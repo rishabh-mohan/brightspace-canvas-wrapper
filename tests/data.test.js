@@ -123,6 +123,16 @@ const assert = require('assert');
   assert.strictEqual(q.known, true);
   assert.strictEqual(q.attempts_used, 2);
 
+  // Discussions: topics flattened out of forums and merged into the assignment list.
+  routes['/d2l/api/le/1.100/12/discussions/forums/'] = [{ ForumId: 1, Name: 'Weekly', IsHidden: false }, { ForumId: 2, Name: 'Gone', IsHidden: true }];
+  routes['/d2l/api/le/1.100/12/discussions/forums/1/topics/'] = [
+    { TopicId: 31, Name: 'Week 1', DueDate: soon, ScoreOutOf: 5, IsHidden: false },
+    { TopicId: 32, Name: 'Hidden', IsHidden: true }];
+  const merged = await data.assignments(12);
+  assert.deepStrictEqual(Array.from(merged, (a) => `${a.kind}:${a.name}:${a.forum}`), ['discussion:Week 1:Weekly']);
+  assert.strictEqual(merged[0].html_url, '/d2l/le/12/discussions/topics/31/View');
+  assert.strictEqual((await data.todo([{ id: 12, name: 'C' }])).length, 1);
+
   const before = calls.length;
   await data.courses();
   assert.strictEqual(calls.length, before, 'second read served from cache');

@@ -7,12 +7,13 @@ A browser extension that shows Brightspace data in a Canvas-style layout. Read-o
 - **Dashboard** on the Brightspace home page: this term's course cards, a To Do list for the next 14 days (ungraded, not yet turned in), overdue items, and recent announcements.
 - **Calendar**: a month view across this term's courses.
 - **Grades** per course: items grouped by category, with the instructor's released total or a labelled estimate, and **What-If scores** to try hypothetical grades.
-- **Assignments** per course: assignments and quizzes merged into one list, split into upcoming, undated and past, with submission status.
+- **Course home**: what's coming up, the latest announcements, and the modules. It is the page a course opens on.
+- **Assignments** per course: assignments, quizzes and discussion topics merged into one list, split into upcoming, undated and past, with submission status. **Quizzes** and **Discussions** show the same list narrowed to one kind.
 - **Announcements** per course, with instructor HTML reduced to plain formatting and links.
 - **Modules** per course, from Brightspace Content, plus links to external tools such as Gradescope.
 - **Preferences**: light, dark or automatic theme (left rail), and a nickname and colour per course (the ⋮ button on each card). Stored in the extension, not on Brightspace.
 
-The wrapper also stands in for Brightspace's own Grades, Assignments and Announcements pages. Everything else (quizzes, discussions, viewing content, submitting work) opens the original Brightspace page. The **Brightspace** button in the left rail shows the original page; the **Canvas view** pill brings the wrapper back.
+The wrapper also stands in for Brightspace's own Grades, Assignments, Announcements, Quizzes, Discussions and Content list pages. Opening an individual item (taking a quiz, reading a thread, viewing a file, submitting work) always goes to the original Brightspace page. The **Brightspace** button in the left rail shows the original page; the **Canvas view** pill brings the wrapper back.
 
 ## Load it
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Brightspace Canvas Wrapper",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Canvas-style dashboard, calendar, grades, assignments, announcements and modules over Brightspace. Read-only.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://*.brightspace.com/*"],
@@ -12,7 +12,10 @@
         "https://*.brightspace.com/d2l/lms/grades/my_grades/main.d2l*",
         "https://*.brightspace.com/d2l/lms/dropbox/user/folders_list.d2l*",
         "https://*.brightspace.com/d2l/lms/dropbox/dropbox.d2l*",
-        "https://*.brightspace.com/d2l/lms/news/main.d2l*"
+        "https://*.brightspace.com/d2l/lms/news/main.d2l*",
+        "https://*.brightspace.com/d2l/lms/quizzing/user/quizzes_list.d2l*",
+        "https://*.brightspace.com/d2l/le/content/*/Home*",
+        "https://*.brightspace.com/d2l/le/*/discussions/List*"
       ],
       "js": ["src/client.js", "src/data.js", "src/styles.js", "src/ui.js"],
       "run_at": "document_start"

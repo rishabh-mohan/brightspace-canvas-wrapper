@@ -104,6 +104,7 @@ input.wi.changed { border-color: var(--link); background: var(--hi); }
 .prose table { width: auto; }
 .prose pre { white-space: pre-wrap; }
 
+.sect { font-size: 17px; font-weight: 700; margin: 26px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 .module { margin-bottom: 14px; }
 .module summary { cursor: pointer; font-weight: 700; padding: 10px 12px; background: var(--soft); border: 1px solid var(--line); }
 

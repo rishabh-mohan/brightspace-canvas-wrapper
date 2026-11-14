@@ -97,6 +97,7 @@ BSX.data = (() => {
           const q = await quizAttempts(a.course_id, a.source_id).catch(() => ({ known: false }));
           return q.known && q.attempts_used > 0 ? null : a;
         }
+        if (a.kind === 'discussion') return a; // no way to tell whether the student has posted
         const s = await submission(a.course_id, a.source_id).catch(() => ({ submitted: false }));
         return s.submitted ? null : a;
       })
@@ -123,12 +124,39 @@ BSX.data = (() => {
       comment: v.Comments?.Text || '',
     };
 
-  // Assignments and quizzes merged into one Canvas-style list.
+  // Every discussion topic in the course, flattened out of its forums.
+  async function discussions(ou) {
+    const forums = (await soft(client.le(`${ou}/discussions/forums/`), [])).filter((f) => !f.IsHidden);
+    const perForum = await Promise.all(
+      forums.map((f) =>
+        soft(client.le(`${ou}/discussions/forums/${f.ForumId}/topics/`), [])
+          .then((topics) => topics.map((t) => ({ ...t, forumName: f.Name })))
+          .catch(() => [])
+      )
+    );
+    return perForum
+      .flat()
+      .filter((t) => !t.IsHidden)
+      .map((t) => ({
+        id: `discussion-${t.TopicId}`,
+        source_id: t.TopicId,
+        kind: 'discussion',
+        name: t.Name,
+        forum: t.forumName || null,
+        due_at: t.DueDate || t.EndDate || null,
+        points_possible: t.ScoreOutOf ?? null,
+        grade: null,
+        html_url: `/d2l/le/${ou}/discussions/topics/${t.TopicId}/View`,
+      }));
+  }
+
+  // Assignments, quizzes and discussion topics merged into one Canvas-style list.
   async function assignments(ou) {
-    const [folders, quizzes, values] = await Promise.all([
+    const [folders, quizzes, values, topics] = await Promise.all([
       soft(client.le(`${ou}/dropbox/folders/`), []),
       soft(client.leObjects(`${ou}/quizzes/`), []),
       gradeValues(ou),
+      discussions(ou).catch(() => []),
     ]);
     const byItem = new Map(values.map((v) => [String(v.GradeObjectIdentifier), v]));
     const grade = (id) => (id == null ? null : toValue(byItem.get(String(id))) || null);
@@ -157,6 +185,7 @@ BSX.data = (() => {
           grade: grade(q.GradeItemId),
           html_url: `/d2l/lms/quizzing/quizzing.d2l?ou=${ou}&qi=${q.QuizId}`,
         })),
+      ...topics,
     ];
   }
 

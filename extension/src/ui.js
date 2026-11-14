@@ -18,6 +18,11 @@
     if (/^\/d2l\/lms\/grades\/my_grades\/main\.d2l$/i.test(p)) return { kind: 'grades', id: ou };
     if (/^\/d2l\/lms\/dropbox\/(user\/folders_list|dropbox)\.d2l$/i.test(p)) return { kind: 'assignments', id: ou };
     if (/^\/d2l\/lms\/news\/main\.d2l$/i.test(p)) return { kind: 'announcements', id: ou };
+    if (/^\/d2l\/lms\/quizzing\/user\/quizzes_list\.d2l$/i.test(p)) return { kind: 'quizzes', id: ou };
+    let t = p.match(/^\/d2l\/le\/content\/(\d+)\/Home\/?$/i);
+    if (t) return { kind: 'modules', id: Number(t[1]) };
+    t = p.match(/^\/d2l\/le\/(\d+)\/discussions\/List\/?$/i);
+    if (t) return { kind: 'discussions', id: Number(t[1]) };
     return null;
   })();
   if (!entry) return;
@@ -134,9 +139,9 @@
     news: (id) => `/d2l/lms/news/main.d2l?ou=${id}${OFF}`,
     grades: (id) => `/d2l/lms/grades/my_grades/main.d2l?ou=${id}${OFF}`,
     assignments: (id) => `/d2l/lms/dropbox/user/folders_list.d2l?ou=${id}${OFF}`,
-    content: (id) => `/d2l/le/content/${id}/Home`,
-    quizzes: (id) => `/d2l/lms/quizzing/user/quizzes_list.d2l?ou=${id}`,
-    discussions: (id) => `/d2l/le/${id}/discussions/List`,
+    content: (id) => `/d2l/le/content/${id}/Home${OFF}`,
+    quizzes: (id) => `/d2l/lms/quizzing/user/quizzes_list.d2l?ou=${id}${OFF}`,
+    discussions: (id) => `/d2l/le/${id}/discussions/List${OFF}`,
     classlist: (id) => `/d2l/lms/classlist/classlist.d2l?ou=${id}`,
   };
 
@@ -170,7 +175,7 @@
   let renderId = 0;
   const app = (...kids) => h('div', { class: 'app', 'data-theme': settings.theme }, ...kids);
   const whatIf = { on: false, courseId: null, overrides: new Map() };
-  const COURSE_VIEWS = ['grades', 'assignments', 'announcements', 'modules'];
+  const COURSE_VIEWS = ['home', 'announcements', 'assignments', 'quizzes', 'discussions', 'grades', 'modules'];
 
   function route() {
     const hash = location.hash;
@@ -269,13 +274,13 @@
     const body = editing === c.id
       ? cardEditor(c)
       : [
-          h('div', { class: 'text' }, h('a', { class: 'name', href: `#/courses/${c.id}/grades`, title: name === c.name ? name : `${name} (${c.name})`, style: `--c:${colorOf(c.id)}` }, name), h('div', { class: 'code', title: c.course_code }, c.course_code)),
+          h('div', { class: 'text' }, h('a', { class: 'name', href: `#/courses/${c.id}/home`, title: name === c.name ? name : `${name} (${c.name})`, style: `--c:${colorOf(c.id)}` }, name), h('div', { class: 'code', title: c.course_code }, c.course_code)),
           h('div', { class: 'links' }, h('a', { href: `#/courses/${c.id}/announcements` }, 'Announcements'), h('a', { href: `#/courses/${c.id}/assignments` }, 'Assignments'), h('a', { href: `#/courses/${c.id}/grades` }, 'Grades'), h('a', { href: `#/courses/${c.id}/modules` }, 'Modules')),
         ];
     return h(
       'div',
       { class: 'card' },
-      h('a', { class: 'hero', href: `#/courses/${c.id}/grades`, style: `background:${colorOf(c.id)}`, 'aria-label': name }, img),
+      h('a', { class: 'hero', href: `#/courses/${c.id}/home`, style: `background:${colorOf(c.id)}`, 'aria-label': name }, img),
       h('button', { class: 'more', title: 'Nickname and colour', 'aria-label': `Nickname and colour for ${name}`, onclick: () => { editing = editing === c.id ? null : c.id; render(); } }, '⋮'),
       body
     );
@@ -286,7 +291,8 @@
     return [
       shown.map((i) => {
         const href = (i.html_url && safeHref(i.html_url)) || `#/courses/${i.course_id}/assignments`;
-        return h('div', { class: late ? 'todo late' : 'todo' }, h('a', { class: 't', href }, i.title || i.name), h('div', { class: 'm' }, courseName(i.course_id), ' · ', late ? h('b', null, `was due ${when(i.due_at)}`) : when(i.due_at)));
+        const course = courseName(i.course_id);
+        return h('div', { class: late ? 'todo late' : 'todo' }, h('a', { class: 't', href }, i.title || i.name), h('div', { class: 'm' }, course ? [course, ' · '] : null, late ? h('b', null, `was due ${when(i.due_at)}`) : when(i.due_at)));
       }),
       items.length > shown.length ? h('div', { class: 'muted small', style: 'padding-top:6px' }, `${items.length - shown.length} more`) : null,
     ];
@@ -375,15 +381,15 @@
     return h(
       'nav',
       { class: 'cnav' },
+      link('home', 'Home'),
       link('announcements', 'Announcements'),
       link('assignments', 'Assignments'),
+      link('quizzes', 'Quizzes'),
+      link('discussions', 'Discussions'),
       link('grades', 'Grades'),
       link('modules', 'Modules'),
       h('div', { class: 'sep' }, 'In Brightspace'),
       h('a', { href: bs.home(id) }, 'Course home'),
-      h('a', { href: bs.content(id) }, 'Content'),
-      h('a', { href: bs.quizzes(id) }, 'Quizzes'),
-      h('a', { href: bs.discussions(id) }, 'Discussions'),
       h('a', { href: bs.classlist(id) }, 'Classlist'),
       tools
     );
@@ -470,8 +476,36 @@
     return [totalBox, hint, table, h('div', { class: 'small', style: 'margin-top:14px' }, h('a', { href: bs.grades(id) }, 'Open Grades in Brightspace'))];
   }
 
-  async function assignmentsView(id) {
-    const all = await data.assignments(id);
+  // Course home: what's coming up, the latest announcements, then the modules.
+  async function homeView(id) {
+    const [news, mods] = await Promise.all([data.announcements(id), modulesView(id)]);
+    const snippet = (a) => {
+      const text = (a.message || (a.message_html ? cleanHtml(a.message_html).textContent : '')).replace(/\s+/g, ' ').trim();
+      return text.length > 240 ? `${text.slice(0, 240)}…` : text;
+    };
+    return [
+      h('div', { class: 'side', style: 'width:auto' }, lazySection('Coming Up', data.todo([{ id, name: '' }]), (items) => todoItems(items, () => '', false))),
+      h('h2', { class: 'sect' }, 'Recent Announcements'),
+      news.length
+        ? [
+            news.slice(0, 3).map((a) => h('article', { class: 'post' }, h('h2', null, h('a', { href: `#/courses/${id}/announcements` }, a.title)), h('div', { class: 'muted small' }, a.posted_at ? `Posted ${when(a.posted_at)}` : ''), h('div', { class: 'prose' }, snippet(a)))),
+            news.length > 3 ? h('div', { class: 'small' }, h('a', { href: `#/courses/${id}/announcements` }, `All ${news.length} announcements`)) : null,
+          ]
+        : h('div', { class: 'muted small' }, 'No announcements.'),
+      h('h2', { class: 'sect' }, 'Modules'),
+      mods,
+    ];
+  }
+
+  const KINDS = {
+    assignment: { tag: 'Assignment', none: 'No assignments, quizzes or discussions in this course.', open: 'Open Assignments in Brightspace', href: (id) => bs.assignments(id) },
+    quiz: { tag: 'Quiz', none: 'No quizzes in this course.', open: 'Open Quizzes in Brightspace', href: (id) => bs.quizzes(id) },
+    discussion: { tag: 'Discussion', none: 'No discussion topics in this course.', open: 'Open Discussions in Brightspace', href: (id) => bs.discussions(id) },
+  };
+
+  // `kind` narrows the merged list to quizzes or discussions; without it, everything is shown.
+  async function assignmentsView(id, kind) {
+    const all = (await data.assignments(id)).filter((a) => !kind || a.kind === kind);
     const now = Date.now();
     const byDue = (a, b) => Date.parse(a.due_at) - Date.parse(b.due_at);
     const upcoming = all.filter((a) => a.due_at && Date.parse(a.due_at) >= now).sort(byDue);
@@ -495,16 +529,17 @@
         }).catch(() => {});
       }
       return h('div', { class: 'item' },
-        h('span', { class: 'tag', style: 'margin:0' }, a.kind === 'quiz' ? 'Quiz' : 'Assignment'),
-        h('div', { class: 'mid' }, h('a', { href: a.html_url }, a.name), h('div', { class: 'muted small' }, a.due_at ? `Due ${when(a.due_at)}` : 'No due date')),
+        h('span', { class: 'tag', style: 'margin:0' }, KINDS[a.kind].tag),
+        h('div', { class: 'mid' }, h('a', { href: a.html_url }, a.name), h('div', { class: 'muted small' }, a.forum ? `${a.forum} · ` : null, a.due_at ? `Due ${when(a.due_at)}` : 'No due date')),
         status,
         h('span', { class: 'muted small' }, score));
     };
     const section = (titleText, items) => (items.length ? h('div', { class: 'list' }, h('h2', null, `${titleText} (${items.length})`), items.map(item)) : null);
 
-    if (!all.length) return h('div', { class: 'msg' }, 'No assignments or quizzes in this course.');
-    return [section('Upcoming', upcoming), section('Undated', undated), section('Past', past),
-      h('div', { class: 'small' }, h('a', { href: bs.assignments(id) }, 'Open Assignments in Brightspace'))];
+    const k = KINDS[kind || 'assignment'];
+    const footer = h('div', { class: 'small' }, h('a', { href: k.href(id) }, k.open));
+    if (!all.length) return [h('div', { class: 'msg' }, k.none), footer];
+    return [section('Upcoming', upcoming), section('Undated', undated), section('Past', past), footer];
   }
 
   async function announcementsView(id) {
@@ -536,7 +571,15 @@
     ];
   }
 
-  const COURSE_BUILDERS = { grades: gradesView, assignments: assignmentsView, announcements: announcementsView, modules: modulesView };
+  const COURSE_BUILDERS = {
+    home: homeView,
+    announcements: announcementsView,
+    assignments: (id) => assignmentsView(id),
+    quizzes: (id) => assignmentsView(id, 'quiz'),
+    discussions: (id) => assignmentsView(id, 'discussion'),
+    grades: gradesView,
+    modules: modulesView,
+  };
 
   // ---- render loop ---------------------------------------------------------
   async function render() {
@@ -555,7 +598,7 @@
         const courses = entry.id ? await data.courses() : [];
         const known = courses.some((c) => c.id === entry.id);
         let target;
-        if (entry.kind === 'home') target = known ? `#/courses/${entry.id}/grades` : '#/';
+        if (entry.kind === 'home') target = known ? `#/courses/${entry.id}/home` : '#/';
         else target = known ? `#/courses/${entry.id}/${entry.kind}` : OFF;
         history.replaceState(null, '', target);
         return render();

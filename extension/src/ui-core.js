@@ -9,7 +9,9 @@
 //   #/courses/{id}[/{section}[/{item}]]        a course page or one item in it
 //   #brightspace            wrapper off, original page visible
 BSX.ui = (() => {
-  if (window.top !== window) return null;
+  // Never inside a frame. (BSX_DEV_FRAME is set only by the dev server's phone-width preview;
+  // extension scripts run in their own world and never see it.)
+  if (window.top !== window && !globalThis.BSX_DEV_FRAME) return null;
 
   // Which Brightspace page are we on, and which wrapper page stands in for it?
   const entry = (() => {
@@ -194,6 +196,7 @@ BSX.ui = (() => {
       if (saved.dismissed && typeof saved.dismissed === 'object') settings.dismissed = { ...saved.dismissed };
       if (typeof saved.showAll === 'boolean') settings.showAll = state.showAll = saved.showAll;
       if (['group', 'due', 'title'].includes(saved.gradeSort)) settings.gradeSort = saved.gradeSort;
+      if (typeof saved.gradescope === 'boolean') settings.gradescope = saved.gradescope;
     } catch {}
   }
   function saveSettings() {
@@ -225,6 +228,22 @@ BSX.ui = (() => {
     settings.todos
       .filter((t) => t.due_at && Date.parse(t.due_at) >= from && Date.parse(t.due_at) <= to && (!courseIds || t.course_id == null || courseIds.has(t.course_id)))
       .map((t) => ({ personal: true, kind: 'todo', source_id: t.id, name: t.title, due_at: t.due_at, course_id: t.course_id ?? null, details: t.details || '', link: t.link || '', grade: null, points_possible: null }));
+
+  // The title of a piece of work as a link: the wrapper page for Brightspace work, the
+  // outside tool (new tab) for external work, the editor for one of the student's own items.
+  function itemLink(i, courses) {
+    if (i.personal) return h('button', { class: 't linklike', type: 'button', title: 'Edit', onclick: () => todoDialog(i, courses || []) }, i.name);
+    if (i.kind === 'external') return h('a', { class: 't', href: webHref(i.html_url) || '#/', target: '_blank', rel: 'noopener noreferrer', title: `Opens ${i.source}` }, i.name, ' ', ic('external', 13));
+    return h('a', { class: 't', href: i.kind ? itemHref(i.course_id, i) : courseHref(i.course_id, 'assignments') }, i.name || i.title);
+  }
+
+  // Work in Gradescope for the given courses, when the student has switched that on.
+  // Only courses with a Gradescope link in their Content are asked about.
+  async function externalWork(courses) {
+    if (!settings.gradescope || !BSX.gradescope) return [];
+    const has = await Promise.all(courses.map((c) => data.externalTools(c.id).then((tools) => tools.some((t) => /gradescope/i.test(t.title))).catch(() => false)));
+    return BSX.gradescope.forCourses(courses.filter((c, n) => has[n]));
+  }
 
   function todoDialog(existing, courses) {
     if (!frame) return;
@@ -284,7 +303,8 @@ BSX.ui = (() => {
   // ---- links ---------------------------------------------------------------
   const PLURAL = { assignment: 'assignments', quiz: 'quizzes', discussion: 'discussions' };
   const courseHref = (id, section, item) => `#/courses/${id}${section ? `/${section}` : ''}${item != null ? `/${item}` : ''}`;
-  const itemHref = (courseId, a) => courseHref(courseId, PLURAL[a.kind], a.source_id);
+  // Work read from an outside tool links straight to that tool.
+  const itemHref = (courseId, a) => (a.kind === 'external' ? a.html_url : courseHref(courseId, PLURAL[a.kind], a.source_id));
   // A Brightspace address for an assignment or quiz, mapped to the wrapper's page for it.
   function wrapHref(url) {
     try {
@@ -306,7 +326,7 @@ BSX.ui = (() => {
     discussions: (id) => `/d2l/le/${id}/discussions/List${OFF}`,
     classlist: (id) => `/d2l/lms/classlist/classlist.d2l?ou=${id}${OFF}`,
     calendar: (id) => `/d2l/le/calendar/${id}`,
-    email: () => '/d2l/lms/email/frame.d2l',
+    email: (orgId) => `/d2l/lms/email/frame.d2l${orgId ? `?ou=${orgId}` : ''}`,
   };
 
   // ---- small building blocks -----------------------------------------------
@@ -317,17 +337,23 @@ BSX.ui = (() => {
 
   // A block that fills in when its data arrives and fails on its own.
   function lazy(promise, build, placeholder = 'Loading…') {
-    const box = h('div', { class: 'muted small pad' }, placeholder);
+    // An empty placeholder marks an optional block: it takes no room until it has content.
+    const optional = placeholder === '';
+    const box = h('div', { class: 'muted small pad', hidden: optional }, placeholder);
     promise
       .then((value) => {
         const built = [build(value)].flat(Infinity).filter(Boolean);
+        if (optional && !built.length) return;
+        box.hidden = false;
         box.className = '';
         box.replaceChildren(...(built.length ? built : [h('div', { class: 'muted small pad' }, 'Nothing for now.')]));
         // A page redrawn in place (ticking an item, changing a setting) keeps its scroll position
         // even though this block arrived after the redraw.
         if (frame && keepScroll != null) frame.main.scrollTop = keepScroll;
       })
-      .catch((e) => (box.textContent = `Unavailable. ${e.message || e}`));
+      .catch((e) => {
+        if (!optional) box.textContent = `Unavailable. ${e.message || e}`;
+      });
     return box;
   }
   const sideSection = (title, body) => h('section', { class: 'sidesec' }, h('h2', null, title), body);
@@ -401,6 +427,7 @@ BSX.ui = (() => {
 
   const reload = () => {
     client.clear();
+    if (BSX.gradescope) BSX.gradescope.clear();
     render();
   };
   const turnOff = () => (location.hash = OFF);
@@ -445,6 +472,9 @@ BSX.ui = (() => {
       h('div', { class: 'seg' }, THEMES.map((t) => h('button', { type: 'button', class: settings.theme === t ? 'on' : null, onclick: () => setTheme(t) }, t[0].toUpperCase() + t.slice(1)))),
       h('div', { class: 'traylabel' }, 'Courses shown'),
       h('div', { class: 'seg' }, scope(false, 'Current'), scope(true, 'All')),
+      h('div', { class: 'traylabel' }, 'Gradescope'),
+      h('div', { class: 'seg' }, [false, true].map((on) => h('button', { type: 'button', class: Boolean(settings.gradescope) === on ? 'on' : null, onclick: () => { settings.gradescope = on; saveSettings(); reload(); openTray('account'); } }, on ? 'Read it' : 'Off'))),
+      h('p', { class: 'muted small', style: 'margin:8px 4px 0' }, 'When on, courses with a Gradescope link also show your Gradescope assignments, due dates and scores. It reads two Gradescope pages with your own Gradescope sign-in and changes nothing there.'),
       h('div', { class: 'traylabel' }, 'Pages'),
       h('a', { class: 'trayitem', href: '#/grades' }, 'Grades for all courses'),
       h('a', { class: 'trayitem', href: '#/courses' }, 'All Courses'),
@@ -564,7 +594,7 @@ BSX.ui = (() => {
   return {
     h, ic, safeHref, cleanHtml, prose, plainOf, clip, num, pct, fmt, when, dayKey, bytes, DAY, COLORS,
     settings, saveSettings, colorOf, nameOf, focusCourses, state,
-    keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog,
+    keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork,
     courseHref, itemHref, wrapHref, bs, PLURAL,
     empty, tag, button, linkButton, lazy, sideSection, filterBox,
     views, render, reload, start,

@@ -211,10 +211,41 @@ function handle(pathname, query) {
   if (t === 'grades/final/values/myGradeValue') return json(d.final);
   if (t === 'news/') return json(d.news);
   if (t === 'content/toc') return json(d.toc);
+  if ((x = t.match(/^content\/topics\/(\d+)\/file$/))) {
+    return { status: 200, type: 'text/html; charset=utf-8', body: `<!doctype html><meta charset="utf-8"><body style="font:16px Georgia,serif;margin:40px;max-width:640px"><h1>Made-up file ${x[1]}</h1><p>This stands in for a PDF or page stored in the course's Content. In the real thing the browser shows the file itself here.</p><ol><li>First point</li><li>Second point</li></ol></body>` };
+  }
   if (t === 'classlist/') return json(d.classlist);
   if (t === 'overview') return json(c.extra ? null : { Description: rich(`<p><strong>${c.name}</strong></p><p>Lectures Monday, Wednesday and Friday. Grading: ${d.categories.map((k) => `${k.Name} ${k.Weight}%`).join(', ')}.</p><p>Late work loses 10% per day. Email the instructor before a deadline if you need an extension.</p>`), HasAttachment: true });
   if (t === 'updates/myUpdates') return json({ OrgUnitId: String(c.id), UserId: '42', UnreadDiscussions: c.id % 3, UnapprovedDiscussions: 0, UnreadAssignmentFeedback: c.id % 2, UnattemptedQuizzes: c.extra ? 0 : 1, UnreadAssignmentSubmissions: 0, UngradedQuizzes: 0, PendingEnrollmentRequests: 0 });
   return json(null);
 }
 
-module.exports = { handle };
+// A made-up Gradescope, with the same page structure the reader in src/gradescope.js expects.
+// Returns the HTML for /account or /courses/555, or null.
+function gradescope(path) {
+  const stamp = (days) => {
+    const d = new Date(now + days * DAY);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} 23:59:00 -0500`;
+  };
+  if (path === '/account') {
+    return `<html><body><div id="account-show"><h1 class="pageHeading">Your Courses</h1><div class="courseList">
+      <div class="courseList--term">Fall 2026</div><div class="courseList--coursesForTerm">
+        <a class="courseBox" href="/courses/555"><h3 class="courseBox--shortname">wl.${T}.CS.25100.LE1</h3><div class="courseBox--name">Data Structures and Algorithms</div><div class="courseBox--assignments">4 assignments</div></a>
+        <a class="courseBox" href="/courses/556"><h3 class="courseBox--shortname">Some Other Course</h3><div class="courseBox--name">Unrelated</div><div class="courseBox--assignments">1 assignment</div></a>
+      </div></div></div></body></html>`;
+  }
+  if (path === '/courses/555') {
+    const dates = (due) => `<td><div class="submissionTimeChart"><time class="submissionTimeChart--releaseDate" datetime="${stamp(due - 7)}">released</time><time class="submissionTimeChart--dueDate" datetime="${stamp(due)}">due</time></div></td>`;
+    return `<html><body><table id="assignments-student-table"><thead><tr role="row"><th>Name</th><th>Status</th><th>Released / Due</th></tr></thead><tbody>
+      <tr role="row"><th class="table--primaryLink" scope="row"><a href="/courses/555/assignments/1/submissions/91">Written Homework 1</a></th><td class="submissionStatus"><div class="submissionStatus--score">9.0 / 10.0</div></td>${dates(-20)}</tr>
+      <tr role="row"><th class="table--primaryLink" scope="row"><a href="/courses/555/assignments/2/submissions/92">Written Homework 2</a></th><td class="submissionStatus"><div class="submissionStatus--text">Submitted</div></td>${dates(-6)}</tr>
+      <tr role="row"><th class="table--primaryLink" scope="row">Written Homework 3</th><td class="submissionStatus"><div class="submissionStatus--text">No Submission</div></td>${dates(-2)}</tr>
+      <tr role="row"><th class="table--primaryLink" scope="row"><button class="js-submitAssignment" data-assignment-id="4" type="button">Written Homework 4</button></th><td class="submissionStatus"><div class="submissionStatus--text">No Submission</div></td>${dates(4)}</tr>
+      <tr role="row"><td colspan="3" class="dropzonePreview--fileNameHeader">Name</td></tr>
+    </tbody></table></body></html>`;
+  }
+  return null;
+}
+
+module.exports = { handle, gradescope };

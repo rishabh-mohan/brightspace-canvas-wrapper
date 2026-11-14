@@ -107,5 +107,5 @@ BSX.client = (() => {
     return items;
   }
 
-  return { ApiError, lp, le, lpPath, lpBookmarked, leObjects, clear: () => cache.clear() };
+  return { ApiError, lp, le, lpPath, lePath, lpBookmarked, leObjects, clear: () => cache.clear() };
 })();

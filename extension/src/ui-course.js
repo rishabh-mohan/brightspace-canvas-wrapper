@@ -12,6 +12,7 @@
     discussion: { icon: 'discussion', label: 'Discussion', group: 'Discussions' },
   };
   const TYPE_ICON = { File: 'file', Link: 'link', 'External tool': 'external', Assignment: 'assignment', Quiz: 'quiz', Discussion: 'discussion' };
+  const VIEWABLE = new Set(['File', 'Link', 'External tool']); // module items with a page inside the wrapper
   const whatIf = { on: false, courseId: null, overrides: new Map() };
 
   // ---- course navigation -----------------------------------------------------
@@ -19,7 +20,7 @@
     const tools = h('div');
     data.externalTools(course.id)
       .then((list) => {
-        if (list.length) tools.replaceChildren(h('div', { class: 'sep' }, 'External tools'), ...list.slice(0, 8).map((t) => h('a', { href: t.html_url, title: 'Opens through Brightspace' }, t.title, ' ', ic('external', 13))));
+        if (list.length) tools.replaceChildren(h('div', { class: 'sep' }, 'External tools'), ...list.slice(0, 8).map((t) => h('a', { href: courseHref(course.id, 'modules', t.id) }, t.title, ' ', ic('external', 13))));
       })
       .catch(() => {});
     return h('nav', { class: 'cnav', 'aria-label': 'Course navigation' },
@@ -52,13 +53,50 @@
               const sub = a ? [a.due_at ? `Due ${when(a.due_at)}` : null, a.grade ? `${num(a.grade.score)}/${num(a.grade.points_possible)} pts` : a.points_possible != null ? `${num(a.points_possible)} pts` : null].filter(Boolean).join('  |  ') || i.type : i.type;
               return h('div', { class: 'irow' },
                 h('span', { class: a ? 'iic ok' : 'iic' }, ic(TYPE_ICON[i.type] || 'item', 22)),
-                h('div', { class: 'imid' }, h('a', { class: i.unread ? 't' : 't read', href: a ? itemHref(courseId, a) : i.html_url }, i.title), h('div', { class: 'muted small' }, sub)),
+                h('div', { class: 'imid' }, h('a', { class: i.unread ? 't' : 't read', href: a ? itemHref(courseId, a) : VIEWABLE.has(i.type) ? courseHref(courseId, 'modules', i.id) : i.html_url }, i.title), h('div', { class: 'muted small' }, sub)),
                 i.locked ? h('span', { class: 'muted' }, ic('lock', 16)) : a && a.grade ? h('span', { class: 'ok', title: 'Graded' }, ic('check', 18)) : i.unread ? h('span', { class: 'newdot', title: 'Not viewed yet' }) : null);
             })
           : h('div', { class: 'irow muted small' }, 'No items in this module.')));
   }
 
-  async function modules(course) {
+  // One module item shown inside the wrapper: a file in a viewer, an external tool in a
+  // frame, or a link. Each keeps a button to the original, in case the frame stays blank.
+  async function moduleItem(course, r) {
+    const list = await data.modules(course.id);
+    const flat = list.flatMap((m) => m.items.map((i) => ({ ...i, module: m.name })));
+    const at = flat.findIndex((i) => i.id === r.itemId);
+    if (at < 0) return notFound('item', course.id, 'modules');
+    const i = flat[at];
+    const step = (j, label, icon, after) => (flat[j] ? h('a', { class: 'btn', href: VIEWABLE.has(flat[j].type) ? courseHref(course.id, 'modules', flat[j].id) : flat[j].html_url, title: flat[j].title }, after ? null : ic(icon, 14), label, after ? ic(icon, 14) : null) : h('span'));
+    const frame = (src, title) => h('iframe', { class: 'viewer', src, title, loading: 'lazy', referrerpolicy: 'same-origin' });
+
+    let view;
+    let open;
+    if (i.type === 'File') {
+      view = frame(i.file_url, i.title);
+      open = [h('a', { class: 'btn', href: i.file_url.replace('?stream=true', ''), title: 'Save a copy' }, 'Download'), h('a', { class: 'btn', href: i.html_url }, 'Open in Brightspace ', ic('external', 14))];
+    } else if (i.type === 'External tool') {
+      const launch = ui.safeHref(i.url) || i.html_url;
+      view = [h('div', { class: 'banner' }, 'This tool is shown inside the page. If it stays blank, the tool does not allow that: use the button to open it in a new tab.'), frame(launch, i.title)];
+      open = [h('a', { class: 'btn primary', href: launch, target: '_blank', rel: 'noopener' }, 'Open in a new tab ', ic('external', 14))];
+    } else {
+      const inside = ui.safeHref(i.url);
+      const outside = !inside && /^https?:\/\//i.test(i.url) ? i.url : null;
+      view = h('div', { class: 'linkcard' }, ic('link', 28), h('div', null, h('div', { class: 't' }, i.title), h('div', { class: 'muted small', style: 'overflow-wrap:anywhere' }, outside || 'A page in Brightspace')),
+        outside ? h('a', { class: 'btn primary', href: outside, target: '_blank', rel: 'noopener noreferrer' }, 'Open link ', ic('external', 14)) : h('a', { class: 'btn primary', href: inside || i.html_url }, 'Open in Brightspace'));
+      open = [h('a', { class: 'btn', href: i.html_url }, 'Open in Brightspace ', ic('external', 14))];
+    }
+    return {
+      crumb: i.title,
+      body: h('article', { class: 'detail' },
+        h('div', { class: 'dhead' }, h('div', null, h('h1', null, i.title), h('div', { class: 'muted small' }, `${i.type} · ${i.module}`)), h('div', { class: 'row' }, open)),
+        view,
+        h('div', { class: 'pager' }, step(at - 1, 'Previous', 'left', false), step(at + 1, 'Next', 'right', true))),
+    };
+  }
+
+  async function modules(course, r) {
+    if (r && r.itemId != null) return moduleItem(course, r);
     const [list, work] = await Promise.all([data.modules(course.id), data.assignments(course.id).catch(() => [])]);
     return { body: list.length ? [moduleList(course.id, list, work), h('p', { class: 'small' }, h('a', { href: bs.content(course.id) }, 'Open Content in Brightspace'))] : ui.empty('No content in this course yet.') };
   }
@@ -169,7 +207,7 @@
       : ui.lazy(data.externalTools(course.id), (tools) =>
           tools.length
             ? h('details', { class: 'group', open: true }, h('summary', null, ic('down', 16), h('span', { class: 'gname' }, 'External Tools'), h('span', { class: 'count' }, tools.length)),
-                tools.map((t) => h('div', { class: 'irow' }, h('span', { class: 'iic' }, ic('external', 22)), h('div', { class: 'imid' }, h('a', { class: 't', href: t.html_url }, t.title), h('div', { class: 'muted small' }, 'Work and grades for this tool live outside Brightspace. Opens through Brightspace.')))))
+                tools.map((t) => h('div', { class: 'irow' }, h('span', { class: 'iic' }, ic('external', 22)), h('div', { class: 'imid' }, h('a', { class: 't', href: courseHref(course.id, 'modules', t.id) }, t.title), h('div', { class: 'muted small' }, 'Work and grades for this tool live outside Brightspace.')))))
             : null, '');
 
     const pick = (key, text) => h('button', { type: 'button', class: settings.asgBy === key ? 'on' : null, onclick: () => { settings.asgBy = key; ui.saveSettings(); ui.render(); } }, text);
@@ -181,10 +219,73 @@
           for (const box of boxes) if (box) box.hidden = ![...box.querySelectorAll('.irow')].some((el) => !el.hidden);
         }), kind ? null : h('div', { class: 'seg' }, pick('date', 'Show by Date'), pick('type', 'Show by Type'))),
         all.length ? boxes : ui.empty(`No ${LABEL[section].toLowerCase()} in this course.`),
+        kind ? null : gradescopeGroup(course),
         external,
         h('p', { class: 'small' }, h('a', { href: original }, `Open ${LABEL[section]} in Brightspace`)),
       ],
     };
+  }
+
+  // ---- Gradescope (optional) ----------------------------------------------------
+  // Resolves to null when the reader is off or the course has no Gradescope link.
+  async function gradescopeFor(course) {
+    if (!settings.gradescope || !BSX.gradescope) return null;
+    const tool = (await data.externalTools(course.id)).find((t) => /gradescope/i.test(t.title));
+    if (!tool) return null;
+    try {
+      return { ...(await BSX.gradescope.forCourse(course)), launch: tool.html_url };
+    } catch (e) {
+      return { state: 'error', items: [], launch: tool.html_url, why: e.message || String(e) };
+    }
+  }
+
+  const gradescopeNote = (g) =>
+    g.state === 'signed_out' ? ['You are not signed in to Gradescope in this browser. ', h('a', { href: g.launch }, 'Open Gradescope from this course'), ' once, then press Refresh.']
+    : g.state === 'no_match' ? 'No Gradescope course matching this one was found on your Gradescope account.'
+    : g.state === 'error' ? `Gradescope could not be read. ${g.why || ''}`
+    : null;
+
+  function gradescopeGroup(course) {
+    return ui.lazy(gradescopeFor(course), (g) => {
+      if (!g) return null;
+      const now = Date.now();
+      const note = gradescopeNote(g);
+      const rows = g.items.map((i) => {
+        const late = i.due_at && Date.parse(i.due_at) < now && !i.submitted;
+        const score = i.grade ? `${num(i.grade.score)}/${num(i.grade.points_possible)} pts` : null;
+        return h('div', { class: 'irow' },
+          h('span', { class: 'iic ok' }, ic('assignment', 22)),
+          h('div', { class: 'imid' }, ui.itemLink(i), h('div', { class: 'muted small' }, [i.due_at ? h('span', null, h('b', null, 'Due'), ` ${when(i.due_at)}`) : 'No due date', score].filter(Boolean).map((s, n) => [n ? '  |  ' : null, s]))),
+          h('span', { class: `small nowrap ${i.submitted ? 'ok' : late ? 'bad' : 'muted'}` }, i.status));
+      });
+      return h('details', { class: 'group', open: true },
+        h('summary', null, ic('down', 16), h('span', { class: 'gname' }, 'Gradescope'), h('span', { class: 'count' }, g.items.length)),
+        note ? h('div', { class: 'irow muted small' }, h('span', null, note)) : null,
+        rows,
+        !note && !rows.length ? h('div', { class: 'irow muted small' }, 'No assignments in Gradescope yet.') : null);
+    }, '');
+  }
+
+  function gradescopeTable(course) {
+    return ui.lazy(gradescopeFor(course), (g) => {
+      if (!g) return null;
+      const note = gradescopeNote(g);
+      return [
+        h('h2', { class: 'sect' }, 'Gradescope'),
+        note ? h('p', { class: 'muted' }, note) : null,
+        g.items.length
+          ? h('table', { class: 'grid' },
+              h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Due'), h('th', { class: 'num' }, 'Score'), h('th', { class: 'num' }, 'Out of'), h('th', { class: 'num' }, '%'))),
+              h('tbody', null, g.items.map((i) => h('tr', null,
+                h('td', null, ui.itemLink(i), i.grade ? null : ui.tag(i.status)),
+                h('td', { class: 'muted small nowrap' }, i.due_at ? when(i.due_at) : ''),
+                h('td', { class: 'num' }, i.grade ? num(i.grade.score) : '–'),
+                h('td', { class: 'num' }, i.points_possible != null ? num(i.points_possible) : ''),
+                h('td', { class: 'num' }, i.grade ? pct(i.grade.score, i.grade.points_possible) : '')))))
+          : null,
+        g.state === 'ok' ? h('p', { class: 'muted small' }, 'Read from Gradescope. These scores are not part of the Brightspace total above unless your instructor also posts them there.') : null,
+      ];
+    }, '');
   }
 
   // ---- assignment, quiz, discussion (detail) ------------------------------------
@@ -222,7 +323,7 @@
   async function quizDetail(course, r) {
     const q = await data.quiz(course.id, r.itemId);
     if (!q) return notFound('quiz', course.id, 'quizzes');
-    const attempts = q.attempts.known ? `${q.attempts.attempts_used}${q.allowed_attempts != null ? ` of ${q.allowed_attempts}` : ''} used` : null;
+    const attempts = q.attempts.known ? `${q.attempts.attempts_used}${q.allowed_attempts != null ? ` of ${q.allowed_attempts}` : ''} used${q.attempts.in_progress ? ` · ${q.attempts.in_progress} in progress` : ''}` : null;
     const closed = q.lock_at && Date.parse(q.lock_at) < Date.now();
     const notOpen = q.unlock_at && Date.parse(q.unlock_at) > Date.now();
     return {
@@ -375,13 +476,14 @@
         h('div', { class: 'dhead' }, h('h1', null, 'Grades'), h('div', { class: 'row' }, arrange, picker)),
         whatIf.on ? h('div', { class: 'banner' }, weighted ? 'What-If scores: type a score to see the effect. In a weighted gradebook only graded items can be changed.' : 'What-If scores: type a score to see the effect, including for work that is not graded yet.') : null,
         table,
+        gradescopeTable(course),
         h('p', { class: 'small' }, h('a', { href: bs.grades(id) }, 'Open Grades in Brightspace')),
       ],
       side: [
         totalBox,
         canEstimate ? ui.button(whatIf.on ? 'Revert to Actual Scores' : 'Show What-If Scores', () => { whatIf.on = !whatIf.on; whatIf.overrides = new Map(); ui.render(); }, 'wide') : null,
         weights,
-        ui.lazy(data.externalTools(id), (tools) => tools.length ? ui.sideSection('Graded elsewhere', [h('p', { class: 'muted small' }, 'Some work in this course is graded in an external tool and may not appear here.'), tools.map((t) => h('a', { class: 'sidelink', href: t.html_url }, t.title, ' ', ic('external', 13)))]) : null, ''),
+        ui.lazy(data.externalTools(id), (tools) => tools.length ? ui.sideSection('Graded elsewhere', [h('p', { class: 'muted small' }, 'Some work in this course is graded in an external tool and may not appear here.'), tools.map((t) => h('a', { class: 'sidelink', href: courseHref(id, 'modules', t.id) }, t.title, ' ', ic('external', 13)))]) : null, ''),
       ],
     };
   }
@@ -403,7 +505,7 @@
   async function files(course) {
     const list = await data.files(course.id);
     if (!list.length) return { body: ui.empty('No files in this course.') };
-    const rows = list.map((f) => [h('tr', null, h('td', null, ic('file', 18), ' ', h('a', { href: f.html_url }, f.title)), h('td', { class: 'muted' }, f.module), h('td', { class: 'muted small nowrap' }, f.updated_at ? ui.fmt.short.format(new Date(f.updated_at)) : '')), `${f.title} ${f.module}`]);
+    const rows = list.map((f) => [h('tr', null, h('td', null, ic('file', 18), ' ', h('a', { href: courseHref(course.id, 'modules', f.id) }, f.title)), h('td', { class: 'muted' }, f.module), h('td', { class: 'muted small nowrap' }, f.updated_at ? ui.fmt.short.format(new Date(f.updated_at)) : '')), `${f.title} ${f.module}`]);
     return {
       body: [
         h('div', { class: 'toolbar' }, ui.filterBox('Search files', rows)),
@@ -420,7 +522,7 @@
       body: [
         h('div', { class: 'dhead' }, h('h1', null, 'Course Syllabus')),
         s && (s.html || s.text) ? prose(s.html, s.text) : h('p', { class: 'muted' }, 'This course has no overview text in Brightspace.'),
-        docs.length ? [h('h2', { class: 'sect' }, 'Syllabus files'), h('ul', { class: 'filelist' }, docs.map((f) => h('li', null, ic('file', 16), ' ', h('a', { href: f.html_url }, f.title))))] : null,
+        docs.length ? [h('h2', { class: 'sect' }, 'Syllabus files'), h('ul', { class: 'filelist' }, docs.map((f) => h('li', null, ic('file', 16), ' ', h('a', { href: courseHref(course.id, 'modules', f.id) }, f.title))))] : null,
         h('h2', { class: 'sect' }, 'Course Summary'),
         dated.length
           ? h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, 'Details'), h('th', { class: 'num' }, 'Due'))),

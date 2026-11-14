@@ -49,7 +49,7 @@ const ctx = {
 };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
-for (const f of ['src/client.js', 'src/data.js']) vm.runInContext(fs.readFileSync(path.join(ext, f), 'utf8'), ctx, { filename: f });
+for (const f of ['src/client.js', 'src/data.js', 'src/gradescope.js']) vm.runInContext(fs.readFileSync(path.join(ext, f), 'utf8'), ctx, { filename: f });
 
 const assert = require('assert');
 (async () => {
@@ -132,6 +132,24 @@ const assert = require('assert');
   assert.deepStrictEqual(Array.from(merged, (a) => `${a.kind}:${a.name}:${a.forum}`), ['discussion:Week 1:Weekly']);
   assert.strictEqual(merged[0].html_url, '/d2l/le/12/discussions/topics/31/View');
   assert.strictEqual((await data.todo([{ id: 12, name: 'C' }])).length, 1);
+
+  // Module items carry the address of the file itself, for the in-page viewer.
+  assert.strictEqual(mods[0].items[0].file_url, '/d2l/api/le/1.100/10/content/topics/11/file?stream=true');
+
+  // Quiz attempts: one handed in, one still open.
+  routes['/d2l/api/le/1.100/10/quizzes/9/attempts/'] = { Objects: [{ AttemptId: 1, Completed: past }, { AttemptId: 2, Completed: null }], Next: null };
+  const open = await data.quizAttempts(10, 9);
+  assert.strictEqual(open.attempts_used, 1);
+  assert.strictEqual(open.in_progress, 1);
+
+  // Gradescope reader: date format and matching a Gradescope course to a Brightspace one.
+  const gs = ctx.BSX.gradescope;
+  assert.strictEqual(gs.toIso('2026-11-16 23:59:00 -0500'), '2026-11-17T04:59:00.000Z');
+  assert.strictEqual(gs.toIso(''), null);
+  const gsCourses = [{ id: '1', short_name: 'Other', name: 'Unrelated' }, { id: '2', short_name: 'wl.202710.MATH.20100.102', name: 'Calculus' }, { id: '3', short_name: 'CS 180', name: 'Programming' }];
+  assert.strictEqual(gs.match({ course_code: 'WL.202710.MATH.20100.102', name: 'x' }, gsCourses).id, '2');
+  assert.strictEqual(gs.match({ course_code: 'wl.202710.CS.18000.BLK', name: 'Fall 2026 CS 18000' }, gsCourses).id, '3');
+  assert.strictEqual(gs.match({ course_code: 'wl.202710.ENGL.10600.Y12', name: 'English' }, gsCourses), null);
 
   const before = calls.length;
   await data.courses();

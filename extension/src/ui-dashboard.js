@@ -4,17 +4,13 @@
   if (!ui) return;
   const { data } = BSX;
   const { h, ic, settings, state, colorOf, nameOf, when, num, pct, courseHref, itemHref, COLORS } = ui;
-  const KIND_ICON = { assignment: 'assignment', quiz: 'quiz', discussion: 'discussion', todo: 'note' };
+  const KIND_ICON = { assignment: 'assignment', quiz: 'quiz', discussion: 'discussion', todo: 'note', external: 'external' };
   let editing = null; // id of the course card whose nickname and colour are being edited
   let listSeen = false; // the list view scrolls to today once per visit
   window.addEventListener('hashchange', () => (listSeen = false));
 
   // ---- sidebar shared by the dashboard and course home ----------------------
-  // A title that opens the wrapper page for an item, or the editor for one of the student's own.
-  function titleOf(i, courses) {
-    if (i.personal) return h('button', { class: 't linklike', type: 'button', title: 'Edit', onclick: () => ui.todoDialog(i, courses) }, i.name);
-    return h('a', { class: 't', href: i.kind ? itemHref(i.course_id, i) : courseHref(i.course_id, 'assignments') }, i.name || i.title);
-  }
+  const titleOf = (i, courses) => ui.itemLink(i, courses);
   const tint = (id) => (id == null ? 'var(--muted)' : colorOf(id));
 
   function todoRow(i, courseLabel, late, courses) {
@@ -37,7 +33,12 @@
     const now = Date.now();
     const open = (i) => !ui.isDone(i) && !ui.isDismissed(i) && (only == null || i.course_id === only);
     const mine = ui.personalItems(now - 60 * ui.DAY, now + 14 * ui.DAY, null).filter(open);
-    const todo = Promise.all([data.todo(courseList), data.overdue().catch(() => [])]);
+    // Outside work counts as to-do while it has no submission; two weeks back for overdue.
+    const outside = ui.externalWork(courseList).then((items) => items.filter((i) => i.due_at && !i.submitted && !i.grade && Date.parse(i.due_at) >= now - 14 * ui.DAY && Date.parse(i.due_at) <= now + 14 * ui.DAY)).catch(() => []);
+    const todo = Promise.all([data.todo(courseList), data.overdue().catch(() => []), outside]).then(([upcoming, late, ext]) => [
+      [...upcoming, ...ext.filter((i) => Date.parse(i.due_at) >= now)],
+      [...late, ...ext.filter((i) => Date.parse(i.due_at) < now)],
+    ]);
     const add = h('button', { class: 'iconbtn xs', type: 'button', title: 'Add To Do', 'aria-label': 'Add To Do', onclick: () => ui.todoDialog(null, courseList) }, ic('plus', 16));
     return [
       ui.sideSection(['To Do', add], ui.lazy(todo, ([upcoming, late]) => {
@@ -126,8 +127,9 @@
     const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
     const from = start.getTime() - 7 * ui.DAY;
     const to = start.getTime() + 28 * ui.DAY;
-    return ui.lazy(data.planner(courses, from, to), (fetched) => {
-      const items = [...fetched, ...ui.personalItems(from, to, null)].sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at));
+    const outside = ui.externalWork(courses).then((list) => list.filter((i) => i.due_at && Date.parse(i.due_at) >= from && Date.parse(i.due_at) <= to)).catch(() => []);
+    return ui.lazy(Promise.all([data.planner(courses, from, to), outside]), ([fetched, ext]) => {
+      const items = [...fetched, ...ext, ...ui.personalItems(from, to, null)].sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at));
       if (!items.length) return ui.empty('Nothing due in the last week or the next four.');
       const days = new Map();
       for (const i of items) {
@@ -142,13 +144,15 @@
         h('section', { class: k === todayKey ? 'pday today' : 'pday', 'data-at': String(day.date.getTime()) },
           h('h2', null, k === todayKey ? 'Today' : k === tomorrowKey ? 'Tomorrow' : ui.fmt.day.format(day.date), k === todayKey || k === tomorrowKey ? h('span', { class: 'muted' }, ` ${ui.fmt.day.format(day.date)}`) : null),
           day.items.map((i) => {
-            const done = Boolean(i.grade) || ui.isDone(i);
-            const check = h('button', { class: done ? 'pcheck done' : 'pcheck', type: 'button', disabled: Boolean(i.grade), title: i.grade ? 'Graded' : done ? 'Marked done. Click to undo' : 'Mark as done', 'aria-label': `${done ? 'Done' : 'Not done'}: ${i.name}`, onclick: () => ui.setFlag('done', i, !ui.isDone(i)) }, done ? ic('check', 14) : null);
+            const settled = Boolean(i.grade) || Boolean(i.submitted); // Brightspace or the outside tool already says so
+            const done = settled || ui.isDone(i);
+            const check = h('button', { class: done ? 'pcheck done' : 'pcheck', type: 'button', disabled: settled, title: i.grade ? 'Graded' : i.submitted ? 'Submitted' : done ? 'Marked done. Click to undo' : 'Mark as done', 'aria-label': `${done ? 'Done' : 'Not done'}: ${i.name}`, onclick: () => ui.setFlag('done', i, !ui.isDone(i)) }, done ? ic('check', 14) : null);
             return h('div', { class: done ? 'prow isdone' : 'prow', style: `--c:${tint(i.course_id)}` },
               check,
               h('span', { class: 'pic' }, ic(KIND_ICON[i.kind] || 'assignment', 22)),
               h('div', { class: 'pmid' }, h('div', { class: 'ctx' }, i.course_id == null ? 'My To Do' : names.get(i.course_id) || ''), titleOf(i, courses)),
-              i.grade ? ui.tag('Graded', 'okt') : null,
+              i.source ? ui.tag(i.source) : null,
+              i.grade ? ui.tag('Graded', 'okt') : i.submitted ? ui.tag('Submitted', 'okt') : null,
               h('div', { class: 'pend' }, i.grade ? h('div', null, `${num(i.grade.score)} / ${num(i.grade.points_possible)}`) : i.points_possible != null ? h('div', null, `${num(i.points_possible)} pts`) : null, h('div', { class: 'muted' }, `${i.personal ? '' : 'Due '}${ui.fmt.time.format(new Date(i.due_at))}`)));
           })));
       // Open on today (or the next day with work), the way a planner does.
@@ -225,11 +229,15 @@
     const courses = await data.courses();
     const visible = state.showAll ? courses : ui.focusCourses(courses);
     const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
+    const org = await data.orgId().catch(() => null);
+    const mail = ui.bs.email(org);
     return {
       title: 'Inbox',
+      actions: h('a', { class: 'btn', href: mail, target: '_blank', rel: 'noopener' }, 'Open in a new tab ', ic('external', 14)),
       body: [
-        h('div', { class: 'banner' }, 'Brightspace mail and instant messages cannot be read here. Open Brightspace Email to read or send messages.'),
-        h('p', null, h('a', { class: 'btn primary', href: ui.bs.email() }, 'Open Brightspace Email ', ic('external', 14))),
+        // Brightspace has no interface for reading mail, so its own Email tool is shown in a frame.
+        h('iframe', { class: 'viewer', src: mail, title: 'Brightspace Email', loading: 'lazy' }),
+        h('p', { class: 'muted small' }, 'This is Brightspace’s own Email tool. If it stays blank, use “Open in a new tab”.'),
         h('h2', { class: 'sect' }, 'Announcements from your instructors'),
         ui.lazy(data.recentAnnouncements(visible, 30), (news) => news.length
           ? h('div', { class: 'rows' }, news.map((a) => h('a', { class: 'arow', href: courseHref(a.course_id, 'announcements', a.id) },

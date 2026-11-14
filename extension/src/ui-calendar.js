@@ -22,7 +22,10 @@
     const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
     // The student's own To Do items sit on the calendar too.
     const mine = settings.calHidden.includes(0) ? [] : ui.personalItems(gridStart.getTime(), gridEnd.getTime(), null).map((t) => ({ personal: t, title: t.name, course_id: t.course_id, start_at: t.due_at, all_day: false }));
-    const events = [...fetched, ...mine].sort((a, b) => Date.parse(a.start_at) - Date.parse(b.start_at));
+    const outside = (await ui.externalWork(shown).catch(() => []))
+      .filter((i) => i.due_at && Date.parse(i.due_at) >= gridStart.getTime() && Date.parse(i.due_at) <= gridEnd.getTime())
+      .map((i) => ({ external: i, title: i.name, course_id: i.course_id, start_at: i.due_at, all_day: false }));
+    const events = [...fetched, ...mine, ...outside].sort((a, b) => Date.parse(a.start_at) - Date.parse(b.start_at));
 
     const byDay = new Map();
     for (const e of events) {
@@ -37,6 +40,7 @@
       const label = full ? [time ? h('span', { class: 'etime' }, `${time} `) : null, e.title, h('span', { class: 'muted' }, ` · ${where}`)] : e.title;
       const attrs = { class: 'event', style: `--c:${e.course_id == null ? 'var(--muted)' : colorOf(e.course_id)}`, title: `${e.title} · ${time ? `${time} · ` : ''}${where}` };
       if (e.personal) return h('button', { ...attrs, type: 'button', onclick: () => ui.todoDialog(e.personal, listed) }, label);
+      if (e.external) return h('a', { ...attrs, href: e.external.html_url, target: '_blank', rel: 'noopener noreferrer', title: `${attrs.title} · ${e.external.source}` }, label);
       const href = e.html_url && ui.wrapHref(e.html_url);
       return href ? h('a', { ...attrs, href }, label) : h('div', attrs, label);
     };

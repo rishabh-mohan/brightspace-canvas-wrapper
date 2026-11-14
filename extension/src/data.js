@@ -53,6 +53,12 @@ BSX.data = (() => {
       );
   }
 
+  // The organisation's own org unit id, which Brightspace-wide tools such as Email hang off.
+  async function orgId() {
+    const items = await client.lpBookmarked('enrollments/myenrollments/');
+    return items.find((e) => e.OrgUnit?.Type?.Code === 'Organization')?.OrgUnit.Id ?? null;
+  }
+
   async function me() {
     const w = await client.lp('users/whoami');
     return { id: w.Identifier, name: [w.FirstName, w.LastName].filter(Boolean).join(' ') || w.UniqueName || '', login: w.UniqueName || '' };
@@ -214,9 +220,11 @@ BSX.data = (() => {
       soft(client.leObjects(`${ou}/quizzes/${quizId}/attempts/`), null),
       client.lp('users/whoami').catch(() => null),
     ]);
-    if (!attempts) return { known: false, attempts_used: 0 };
+    if (!attempts) return { known: false, attempts_used: 0, in_progress: 0 };
     const mine = attempts.filter((a) => a.UserId == null || !who || sameId(a.UserId, who.Identifier));
-    return { known: true, attempts_used: mine.length };
+    // An attempt has a Completed time once it is handed in; one without is still open.
+    const finished = mine.filter((a) => !('Completed' in a) || a.Completed);
+    return { known: true, attempts_used: finished.length, in_progress: mine.length - finished.length };
   }
 
   async function quiz(ou, quizId) {
@@ -244,7 +252,7 @@ BSX.data = (() => {
   async function discussion(ou, topicId) {
     const t = (await topicList(ou)).find((x) => sameId(x.TopicId, topicId));
     if (!t) return null;
-    const raw = list(await soft(client.le(`${ou}/discussions/forums/${t.ForumId}/topics/${t.TopicId}/posts/`), []));
+    const raw = list(await soft(client.le(`${ou}/discussions/forums/${t.ForumId}/topics/${t.TopicId}/posts/?sort=creationdate&pageSize=1000`), []));
     const posts = raw
       .filter((p) => !p.IsDeleted)
       .map((p) => ({
@@ -454,7 +462,7 @@ BSX.data = (() => {
 
   // Content tree flattened to a list of modules; `depth` keeps the nesting for indentation.
   async function modules(ou) {
-    const toc = await soft(client.le(`${ou}/content/toc`), { Modules: [] });
+    const [toc, topicBase] = await Promise.all([soft(client.le(`${ou}/content/toc`), { Modules: [] }), client.lePath(`${ou}/content/topics`)]);
     const out = [];
     const walk = (mods, depth) => {
       for (const m of mods || []) {
@@ -473,6 +481,8 @@ BSX.data = (() => {
               unread: Boolean(t.Unread),
               locked: Boolean(t.IsLocked),
               updated_at: t.LastModifiedDate || null,
+              url: t.Url || '', // a link's address, a tool's launch address, or a file's path
+              file_url: `${topicBase}/${t.TopicId}/file?stream=true`, // the file itself, shown inline
               html_url: `/d2l/le/content/${ou}/viewContent/${t.TopicId}/View`,
             })),
         });
@@ -529,7 +539,7 @@ BSX.data = (() => {
   }
 
   return {
-    courses, me, updates,
+    courses, orgId, me, updates,
     assignments, assignmentGroups, assignment, submission, quiz, quizAttempts, discussions, discussion,
     todo, planner, overdue, recentFeedback,
     grades, estimate, estimable, courseTotals,

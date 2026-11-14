@@ -223,6 +223,12 @@ a.t:hover { color: var(--link); }
 .phead { display: flex; gap: 10px; align-items: center; }
 .psub { font-weight: 700; margin-top: 10px; }
 
+.viewer { display: block; width: 100%; height: calc(100vh - 230px); min-height: 460px; border: 1px solid var(--line); border-radius: 4px; background: #fff; margin: 12px 0; }
+.pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.pager .btn { max-width: 48%; overflow: hidden; }
+.linkcard { display: flex; gap: 16px; align-items: center; padding: 22px; border: 1px solid var(--line); border-radius: 4px; margin: 14px 0; }
+.linkcard > div { flex: 1; min-width: 0; }
+
 /* tables and grades */
 table.grid { border-collapse: collapse; width: 100%; }
 .grid th, .grid td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--line2); vertical-align: top; }
@@ -267,6 +273,29 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
   .head, .crumbs { margin: 0 16px; }
   .head h1 { font-size: 24px; }
   .head { flex-wrap: wrap; }
+}
+@media (max-width: 560px) {
+  .rail { width: 48px; }
+  .tray { left: 48px; width: calc(100vw - 48px); }
+  .layout { padding: 12px; }
+  .head, .crumbs { margin: 0 12px; gap: 8px; }
+  .head h1 { flex-basis: 100%; white-space: normal; }
+  .head .seg button { padding: 6px 8px; font-size: 13px; }
+  .crumbs .trail { font-size: 16px; }
+  .calnav, .toolbar, .row { flex-wrap: wrap; }
+  .dhead { flex-direction: column; align-items: stretch; }
+  .dhead .btn { align-self: flex-start; white-space: normal; }
+  .content { overflow-x: auto; }
+  .irow, .prow, .srow, .arow, .nrow { flex-wrap: wrap; gap: 8px 10px; }
+  .imid, .pmid { flex-basis: 60%; }
+  .nrow .t { max-width: 100%; }
+  .cal .day { min-height: 64px; padding: 2px; }
+  .cal .dow { padding: 4px 0; font-size: 11px; }
+  .event { font-size: 10.5px; padding: 0 2px; border-left-width: 2px; }
+  .meta { gap: 4px 18px; }
+  .cards { grid-template-columns: 1fr; gap: 18px; }
+  .viewer { height: 70vh; }
+  select.pick { max-width: 100%; }
   .rail { width: 60px; }
   .rail a span, .rail button span { display: none; }
   .tray { left: 60px; width: min(320px, calc(100vw - 60px)); }

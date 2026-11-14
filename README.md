@@ -13,7 +13,7 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 - List View: a planner of dated work, grouped by day and opened on today. Items can be ticked off.
 - Recent Activity: recent announcements and newly posted grades.
 - Sidebar: To Do (overdue first, each item dismissible), Recent Feedback, View Grades.
-- **+ To Do** adds your own item, for work that lives outside Brightspace such as Gradescope or publisher sites. Your items appear in To Do, List View and the Calendar.
+- **+ To Do** adds your own item, for anything that lives outside Brightspace. Your items appear in To Do, List View and the Calendar.
 
 **Courses**
 - Home: recent announcements, modules, and a To Do and feedback sidebar.
@@ -21,25 +21,41 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 - Assignments: assignments, quizzes and discussions in one list, by date or by grade category, with search, submission status and an External Tools group.
 - Assignment, quiz and discussion pages: instructions, dates, points, your submission and files, your grade and feedback, quiz attempts, and discussion posts as a thread.
 - Grades: every item with due date and score, group subtotals, the released total or a labelled estimate, group weights, What-If scores, arranging by group, due date or title, and a course switcher.
-- People, Files, Syllabus (course overview plus a summary of dated work), Quizzes, Discussions, Modules.
+- Modules, with each item opening inside the wrapper: files in a viewer, external tools in a frame, links as a card, each with Previous and Next.
+- People, Files, Syllabus (course overview plus a summary of dated work), Quizzes, Discussions.
 
 **Calendar**: month and agenda views, a checkbox per course, and your own To Do items.
 
+**Inbox**: Brightspace's own Email tool shown in a frame, with recent announcements underneath.
+
+**Gradescope** (optional, off by default; Account → Gradescope): for courses with a Gradescope link, reads your Gradescope assignments, due dates and scores and shows them in Assignments, Grades, To Do, List View and the Calendar. It uses your own Gradescope sign-in, reads two kinds of page, and changes nothing there. Open Gradescope once from a course if it says you are signed out.
+
 **Preferences** (Account): light, dark or automatic theme, and whether to show current courses or all. Preferences and your To Do items are stored in the extension, in this browser only.
 
-The wrapper stands in for the Brightspace home page, course home pages, and Brightspace's own Grades, Assignments, Announcements, Quizzes, Discussions, Classlist and Content list pages. On every other Brightspace page a small "← Canvas view" button leads back.
+The wrapper stands in for the Brightspace home page, course home pages, and Brightspace's own Grades, Assignments, Announcements, Quizzes, Discussions, Classlist and Content list pages. On every other Brightspace page a small "← Canvas view" button leads back. The layout adapts down to phone width.
 
-## Limits
+## Scope and limits
 
-- **External tools are links.** Work in Gradescope or publisher sites is not read; add it yourself with **+ To Do**.
-- **Inbox** cannot read Brightspace mail. It links to Brightspace Email and lists recent announcements instead.
+- **Student view only.** There are no instructor pages (gradebook editing, SpeedGrader, course settings): they need an instructor role and would have to write to Brightspace.
+- **Other external tools are frames or links.** Only Gradescope is read. Publisher sites (MyLab, WebAssign and so on) open in a frame or a new tab; add their work yourself with **+ To Do**.
 - **Estimated totals** come from graded items, ignore dropped-score rules and are not official.
 - **Discussions in To Do** cannot tell whether you have already posted.
-- **Not yet checked against real Brightspace:** quiz attempts, discussion posts, the course overview, the Inbox address, and the addresses of the pages the wrapper stands in for. The probe (below) checks the first three.
+- **No wiki pages.** Brightspace has none; HTML pages in Content open in the file viewer.
+
+## What has been checked, and how
+
+| Checked | How |
+| --- | --- |
+| Every page and interaction renders | Headless Chrome against the made-up Brightspace (`tools/shots.ps1`) |
+| The extension itself loads and runs in Firefox and Edge | Installed as a temporary add-on (Firefox 160 via `web-ext`, Edge via `--load-extension`) against the made-up Brightspace |
+| Brightspace API routes and fields | Your probe report in `fixtures/` for most; D2L's API documentation for quiz attempts, discussion posts, course overview and topic files |
+| Gradescope page structure | The public `gradescope-api` project's parser, and a made-up Gradescope in the dev server |
+
+Not yet checked on a real account: the addresses of the Brightspace pages the wrapper stands in for, the Email address used by Inbox, whether Brightspace and external tools allow being shown in a frame, and the Gradescope reader against real Gradescope. Each has a fallback: a page that is not recognised stays as plain Brightspace, and every frame has an "open in a new tab" button.
 
 ## Load it
 
-- **Firefox (primary, 121 or later):** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on…**, and select `extension/manifest.json`. It is removed when Firefox closes; use **Reload** on that page after code changes. If the wrapper does not appear, open `about:addons`, select the extension, and under **Permissions** allow access to `brightspace.com`.
+- **Firefox (primary, 121 or later):** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on…**, and select `extension/manifest.json`. It is removed when Firefox closes; use **Reload** on that page after code changes. If the wrapper does not appear, open `about:addons`, select the extension, and under **Permissions** allow access to `brightspace.com` (and `gradescope.com` if you switch the Gradescope reader on).
 - **Chrome or Edge:** open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, and select the `extension` folder. Chrome shows a harmless warning about `background.scripts`.
 
 Then sign in to Brightspace and open its home page.
@@ -54,7 +70,10 @@ node tests/data.test.js           # data-layer test against a stubbed Brightspac
 powershell -File tools\shots.ps1  # opens every page in headless Chrome or Edge and checks it rendered
 ```
 
-`tools/dev-server.js` runs the extension's scripts against a made-up Brightspace (`tools/fake-brightspace.js`) with invented courses and grades. `tools/shots.ps1 -Out <folder>` also saves a screenshot of each page listed in `tools/pages.json`; add `-Theme dark` for the dark theme.
+- `tools/dev-server.js` runs the extension's scripts against a made-up Brightspace and Gradescope (`tools/fake-brightspace.js`) with invented courses and grades.
+- `tools/shots.ps1 -Out <folder>` also saves a screenshot of each page listed in `tools/pages.json`; add `-Theme dark` for the dark theme.
+- `http://localhost:8765/__phone?w=390&to=/d2l/home%23/` shows a page at phone width.
+- `node tools/dev-extension.js <folder>` writes a copy of the extension that also runs on `localhost`. Load that copy in a browser (for Firefox: `web-ext run --source-dir <folder>`) and open pages with `?bsxreal=1` to exercise the real extension against the made-up Brightspace. `http://localhost:8765/__status` lists what each opened page reported.
 
 ## Layout
 
@@ -62,12 +81,14 @@ powershell -File tools\shots.ps1  # opens every page in headless Chrome or Edge 
 | --- | --- |
 | `extension/src/client.js` | Talks to the Brightspace API: versions, paging, throttling, a two-minute cache |
 | `extension/src/data.js` | Adapters that turn Brightspace responses into Canvas-shaped objects |
+| `extension/src/gradescope.js` | Optional Gradescope reader |
 | `extension/src/ui-core.js` | Frame, navigation, trays, routing, preferences, shared helpers |
-| `extension/src/ui-dashboard.js` | Dashboard views, all courses, all grades, the To Do sidebar |
+| `extension/src/ui-dashboard.js` | Dashboard views, Inbox, all courses, all grades, the To Do sidebar |
 | `extension/src/ui-course.js` | Every page inside a course |
 | `extension/src/ui-calendar.js` | Calendar |
 | `extension/src/styles.js`, `icons.js` | Look: light and dark themes, icons |
+| `extension/background.js` | Runs the probe; fetches Gradescope pages for the reader |
 | `extension/probe.js` | Access probe, run from the toolbar button |
 | `fixtures/` | Probe reports |
-| `tools/`, `tests/` | Dev server, fake Brightspace, page check, data test |
+| `tools/`, `tests/` | Dev server, made-up Brightspace, page check, data test |
 | `docs/` | The plan, plus a reference pack on how Brightspace works (from a separate planner app; not used at runtime) |

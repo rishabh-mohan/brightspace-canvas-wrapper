@@ -1,6 +1,6 @@
 # Canvas-style wrapper for Brightspace
 
-A browser extension that shows your Brightspace courses in Canvas's layout. It is read-only: it never submits, posts or changes anything on Brightspace. Anything that writes (submitting work, taking a quiz, replying to a discussion) opens the real Brightspace page.
+A browser extension that shows your Brightspace courses in Canvas's layout. It makes exactly one kind of change on Brightspace: handing in an assignment file when you press **Submit Assignment**. Everything else that writes (taking a quiz, replying to a discussion, text or on-paper submissions) opens the real Brightspace page.
 
 Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brightspace-vs-canvas-wrapper-plan.md).
 
@@ -19,7 +19,11 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 - Home: recent announcements, modules, and a To Do and feedback sidebar.
 - Announcements: searchable list and a page per announcement.
 - Assignments: assignments, quizzes and discussions in one list, by date or by grade category, with search, submission status and an External Tools group.
-- Assignment, quiz and discussion pages: instructions, dates, points, your submission and files, your grade and feedback, quiz attempts, and discussion posts as a thread.
+- Assignment pages: instructions and attached files, the rubric (with your ratings, points and per-criterion comments once marked), your submitted files, your grade, and feedback comments and files. Every file downloads in place.
+- **Start Assignment / New Attempt**: choose one file, add an optional comment, press Submit Assignment. It is sent to Brightspace's student submission route (one file per submission, as Brightspace allows) with the same short-lived token Brightspace's own pages use. Shown only for file-upload assignments that are open; "only one submission" assignments hide it once you have submitted. If Brightspace refuses, the page says why and links to the Brightspace page.
+- Quiz pages: attempts completed and remaining (from Brightspace's quiz summary page where, as at Purdue, the attempts list is refused to students), time limit, availability, grade.
+- Discussion pages: posts as a thread, with your own posts marked.
+- Announcement pages include their attachments.
 - Grades: every item with due date and score, group subtotals, the released total or a labelled estimate, group weights, What-If scores, arranging by group, due date or title, and a course switcher.
 - Modules, led by a **Course Home** module (the instructor's Brightspace course homepage, shown in a frame, and the syllabus), with each item opening inside the wrapper: files in a viewer, external tools in a frame, links as a card, each with Previous and Next.
 - People, Files, Syllabus (course overview plus a summary of dated work), Quizzes, Discussions.
@@ -41,7 +45,6 @@ The wrapper stands in for the Brightspace home page, course home pages, and Brig
 - **Student view only.** There are no instructor pages (gradebook editing, SpeedGrader, course settings): they need an instructor role and would have to write to Brightspace.
 - **Other external tools are frames or links.** Only Gradescope is read. Publisher sites (MyLab, WebAssign and so on) open in a frame or a new tab; add their work yourself with **+ To Do**.
 - **Estimated totals** come from graded items, apply each group's drop-lowest and drop-highest rules, and are not official.
-- **Quizzes in To Do** stay listed until graded: Purdue refuses students the quiz-attempts list (403), so the wrapper cannot see that you finished one.
 - **No wiki pages.** Brightspace has none; HTML pages in Content open in the file viewer.
 
 ## What has been checked, and how
@@ -54,7 +57,7 @@ The wrapper stands in for the Brightspace home page, course home pages, and Brig
 | Brightspace page addresses for Announcements, Classlist, Discussions, Content, course home and Email | A university's published list of Brightspace link templates ([University of Limerick](https://ul.ie/node/82179)) |
 | Gradescope page structure | The public `gradescope-api` project's parser, and a made-up Gradescope in the dev server |
 
-Not yet checked on a real account: the student addresses of Brightspace's Grades, Assignments and Quizzes list pages, whether Brightspace and external tools allow being shown in a frame, and the Gradescope reader against real Gradescope. Each has a fallback: a page that is not recognised stays as plain Brightspace, and every frame has an "open in a new tab" button.
+Not yet checked on a real account: the wording of the quiz summary page (the probe now records its attempt labels with digits masked), submitting a file (the request follows D2L's documented format and is exercised against the made-up Brightspace), rubric and feedback-file fields on a marked assignment, the student addresses of Brightspace's Grades, Assignments and Quizzes list pages, whether Brightspace and external tools allow being shown in a frame, and the Gradescope reader against real Gradescope. Each has a fallback: a page that is not recognised stays as plain Brightspace, and every frame has an "open in a new tab" button.
 
 ## Load it
 

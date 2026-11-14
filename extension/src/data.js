@@ -85,6 +85,8 @@ BSX.data = (() => {
     };
 
   // ---- assignments, quizzes, discussions -----------------------------------
+  // Dropbox SubmissionType: 0 file, 1 text, 2 on paper, 3 observed in person, 4 file or text.
+  // SubmissionsRule: 2 keep all, 3 overwrite, 4 only one.
   const mapFolder = (f, ou, grade) => ({
     id: `assignment-${f.Id}`,
     source_id: f.Id,
@@ -94,8 +96,42 @@ BSX.data = (() => {
     points_possible: f.Assessment?.ScoreDenominator ?? null,
     grade_item_id: f.GradeItemId ?? null,
     grade,
+    submission_type: f.SubmissionType ?? 0,
+    submissions_rule: f.SubmissionsRule ?? null,
+    unlock_at: f.Availability?.StartDate || null,
+    lock_at: f.Availability?.EndDate || null,
+    allowed_extensions: f.AllowableFileType === 5 && Array.isArray(f.CustomAllowableFileTypes) ? f.CustomAllowableFileTypes.map(String) : null,
     html_url: `/d2l/lms/dropbox/user/folder_submit_files.d2l?db=${f.Id}&ou=${ou}`,
   });
+
+  // Rubric as Brightspace describes it, flattened to one row per criterion.
+  // ScoringMethod: 0 text only, 1 points, 2 text and numeric, 3 custom points.
+  const rtext = (r) => (r ? r.Text || '' : '');
+  const mapRubric = (r) => ({
+    id: r.RubricId,
+    name: r.Name || 'Rubric',
+    description: rtext(r.Description),
+    points: r.ScoringMethod != null && r.ScoringMethod !== 0,
+    criteria: (r.CriteriaGroups || []).flatMap((g) =>
+      (g.Criteria || []).map((c) => ({
+        id: c.Id,
+        name: c.Name,
+        group: g.Name || '',
+        levels: (g.Levels || []).map((l, i) => ({ id: l.Id, name: l.Name, points: c.Cells?.[i]?.Points ?? l.Points ?? null, description: rtext(c.Cells?.[i]?.Description) })),
+      }))
+    ),
+    overall: (r.OverallLevels || []).map((l) => ({ id: l.Id, name: l.Name, from: l.RangeStart ?? l.RangeStartPoints ?? null, description: rtext(l.Description) })),
+  });
+  const mapAssessment = (x) => {
+    const o = x.OverallOutcome || x.OverallLevel || {};
+    return {
+      rubric_id: x.RubricId,
+      score: o.Score ?? x.OverallScore ?? null,
+      level_id: o.LevelId ?? null,
+      feedback: rtext(o.Feedback || x.OverallFeedback),
+      criteria: (x.CriteriaOutcome || []).map((c) => ({ id: c.CriterionId, level_id: c.LevelId ?? null, score: c.Score ?? null, feedback: rtext(c.Feedback) })),
+    };
+  };
 
   const mapQuiz = (q, ou, grade) => ({
     id: `quiz-${q.QuizId}`,
@@ -167,13 +203,15 @@ BSX.data = (() => {
     return list(await soft(client.le(`${ou}/dropbox/folders/${folderId}/submissions/mysubmissions/`), []));
   }
 
-  function readSubmission(entries) {
+  // `base` is the folder's API address; with it, files get addresses they can be downloaded from.
+  function readSubmission(entries, base = null) {
     const out = { submitted: false, submitted_at: null, status: 'unsubmitted', submissions: [], feedback: null };
     for (const e of entries) {
       const subs = (e.Submissions || []).map((s) => ({
+        id: s.Id,
         submitted_at: s.SubmissionDate || null,
         comment: s.Comment?.Text || '',
-        files: (s.Files || []).filter((f) => !f.IsDeleted).map((f) => ({ name: f.FileName, size: f.Size })),
+        files: (s.Files || []).filter((f) => !f.IsDeleted).map((f) => ({ name: f.FileName, size: f.Size, url: base && s.Id != null ? `${base}/submissions/${s.Id}/files/${f.FileId}` : null })),
       }));
       const real = subs.some((s) => s.submitted_at || s.files.length);
       if ((e.Status === 1 || e.Status === 3) && real) {
@@ -184,8 +222,20 @@ BSX.data = (() => {
       }
       out.submissions.push(...subs);
       const fb = e.Feedback;
-      if (fb && (fb.Score != null || fb.Feedback?.Text || fb.Feedback?.Html)) {
-        out.feedback = { score: fb.Score ?? null, comment_html: fb.Feedback?.Html || '', comment: fb.Feedback?.Text || '', graded: Boolean(fb.IsGraded) };
+      const fbFiles = fb?.Files || [];
+      const fbLinks = fb?.Links || [];
+      const rubrics = fb?.RubricAssessments || [];
+      if (fb && (fb.Score != null || fb.Feedback?.Text || fb.Feedback?.Html || fbFiles.length || fbLinks.length || rubrics.length)) {
+        const who = e.Entity && e.Entity.EntityId != null ? `${String(e.Entity.EntityType || 'User').toLowerCase()}/${e.Entity.EntityId}` : null;
+        out.feedback = {
+          score: fb.Score ?? null,
+          comment_html: fb.Feedback?.Html || '',
+          comment: fb.Feedback?.Text || '',
+          graded: Boolean(fb.IsGraded),
+          files: fbFiles.map((f) => ({ name: f.FileName, size: f.Size, url: base && who ? `${base}/feedback/${who}/attachments/${f.FileId}` : null })),
+          links: fbLinks.map((l) => ({ name: l.LinkName || l.Name || 'Link', url: l.Href || l.Url || null })).filter((l) => l.url),
+          rubrics: rubrics.map(mapAssessment),
+        };
       }
     }
     out.submissions.sort((a, b) => Date.parse(b.submitted_at || 0) - Date.parse(a.submitted_at || 0));
@@ -200,7 +250,7 @@ BSX.data = (() => {
 
   // One assignment with its instructions, the student's submissions and any feedback.
   async function assignment(ou, folderId) {
-    const [fs, entries, values] = await Promise.all([folders(ou), submissionEntries(ou, folderId), gradeValues(ou)]);
+    const [fs, entries, values, base] = await Promise.all([folders(ou), submissionEntries(ou, folderId), gradeValues(ou), client.lePath(`${ou}/dropbox/folders/${folderId}`)]);
     const f = fs.find((x) => sameId(x.Id, folderId));
     if (!f) return null;
     const v = values.find((x) => sameId(x.GradeObjectIdentifier, f.GradeItemId));
@@ -208,9 +258,39 @@ BSX.data = (() => {
       ...mapFolder(f, ou, toValue(v) || null),
       description_html: f.CustomInstructions?.Html || '',
       description: f.CustomInstructions?.Text || '',
-      attachments: (f.Attachments || []).map((a) => ({ name: a.FileName, size: a.Size })),
-      ...readSubmission(entries),
+      attachments: (f.Attachments || []).map((a) => ({ name: a.FileName, size: a.Size, url: `${base}/attachments/${a.FileId}` })),
+      links: (f.LinkAttachments || []).map((l) => ({ name: l.LinkName || l.Name || 'Link', url: l.Href || l.Url || null })).filter((l) => l.url),
+      rubrics: (f.Assessment?.Rubrics || []).map(mapRubric),
+      ...readSubmission(entries, base),
     };
+  }
+
+  // Can the student hand in this assignment from the wrapper? Brightspace's student
+  // route takes one file (and an optional comment) per submission.
+  function canSubmit(a, now = Date.now()) {
+    if (a.submission_type !== 0 && a.submission_type !== 4) return { ok: false, why: 'This assignment is not a file upload.' };
+    if (a.unlock_at && Date.parse(a.unlock_at) > now) return { ok: false, why: 'This assignment is not open yet.' };
+    if (a.lock_at && Date.parse(a.lock_at) < now) return { ok: false, why: 'This assignment is closed.' };
+    if (a.submissions_rule === 4 && a.submitted) return { ok: false, why: 'Only one submission is allowed, and you have already submitted.' };
+    return { ok: true, why: null };
+  }
+
+  // Hand in one file, with an optional comment, as the signed-in student.
+  // Sent as Brightspace documents it: multipart/mixed, a JSON comment then the file.
+  async function submit(ou, folderId, file, comment = '') {
+    const boundary = `bsx${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    const safe = String(file.name || 'file').replace(/["\r\n\\]/g, '_');
+    const body = new Blob([
+      `--${boundary}\r\nContent-Type: application/json\r\n\r\n`,
+      JSON.stringify({ Text: comment || '', Html: null }),
+      `\r\n--${boundary}\r\nContent-Disposition: form-data; name=""; filename="${safe}"; filename*=UTF-8''${encodeURIComponent(file.name || 'file')}\r\nContent-Type: ${file.type || 'application/octet-stream'}\r\n\r\n`,
+      file,
+      `\r\n--${boundary}--\r\n`,
+    ]);
+    await client.send(`${ou}/dropbox/folders/${folderId}/submissions/mysubmissions/`, { body, type: `multipart/mixed;boundary=${boundary}` });
+    client.clear();
+    const after = readSubmission(await submissionEntries(ou, folderId));
+    return { submitted: after.submitted, submitted_at: after.submitted_at };
   }
 
   // How many attempts the student has made on a quiz. `known` is false when Brightspace
@@ -220,11 +300,49 @@ BSX.data = (() => {
       soft(client.leObjects(`${ou}/quizzes/${quizId}/attempts/`), null),
       client.lp('users/whoami').catch(() => null),
     ]);
-    if (!attempts) return { known: false, attempts_used: 0, in_progress: 0 };
+    if (!attempts) return quizSummary(ou, quizId);
     const mine = attempts.filter((a) => a.UserId == null || !who || sameId(a.UserId, who.Identifier));
     // An attempt has a Completed time once it is handed in; one without is still open.
     const finished = mine.filter((a) => !('Completed' in a) || a.Completed);
     return { known: true, attempts_used: finished.length, in_progress: mine.length - finished.length };
+  }
+
+  // Where the attempts list is refused to students (as at Purdue), Brightspace's own quiz
+  // summary page still states the attempts allowed, completed and remaining. Read that
+  // page's text; opening it does not start an attempt.
+  function parseQuizSummary(html) {
+    const text = String(html || '')
+      .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;|&#160;/g, ' ')
+      .replace(/\s+/g, ' ');
+    const grab = (re) => {
+      const m = text.match(re);
+      return m ? (/unlimited/i.test(m[1]) ? Infinity : Number(m[1])) : null;
+    };
+    const SEP = '\\s*[-:–]?\\s*';
+    const completed = grab(new RegExp(`(?:Attempts?\\s+Completed|Completed(?:\\s+Attempts?)?)${SEP}(\\d+)(?![\\d/:.])`, 'i'));
+    const allowed = grab(new RegExp(`(?:Attempts?\\s+Allowed|Allowed(?:\\s+Attempts?)?)${SEP}(\\d+(?![\\d/:.])|Unlimited)`, 'i'));
+    const remaining = grab(new RegExp(`(?:Attempts?\\s+Remaining|Remaining(?:\\s+Attempts?)?)${SEP}(\\d+(?![\\d/:.])|Unlimited)`, 'i'));
+    let used = completed;
+    if (used == null && Number.isFinite(allowed) && Number.isFinite(remaining)) used = Math.max(0, allowed - remaining);
+    if (used == null) return { known: false, attempts_used: 0, in_progress: 0 };
+    return {
+      known: true,
+      attempts_used: used,
+      in_progress: 0,
+      allowed: allowed === Infinity ? null : allowed,
+      remaining: remaining === Infinity ? null : remaining ?? (Number.isFinite(allowed) ? Math.max(0, allowed - used) : null),
+      source: 'summary',
+    };
+  }
+
+  async function quizSummary(ou, quizId) {
+    const html = await client.page(`/d2l/lms/quizzing/user/quiz_summary.d2l?qi=${encodeURIComponent(quizId)}&ou=${encodeURIComponent(ou)}`).catch((e) => {
+      if (e instanceof client.ApiError && e.status === 401) throw e;
+      return '';
+    });
+    return parseQuizSummary(html);
   }
 
   async function quiz(ou, quizId) {
@@ -446,7 +564,7 @@ BSX.data = (() => {
 
   // ---- announcements -------------------------------------------------------
   async function announcements(ou) {
-    const items = list(await soft(client.le(`${ou}/news/`), []));
+    const [items, base] = await Promise.all([soft(client.le(`${ou}/news/`), []).then(list), client.lePath(`${ou}/news`)]);
     const now = Date.now();
     return items
       .filter(
@@ -463,6 +581,7 @@ BSX.data = (() => {
         message: n.Body?.Text || '',
         posted_at: n.StartDate || n.CreatedDate || null,
         pinned: Boolean(n.IsPinned),
+        attachments: (n.Attachments || []).map((f) => ({ name: f.FileName, size: f.Size, url: `${base}/${n.Id}/attachments/${f.FileId}` })),
       }))
       .sort((a, b) => b.pinned - a.pinned || Date.parse(b.posted_at || 0) - Date.parse(a.posted_at || 0));
   }
@@ -577,7 +696,7 @@ BSX.data = (() => {
 
   return {
     courses, orgId, me, updates,
-    assignments, assignmentGroups, assignment, submission, quiz, quizAttempts, discussions, discussion,
+    assignments, assignmentGroups, assignment, submission, canSubmit, submit, quiz, quizAttempts, parseQuizSummary, discussions, discussion,
     todo, planner, overdue, recentFeedback,
     grades, estimate, estimable, courseTotals,
     announcements, recentAnnouncements,

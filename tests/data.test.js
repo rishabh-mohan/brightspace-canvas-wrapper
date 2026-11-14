@@ -32,12 +32,20 @@ const routes = {
   '/d2l/api/le/1.100/overdueItems/myItems': { Objects: [{ ItemId: 1, ItemName: 'Late', OrgUnitId: 10, DueDate: past }], Next: null },
 };
 const calls = [];
+const posts = [];
 const ctx = {
-  console, URL, Date, Math, JSON, Promise, Map, Set, encodeURIComponent, setTimeout, clearTimeout,
+  console, URL, Date, Math, JSON, Promise, Map, Set, encodeURIComponent, setTimeout, clearTimeout, Blob,
+  localStorage: { getItem: (k) => (k === 'XSRF.Token' ? 'x1' : null) },
   location: { origin: 'https://x.brightspace.com', host: 'x.brightspace.com' },
   sessionStorage: { getItem: () => null, setItem() {} },
-  fetch: async (p) => {
+  fetch: async (p, opts = {}) => {
     calls.push(p);
+    if (opts.method === 'POST') {
+      posts.push({ p, opts });
+      if (p === '/d2l/lp/auth/oauth2/token') return { ok: opts.headers['X-Csrf-Token'] === 'x1', json: async () => ({ access_token: 'tok' }) };
+      return { ok: true, status: 200, text: async () => '{}' };
+    }
+    if (p.startsWith('/d2l/lms/')) return { ok: true, status: 200, url: p, text: async () => '<html><td>Attempts</td><td>Allowed - 2, Completed - 1</td><p>Due on 11/12/2026 11:59 PM</p></html>' };
     if (p.startsWith('/d2l/api/le/1.100/calendar/events/myEvents/')) {
       return { ok: true, json: async () => ({ Objects: [
         { CalendarEventId: 3, Title: 'HW1 - Available', OrgUnitId: 10, OrgUnitName: 'A', StartDateTime: past, EndDateTime: past, IsAssociatedWithEntity: true, AssociatedEntity: { AssociatedEntityType: 'Dropbox', AssociatedEntityId: 5, Link: '/x' } },
@@ -131,8 +139,16 @@ const assert = require('assert');
   assert.strictEqual(data.estimable(wu, wu.groups[0].items[1]), true);
   assert.deepEqual({ ...data.estimate(wu, new Map([[2, 25]])) }, { score: 21, points_possible: 30 });
 
-  // Quiz attempts: unknown when Brightspace refuses, counted when it answers.
-  assert.strictEqual((await data.quizAttempts(10, 7)).known, false);
+  // Quiz attempts: when the API refuses, Brightspace's quiz summary page is read instead.
+  const sum = await data.quizAttempts(10, 7);
+  assert.strictEqual(sum.known, true);
+  assert.strictEqual(sum.attempts_used, 1);
+  assert.strictEqual(sum.remaining, 1);
+  const p = data.parseQuizSummary;
+  assert.strictEqual(p('Completed on 11/12/2026').known, false, 'a date is not an attempt count');
+  assert.deepStrictEqual([p('Attempts Allowed: 3 Attempts Remaining: 1').attempts_used, p('Attempts Allowed: 3 Attempts Remaining: 1').remaining], [2, 1]);
+  assert.strictEqual(p('Allowed - Unlimited, Completed - 4').remaining, null);
+  assert.strictEqual(p('<p>Nothing useful</p>').known, false);
   routes['/d2l/api/le/1.100/10/quizzes/8/attempts/'] = { Objects: [{ AttemptId: 1, UserId: 42 }, { AttemptId: 2, UserId: 42 }], Next: null };
   const q = await data.quizAttempts(10, 8);
   assert.strictEqual(q.known, true);
@@ -176,6 +192,38 @@ const assert = require('assert');
   const before = calls.length;
   await data.courses();
   assert.strictEqual(calls.length, before, 'second read served from cache');
+
+  // Assignment detail: rubric, rubric results, feedback files, download addresses.
+  routes['/d2l/api/le/1.100/13/dropbox/folders/'] = [{ Id: 5, Name: 'Essay', DueDate: soon, SubmissionType: 0, SubmissionsRule: 4, Availability: null, GradeItemId: null,
+    Attachments: [{ FileId: 3, FileName: 'prompt.pdf', Size: 10 }],
+    Assessment: { ScoreDenominator: 10, Rubrics: [{ RubricId: 9, Name: 'R', ScoringMethod: 1, CriteriaGroups: [{ Name: 'G', Levels: [{ Id: 1, Name: 'Good' }, { Id: 2, Name: 'Poor' }], Criteria: [{ Id: 91, Name: 'Clarity', Cells: [{ Points: 10, Description: { Text: 'clear' } }, { Points: 0, Description: { Text: 'unclear' } }] }] }], OverallLevels: [] }] } }];
+  routes['/d2l/api/le/1.100/13/dropbox/folders/5/submissions/mysubmissions/'] = [{ Entity: { EntityId: 42, EntityType: 'User' }, Status: 3,
+    Submissions: [{ Id: 8, SubmissionDate: past, Files: [{ FileId: 4, FileName: 'mine.pdf', Size: 5 }] }],
+    Feedback: { Score: 10, IsGraded: true, Feedback: { Text: 'Nice' }, Files: [{ FileId: 6, FileName: 'notes.pdf', Size: 2 }], Links: [],
+      RubricAssessments: [{ RubricId: 9, OverallOutcome: { Score: 10 }, CriteriaOutcome: [{ CriterionId: 91, LevelId: 1, Score: 10, Feedback: { Text: 'Well put' } }] }] } }];
+  const essay = await data.assignment(13, 5);
+  assert.strictEqual(essay.rubrics[0].criteria[0].levels[0].points, 10);
+  assert.strictEqual(essay.rubrics[0].criteria[0].levels[1].description, 'unclear');
+  assert.strictEqual(essay.feedback.rubrics[0].criteria[0].level_id, 1);
+  assert.strictEqual(essay.feedback.rubrics[0].criteria[0].feedback, 'Well put');
+  assert.strictEqual(essay.feedback.files[0].url, '/d2l/api/le/1.100/13/dropbox/folders/5/feedback/user/42/attachments/6');
+  assert.strictEqual(essay.submissions[0].files[0].url, '/d2l/api/le/1.100/13/dropbox/folders/5/submissions/8/files/4');
+  assert.strictEqual(essay.attachments[0].url, '/d2l/api/le/1.100/13/dropbox/folders/5/attachments/3');
+  assert.strictEqual(data.canSubmit(essay).ok, false, 'only one submission allowed and already handed in');
+  assert.strictEqual(data.canSubmit({ ...essay, submitted: false }).ok, true);
+  assert.strictEqual(data.canSubmit({ ...essay, submitted: false, lock_at: past }).ok, false);
+  assert.strictEqual(data.canSubmit({ ...essay, submitted: false, submission_type: 2 }).ok, false);
+
+  // Handing in: token first, then one multipart/mixed POST with a JSON comment and the file.
+  await data.submit(13, 5, new Blob(['hello'], { type: 'text/plain' }), 'my comment');
+  assert.strictEqual(posts[0].p, '/d2l/lp/auth/oauth2/token');
+  const sent = posts[1];
+  assert.strictEqual(sent.p, '/d2l/api/le/1.100/13/dropbox/folders/5/submissions/mysubmissions/');
+  assert.strictEqual(sent.opts.headers.Authorization, 'Bearer tok');
+  assert.match(sent.opts.headers['Content-Type'], /^multipart\/mixed;boundary=/);
+  const bodyText = await sent.opts.body.text();
+  assert.match(bodyText, /Content-Type: application\/json\r\n\r\n\{"Text":"my comment","Html":null\}\r\n--/);
+  assert.match(bodyText, /filename="file"[\s\S]*Content-Type: text\/plain\r\n\r\nhello\r\n--bsx\w+--/);
 
   // Saved answers: a new page draws from the last visit at once, then redraws when
   // Brightspace's real answer differs.

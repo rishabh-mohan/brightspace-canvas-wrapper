@@ -246,6 +246,22 @@
       const quizId = quizzes.body?.Objects?.[0]?.QuizId;
       if (quizId) {
         await probe(group, 'My quiz attempts (first quiz)', 'le/{ou}/quizzes/{id}/attempts/', `${le}/${ou}/quizzes/${quizId}/attempts/`);
+        // The quiz summary page, read where the attempts list is refused. Records only which
+        // attempt labels the page has and whether a number follows each, not the numbers.
+        statusLine.textContent = 'Checking quiz summary page…';
+        try {
+          const res = await fetch(`/d2l/lms/quizzing/user/quiz_summary.d2l?qi=${quizId}&ou=${ou}`, { credentials: 'same-origin' });
+          const text = (await res.text()).replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/g, ' ').replace(/\s+/g, ' ');
+          const near = (word) => {
+            const m = text.match(new RegExp(`.{0,25}\\b${word}\\b.{0,25}`, 'i'));
+            return m ? m[0].replace(/\d/g, '#') : null; // digits masked
+          };
+          const r = { status: res.status, contentType: res.headers.get('content-type') };
+          row('Quiz summary page (first quiz)', r);
+          report.results.push({ group, label: 'Quiz summary page (first quiz)', endpoint: '/d2l/lms/quizzing/user/quiz_summary.d2l?qi={id}&ou={ou}', status: res.status, contentType: r.contentType, redirectedToLogin: /\/d2l\/login/i.test(res.url), labels: { allowed: near('Allowed'), completed: near('Completed'), remaining: near('Remaining') } });
+        } catch (e) {
+          report.results.push({ group, label: 'Quiz summary page (first quiz)', error: String(e) });
+        }
       }
       const forumId = Array.isArray(forums.body) && forums.body[0]?.ForumId;
       if (forumId) {

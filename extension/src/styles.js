@@ -229,6 +229,27 @@ a.t:hover { color: var(--link); }
 .linkcard { display: flex; gap: 16px; align-items: center; padding: 22px; border: 1px solid var(--line); border-radius: 4px; margin: 14px 0; }
 .linkcard > div { flex: 1; min-width: 0; }
 
+/* rubric (Canvas-style: criterion, ratings, points) */
+.rubric { border-collapse: collapse; width: 100%; margin: 10px 0 18px; font-size: 14px; }
+.rubric th, .rubric td { border: 1px solid var(--line); padding: 8px 10px; vertical-align: top; text-align: left; }
+.rubric thead th { background: var(--soft); }
+.rubric .ratings { display: flex; flex-wrap: wrap; gap: 0; padding: 0; }
+.rubric .rating { flex: 1 1 110px; padding: 8px 10px; border-right: 1px solid var(--line2); min-width: 0; }
+.rubric .rating:last-child { border-right: 0; }
+.rubric .rating.on { background: var(--hi); box-shadow: inset 0 -3px 0 var(--link); }
+.rubric .rpts { font-weight: 700; }
+.rubric .num { text-align: right; white-space: nowrap; }
+.rubric .cfb { margin-top: 6px; font-style: italic; color: var(--muted); }
+
+/* hand-in panel */
+.submitbox { margin: 18px 0; padding: 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--soft); }
+.submitbox h2 { margin: 0 0 10px; font-size: 18px; }
+.submitbox label { display: block; margin: 10px 0 4px; font-weight: 700; font-size: 14px; }
+.submitbox .row { margin-top: 14px; gap: 8px; }
+.submitbox .msg { margin-top: 10px; font-size: 14px; }
+.submitbox .msg.bad { color: var(--bad); }
+.btn[disabled] { opacity: .6; cursor: default; }
+
 /* tables and grades */
 table.grid { border-collapse: collapse; width: 100%; }
 .grid th, .grid td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--line2); vertical-align: top; }

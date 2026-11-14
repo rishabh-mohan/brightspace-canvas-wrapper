@@ -6,7 +6,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { handle, gradescope } = require('./fake-brightspace');
+const { handle, gradescope, quizSummary, submit } = require('./fake-brightspace');
 const statuses = []; // what pages reported back about themselves (see the page script below)
 
 const ext = path.join(__dirname, '..', 'extension');
@@ -26,6 +26,7 @@ function page(real) {
 (() => {
   const q = new URLSearchParams(location.search);
   if (q.get('bsxframe')) window.BSX_DEV_FRAME = true; // phone-width preview, see /__phone
+  localStorage.setItem('XSRF.Token', 'dev-xsrf'); // Brightspace keeps its anti-forgery token here
   const preset = { theme: q.get('bsxtheme'), dash: q.get('bsxdash'), gradescope: q.get('bsxgs') ? true : null };
   const any = preset.theme || preset.dash || preset.gradescope;
   const read = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
@@ -52,6 +53,10 @@ function page(real) {
     const verb = step.slice(0, step.indexOf(':'));
     const rest = step.slice(step.indexOf(':') + 1);
     if (verb === 'click') root()?.querySelector(rest)?.click();
+    if (verb === 'file') { // file:<sel>=<name> picks a small made-up file
+      const el = root()?.querySelector(rest.slice(0, rest.lastIndexOf('=')));
+      if (el) { const dt = new DataTransfer(); dt.items.add(new File(['made-up work'], rest.slice(rest.lastIndexOf('=') + 1), { type: 'application/pdf' })); el.files = dt.files; }
+    }
     if (verb === 'type') {
       const el = root()?.querySelector(rest.slice(0, rest.lastIndexOf('=')));
       if (el) { el.value = rest.slice(rest.lastIndexOf('=') + 1); el.dispatchEvent(new Event('input', { bubbles: true })); }
@@ -108,6 +113,23 @@ http
     }
     if (url.pathname.startsWith('/__gradescope/')) {
       const html = url.searchParams.get('signedout') ? null : gradescope(url.pathname.slice('/__gradescope'.length));
+      return html ? send(200, 'text/html; charset=utf-8', html) : send(404, 'text/plain', 'Not found');
+    }
+    // Writes: the token Brightspace's pages use, and handing in an assignment.
+    if (req.method === 'POST' && url.pathname === '/d2l/lp/auth/oauth2/token') {
+      return send(req.headers['x-csrf-token'] ? 200 : 403, 'application/json', JSON.stringify({ access_token: 'dev-token', expires_in: 3600 }));
+    }
+    if (req.method === 'POST' && url.pathname.startsWith('/d2l/api/')) {
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        const r = req.headers.authorization === 'Bearer dev-token' ? submit(url.pathname, Buffer.concat(chunks), req.headers['content-type']) : { status: 403, type: 'text/plain', body: 'Not authorised' };
+        send(r.status, r.type, r.body);
+      });
+      return undefined;
+    }
+    if (url.pathname === '/d2l/lms/quizzing/user/quiz_summary.d2l') {
+      const html = quizSummary(url.searchParams);
       return html ? send(200, 'text/html; charset=utf-8', html) : send(404, 'text/plain', 'Not found');
     }
     const api = handle(url.pathname, url.searchParams);

@@ -139,7 +139,8 @@
     if (r.itemId != null) {
       const a = list.find((x) => x.id === r.itemId);
       if (!a) return notFound('announcement', course.id, 'announcements');
-      return { crumb: a.title, body: h('article', { class: 'detail' }, h('h1', null, a.title), h('div', { class: 'muted small' }, a.posted_at ? `Posted ${when(a.posted_at)}` : ''), prose(a.message_html, a.message)) };
+      return { crumb: a.title, body: h('article', { class: 'detail' }, h('h1', null, a.title), h('div', { class: 'muted small' }, a.posted_at ? `Posted ${when(a.posted_at)}` : ''), prose(a.message_html, a.message),
+        a.attachments.length ? [h('h2', { class: 'sect' }, 'Attachments'), h('ul', { class: 'filelist' }, a.attachments.map(fileItem))] : null) };
     }
     if (!list.length) return { body: ui.empty('No announcements in this course.') };
     const rows = list.map((a) => {
@@ -308,6 +309,85 @@
       : h('div', { class: 'muted small pad' }, possible != null ? `Not graded yet. ${num(possible)} points possible.` : 'Not graded yet.'));
   }
 
+  const SUBMIT_KIND = { 0: 'a file upload', 1: 'a text entry', 2: 'on paper', 3: 'in person', 4: 'a file upload or text entry' };
+  const fileItem = (f) => h('li', null, ic('file', 16), ' ', f.url ? h('a', { href: f.url, download: f.name, title: `Download ${f.name}` }, f.name) : f.name, f.size != null ? h('span', { class: 'muted small' }, ` ${ui.bytes(f.size)}`) : null);
+  const linkItem = (l) => (ui.safeHref(l.url) || /^https?:\/\//i.test(l.url) ? h('li', null, ic('link', 16), ' ', h('a', { href: l.url, target: '_blank', rel: 'noopener noreferrer' }, l.name)) : null);
+
+  // A rubric as Canvas shows it: one row per criterion, its ratings side by side, and
+  // (once assessed) the chosen rating highlighted with the points and any comment.
+  function rubricTable(rubric, result) {
+    const outcome = new Map((result?.criteria || []).map((c) => [c.id, c]));
+    let total = 0;
+    let max = 0;
+    const rows = rubric.criteria.map((c) => {
+      const o = outcome.get(c.id);
+      const top = Math.max(0, ...c.levels.map((l) => l.points || 0));
+      max += top;
+      const chosen = o && o.level_id != null ? c.levels.find((l) => l.id === o.level_id) : null;
+      const got = o ? o.score ?? chosen?.points ?? null : null;
+      if (got != null) total += got;
+      return h('tr', null,
+        h('th', { scope: 'row' }, c.name, c.group && rubric.criteria.some((x) => x.group !== c.group) ? h('div', { class: 'muted small' }, c.group) : null),
+        h('td', { class: 'ratings' }, c.levels.map((l) => h('div', { class: l === chosen ? 'rating on' : 'rating' },
+          rubric.points && l.points != null ? h('div', { class: 'rpts' }, `${num(l.points)} pts`) : null,
+          h('div', null, h('b', null, l.name)),
+          l.description ? h('div', { class: 'muted small' }, l.description) : null)),
+          o && o.feedback ? h('div', { class: 'cfb', style: 'flex-basis:100%;padding:0 10px 8px' }, o.feedback) : null),
+        rubric.points ? h('td', { class: 'num' }, got != null ? `${num(got)} / ${num(top)} pts` : `${num(top)} pts`) : null);
+    });
+    const overall = result && result.level_id != null ? rubric.overall.find((l) => l.id === result.level_id) : null;
+    return [
+      h('table', { class: 'rubric' },
+        h('thead', null, h('tr', null, h('th', { colspan: rubric.points ? '3' : '2' }, rubric.name))),
+        h('thead', null, h('tr', null, h('th', null, 'Criteria'), h('th', null, 'Ratings'), rubric.points ? h('th', { class: 'num' }, 'Pts') : null)),
+        h('tbody', null, rows),
+        rubric.points ? h('tfoot', null, h('tr', null, h('th', { colspan: '2' }, overall ? `Overall: ${overall.name}` : ''), h('th', { class: 'num' }, result ? `Total: ${num(result.score ?? total)} / ${num(max)}` : `Total points: ${num(max)}`))) : null),
+      result && result.feedback ? h('p', { class: 'cfb' }, result.feedback) : null,
+    ];
+  }
+
+  // Canvas's "Start Assignment": choose a file, add a comment, submit. Brightspace takes one
+  // file per submission; it is sent only when the student presses Submit.
+  function submitBox(course, a, onDone) {
+    const file = h('input', { type: 'file', class: 'txt', 'aria-label': 'File to submit', accept: a.allowed_extensions ? a.allowed_extensions.map((x) => (x.startsWith('.') ? x : `.${x}`)).join(',') : null });
+    const comment = h('textarea', { class: 'txt', rows: '3', 'aria-label': 'Comment' });
+    const msg = h('div', { class: 'msg', role: 'status' });
+    const go = h('button', { type: 'button', class: 'btn primary' }, 'Submit Assignment');
+    const box = h('section', { class: 'submitbox', hidden: true },
+      h('h2', null, a.submitted ? 'New Attempt' : 'File Upload'),
+      h('label', null, 'File', file),
+      a.allowed_extensions ? h('div', { class: 'muted small' }, `Allowed: ${a.allowed_extensions.join(', ')}`) : null,
+      h('label', null, 'Comment (optional)', comment),
+      a.submissions_rule === 3 && a.submitted ? h('div', { class: 'muted small' }, 'This replaces your earlier submission.') : null,
+      a.submissions_rule === 4 ? h('div', { class: 'muted small' }, 'Only one submission is allowed for this assignment.') : null,
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: () => (box.hidden = true) }, 'Cancel'), go),
+      msg);
+    go.addEventListener('click', async () => {
+      const f = file.files && file.files[0];
+      if (!f) {
+        msg.className = 'msg bad';
+        msg.textContent = 'Choose a file first.';
+        return;
+      }
+      go.disabled = true;
+      msg.className = 'msg';
+      msg.textContent = `Submitting ${f.name}…`;
+      try {
+        const s = await data.submit(course.id, a.source_id, f, comment.value.trim());
+        msg.className = 'msg ok';
+        msg.textContent = s.submitted ? `Submitted ${f.name}.` : 'Sent. Brightspace has not listed it yet; check again in a moment.';
+        setTimeout(onDone, 1200);
+      } catch (e) {
+        go.disabled = false;
+        msg.className = 'msg bad';
+        msg.replaceChildren(
+          e && e.status === 403 ? 'Brightspace refused the submission (not permitted). ' : e && e.status === 401 ? 'Your Brightspace session has ended; sign in again. ' : `Brightspace did not accept the submission${e && e.status ? ` (${e.status})` : ''}. ${e && e.detail ? e.detail + ' ' : ''}`,
+          h('a', { href: a.html_url }, 'Submit in Brightspace instead'), '.');
+      }
+    });
+    return box;
+  }
+
   async function assignmentDetail(course, r) {
     const a = await data.assignment(course.id, r.itemId);
     if (!a) return notFound('assignment', course.id, 'assignments');
@@ -318,17 +398,34 @@
         ? h('div', { class: 'substat' }, 'Draft saved, not submitted')
         : h('div', { class: late ? 'substat bad' : 'substat' }, late ? 'Missing' : 'Not submitted');
     const files = a.submissions.flatMap((s) => s.files);
+    const fb = a.feedback;
+    const can = data.canSubmit(a);
+    const box = can.ok ? submitBox(course, a, () => ui.reload()) : null;
+    const head = can.ok
+      ? h('div', { class: 'row' },
+          h('button', { type: 'button', class: 'btn primary', onclick: () => { box.hidden = false; box.querySelector('input[type=file]').focus(); } }, a.submitted ? 'New Attempt' : 'Start Assignment'),
+          h('a', { class: 'btn', href: a.html_url, title: 'Open the assignment in Brightspace' }, ic('external', 14)))
+      : outButton(a.submitted ? 'View in Brightspace' : 'Open in Brightspace', a.html_url);
+    // Rubric results without the rubric itself (not every folder lists it) still show their scores.
+    const shown = new Set(a.rubrics.map((x) => x.id));
+    const orphanResults = (fb?.rubrics || []).filter((x) => !shown.has(x.rubric_id));
     return {
       crumb: a.name,
       body: h('article', { class: 'detail' },
-        h('div', { class: 'dhead' }, h('h1', null, a.name), outButton(a.submitted ? 'View or resubmit in Brightspace' : 'Start Assignment in Brightspace', a.html_url)),
-        metaBar([['Due', a.due_at ? when(a.due_at) : 'No due date'], ['Points', a.points_possible != null ? num(a.points_possible) : null], ['Submitting', 'a file upload']]),
+        h('div', { class: 'dhead' }, h('h1', null, a.name), head),
+        metaBar([['Due', a.due_at ? when(a.due_at) : 'No due date'], ['Points', a.points_possible != null ? num(a.points_possible) : null], ['Submitting', SUBMIT_KIND[a.submission_type] || null], ['Available until', a.lock_at ? when(a.lock_at) : null]]),
+        !can.ok && a.submission_type !== 2 && a.submission_type !== 3 ? h('div', { class: 'banner' }, can.why) : null,
+        box,
         prose(a.description_html, a.description) || h('p', { class: 'muted' }, 'No additional details were added for this assignment.'),
-        a.attachments.length ? [h('h2', { class: 'sect' }, 'Attached files'), h('ul', { class: 'filelist' }, a.attachments.map((f) => h('li', null, ic('file', 16), ' ', h('a', { href: a.html_url, title: 'Download from the Brightspace page' }, f.name), h('span', { class: 'muted small' }, ` ${ui.bytes(f.size)}`)))) ] : null),
+        a.attachments.length || a.links.length ? [h('h2', { class: 'sect' }, 'Attached files'), h('ul', { class: 'filelist' }, a.attachments.map(fileItem), a.links.map(linkItem))] : null,
+        a.rubrics.map((rb) => rubricTable(rb, (fb?.rubrics || []).find((x) => x.rubric_id === rb.id))),
+        orphanResults.length ? [h('h2', { class: 'sect' }, 'Rubric results'), orphanResults.map((x) => h('p', null, x.score != null ? `Score: ${num(x.score)}` : '', x.feedback ? h('div', { class: 'cfb' }, x.feedback) : null))] : null),
       side: [
-        ui.sideSection('Submission', [statusLine, files.length ? h('ul', { class: 'filelist' }, files.map((f) => h('li', null, ic('file', 16), ' ', f.name, h('span', { class: 'muted small' }, ` ${ui.bytes(f.size)}`)))) : null]),
-        gradePanel(a.grade || (a.feedback && a.feedback.score != null ? { score: a.feedback.score, points_possible: a.points_possible, displayed: '', comment: '' } : null), a.points_possible),
-        a.feedback && (a.feedback.comment_html || a.feedback.comment) ? ui.sideSection('Comments', prose(a.feedback.comment_html, a.feedback.comment)) : null,
+        ui.sideSection('Submission', [statusLine, files.length ? h('ul', { class: 'filelist' }, files.map(fileItem)) : null]),
+        gradePanel(a.grade || (fb && fb.score != null ? { score: fb.score, points_possible: a.points_possible, displayed: '', comment: '' } : null), a.points_possible),
+        fb && (fb.comment_html || fb.comment || fb.files.length || fb.links.length)
+          ? ui.sideSection('Feedback', [prose(fb.comment_html, fb.comment), fb.files.length || fb.links.length ? h('ul', { class: 'filelist' }, fb.files.map(fileItem), fb.links.map(linkItem)) : null])
+          : null,
       ],
     };
   }
@@ -336,7 +433,13 @@
   async function quizDetail(course, r) {
     const q = await data.quiz(course.id, r.itemId);
     if (!q) return notFound('quiz', course.id, 'quizzes');
-    const attempts = q.attempts.known ? `${q.attempts.attempts_used}${q.allowed_attempts != null ? ` of ${q.allowed_attempts}` : ''} used${q.attempts.in_progress ? ` · ${q.attempts.in_progress} in progress` : ''}` : null;
+    const allowed = q.attempts.allowed ?? q.allowed_attempts;
+    const remaining = q.attempts.remaining ?? (allowed != null && q.attempts.known ? Math.max(0, allowed - q.attempts.attempts_used) : null);
+    const attempts = q.attempts.known
+      ? [h('div', null, h('b', null, `${q.attempts.attempts_used}`), allowed != null ? ` of ${allowed}` : '', ' completed'),
+         q.attempts.in_progress ? h('div', { class: 'muted small' }, `${q.attempts.in_progress} in progress`) : null,
+         h('div', { class: 'muted small' }, remaining != null ? `${remaining} remaining` : 'Unlimited attempts')]
+      : null;
     const closed = q.lock_at && Date.parse(q.lock_at) < Date.now();
     const notOpen = q.unlock_at && Date.parse(q.unlock_at) > Date.now();
     return {

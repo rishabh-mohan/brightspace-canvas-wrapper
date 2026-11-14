@@ -57,9 +57,9 @@ function build(c) {
       CustomInstructions: rich(`<p>Complete <strong>${c.hw} ${i}</strong> and upload one PDF.</p><ul><li>Show your work.</li><li>Late work loses 10% per day.</li></ul><p>See the <a href="https://example.edu/rubric">rubric</a>.</p>`),
       Attachments: i % 2 ? [{ FileId: i, FileName: `${c.hw.toLowerCase().replace(/ /g, '-')}-${i}.pdf`, Size: 184320 }] : [],
       TotalFiles: 0, UnreadFiles: 0, FlaggedFiles: 0, TotalUsers: 0, TotalUsersWithSubmissions: 0, TotalUsersWithFeedback: 0, Availability: null, IsHidden: false,
-      Assessment: { ScoreDenominator: max, Rubrics: [] }, DropboxType: 2, GroupTypeId: null, DueDate: at(due), DisplayInCalendar: true, NotificationEmail: null,
+      Assessment: { ScoreDenominator: max, Rubrics: i % 2 ? [rubric(c.id * 100 + i, max)] : [] }, DropboxType: 2, GroupTypeId: null, DueDate: at(due), DisplayInCalendar: true, NotificationEmail: null,
       LinkAttachments: [], ActivityId: '', IsAnonymous: false, SubmissionType: 0, CompletionType: 0, AllowableFileType: 0, CustomAllowableFileTypes: null,
-      GradeItemId: gid, AllowOnlyUsersWithSpecialAccess: null, SubmissionsRule: 0,
+      GradeItemId: gid, AllowOnlyUsersWithSpecialAccess: null, SubmissionsRule: 2,
     });
     items.push(item(gid, `${c.hw} ${i}`, max, cat.hw, 30 / n));
     // One piece of STAT homework is left unsubmitted and ungraded, to exercise "overdue".
@@ -109,7 +109,7 @@ function build(c) {
   ];
 
   const news = (c.extra ? [1] : [1, 2, 3, 4]).map((i) => ({
-    Id: c.id * 10 + i, IsHidden: false, Attachments: [], CreatedBy: 1, CreatedDate: at(-i * 5 + 3, 9, 15), LastModifiedDate: at(-i * 5 + 3, 9, 15), Title: ['Exam room change', 'Office hours moved this week', 'Homework solutions posted', 'Welcome to the course'][i - 1],
+    Id: c.id * 10 + i, IsHidden: false, Attachments: i === 3 ? [{ FileId: 1, FileName: 'solutions.pdf', Size: 220000 }] : [], CreatedBy: 1, CreatedDate: at(-i * 5 + 3, 9, 15), LastModifiedDate: at(-i * 5 + 3, 9, 15), Title: ['Exam room change', 'Office hours moved this week', 'Homework solutions posted', 'Welcome to the course'][i - 1],
     Body: rich(['<p>The exam is now in <strong>WALC 1055</strong>. Bring a photo ID.</p><p>Seating chart: <a href="https://example.edu/seats">example.edu/seats</a></p>', '<p>Office hours move to Thursday 2–4pm in LWSN B146.</p>', '<p>Solutions for the last homework are in Content under Week 5.</p><ul><li>Check problem 3 carefully.</li><li>Regrade requests close Friday.</li></ul>', '<p>Welcome! Read the syllabus and complete the intro survey.</p><script>alert(1)</script><img src="x" alt="campus photo">'][i - 1]),
     StartDate: at(-i * 5 + 3, 9, 15), EndDate: null, IsGlobal: false, IsPublished: true, ShowOnlyInCourseOfferings: false, IsAuthorInfoShown: true, IsPinned: i === 4, IsStartDateShown: true, SortOrder: i,
   }));
@@ -134,11 +134,55 @@ function build(c) {
 
   return { folders, quizzes, items, values, categories, final, forums, topics, posts, news, toc, classlist, events };
 }
+// A points rubric with three criteria and four levels, shaped as Brightspace's Rubric.Rubric.
+function rubric(id, max) {
+  const part = max / 4;
+  const levels = [['Exemplary', 1], ['Proficient', 0.75], ['Developing', 0.5], ['Missing', 0]];
+  const crit = (cid, name, weight, words) => ({ Id: cid, Name: name, Cells: levels.map(([, f], k) => ({ Points: Math.round(part * weight * f * 10) / 10, Description: rich(words[k]), Feedback: rich('') })) });
+  return {
+    RubricId: id, Name: 'Grading rubric', Description: rich(''), RubricType: 1, ScoringMethod: 1, IsScoreVisibleToAssessedUsers: true,
+    CriteriaGroups: [{ Name: 'Criteria', Levels: levels.map(([n], k) => ({ Id: k + 1, Name: n, Points: null })), Criteria: [
+      crit(id * 10 + 1, 'Correctness', 2, ['All parts correct', 'Minor errors', 'Several errors', 'Not attempted']),
+      crit(id * 10 + 2, 'Shows work', 1, ['Every step shown', 'Most steps shown', 'Few steps shown', 'No work shown']),
+      crit(id * 10 + 3, 'Presentation', 1, ['Clear and tidy', 'Mostly clear', 'Hard to follow', 'Illegible']),
+    ] }],
+    OverallLevels: [],
+  };
+}
+
 const DATA = new Map(COURSES.map((c) => [c.id, build(c)]));
+const handedIn = new Map(); // folder id -> submissions made through the dev server
+
+// Quiz attempts are refused to students in this course, as at Purdue; the summary page answers instead.
+const NO_ATTEMPTS_API = 102;
+function quizSummary(query) {
+  const c = course(query.get('ou'));
+  const q = c && DATA.get(c.id).quizzes.find((k) => k.QuizId === Number(query.get('qi')));
+  if (!q) return null;
+  const allowed = q.AttemptsAllowed.NumberOfAttemptsAllowed;
+  const done = Date.parse(q.DueDate) < now ? 1 : 0;
+  return `<!doctype html><html><body><h1>${q.Name} - Summary</h1><div class="d2l-box"><table><tr><th>Due Date</th><td>${q.DueDate}</td></tr><tr><th>Attempts</th><td>Allowed - ${allowed}, Completed - ${done}</td></tr><tr><th>Time Limit</th><td>30 minutes</td></tr></table></div><button>Start Quiz!</button></body></html>`;
+}
+
+// POST .../dropbox/folders/{id}/submissions/mysubmissions/ with a multipart/mixed body.
+function submit(pathname, body, contentType) {
+  const m = pathname.match(/^\/d2l\/api\/le\/[\d.]+\/(\d+)\/dropbox\/folders\/(\d+)\/submissions\/mysubmissions\/$/);
+  if (!m || !/^multipart\/mixed;\s*boundary=/i.test(contentType || '')) return { status: 400, type: 'text/plain', body: 'Bad request' };
+  const text = body.toString('latin1');
+  const name = (text.match(/filename="([^"]*)"/) || [])[1];
+  const json = (text.match(/Content-Type: application\/json\r\n\r\n([^\r]*)/) || [])[1];
+  if (!name) return { status: 405, type: 'text/plain', body: 'A submission needs a file.' };
+  const list = handedIn.get(Number(m[2])) || [];
+  list.push({ Id: 100 + list.length, SubmittedBy: { Identifier: '42', DisplayName: 'Student One' }, SubmissionDate: new Date().toISOString(), Comment: rich(json ? JSON.parse(json).Text : ''), Files: [{ IsRead: false, IsFlagged: false, IsDeleted: false, FileId: 500 + list.length, FileName: name, Size: body.length }] });
+  handedIn.set(Number(m[2]), list);
+  return { status: 200, type: 'application/json', body: '{}' };
+}
 
 function submissions(c, d, folderId) {
   const f = d.folders.find((x) => x.Id === Number(folderId));
   if (!f) return null;
+  const mine = handedIn.get(f.Id);
+  if (mine) return [{ Entity: { DisplayName: 'Student One', EntityId: 42, EntityType: 'User', Active: true }, Status: 1, Feedback: null, Submissions: mine, CompletionDate: mine[mine.length - 1].SubmissionDate }];
   const due = Date.parse(f.DueDate);
   if (due > now + 5 * DAY) return []; // furthest-out work: nothing yet
   if (due > now) return [{ Entity: {}, Status: 2, Feedback: null, Submissions: [{ Id: 1, SubmissionDate: null, Comment: rich(''), Files: [] }], CompletionDate: null }];
@@ -146,7 +190,14 @@ function submissions(c, d, folderId) {
   if (!graded && (f.Id % 2 || f.Id === 10304)) return []; // some recent work left unsubmitted
   return [{
     Entity: { DisplayName: 'Student One', EntityId: 42, EntityType: 'User', Active: true }, Status: graded ? 3 : 1,
-    Feedback: graded ? { Files: [], Links: [], Score: graded.PointsNumerator, Feedback: rich('<p>Solid work. Watch the edge cases in part 2.</p>'), RubricAssessments: [], IsGraded: true, GradedSymbol: null } : null,
+    Feedback: graded ? {
+      Files: f.Id % 2 ? [{ FileId: 77, FileName: 'marked-up.pdf', Size: 96000 }] : [], Links: [], Score: graded.PointsNumerator, Feedback: rich('<p>Solid work. Watch the edge cases in part 2.</p>'),
+      RubricAssessments: f.Assessment.Rubrics.map((rb) => ({
+        RubricId: rb.RubricId, UserId: 42, ObjectType: 'Dropbox', ObjectId: f.Id,
+        OverallOutcome: { LevelId: null, Score: graded.PointsNumerator, ScoreIsOverridden: false, Feedback: rich(''), FeedbackIsOverridden: false },
+        CriteriaOutcome: rb.CriteriaGroups[0].Criteria.map((cr, k) => ({ CriterionId: cr.Id, LevelId: k === 0 ? 2 : 1, Score: cr.Cells[k === 0 ? 1 : 0].Points, ScoreIsOverridden: false, Feedback: rich(k === 0 ? 'Part 2 misses the empty-input case.' : ''), FeedbackIsOverridden: false })),
+      })),
+      IsGraded: true, GradedSymbol: null } : null,
     Submissions: [{ Id: 9, SubmittedBy: { Identifier: '42', DisplayName: 'Student One' }, SubmissionDate: new Date(due - 5 * 36e5).toISOString(), Comment: rich(''), Files: [{ IsRead: true, IsFlagged: false, IsDeleted: false, FileId: 1, FileName: `${f.Name.toLowerCase().replace(/ /g, '-')}.pdf`, Size: 412000 }] }],
     CompletionDate: new Date(due - 5 * 36e5).toISOString(),
   }];
@@ -196,7 +247,11 @@ function handle(pathname, query) {
   if (t === 'dropbox/folders/') return json(d.folders);
   if ((x = t.match(/^dropbox\/folders\/(\d+)\/submissions\/mysubmissions\/$/))) return json(submissions(c, d, x[1]));
   if (t === 'quizzes/') return json({ Objects: d.quizzes, Next: null });
+  if (/^dropbox\/folders\/\d+\/(attachments\/\d+|feedback\/user\/\d+\/attachments\/\d+|submissions\/\d+\/files\/\d+)$/.test(t) || /^news\/\d+\/attachments\/\d+$/.test(t)) {
+    return { status: 200, type: 'text/plain; charset=utf-8', body: 'Made-up file contents.' };
+  }
   if ((x = t.match(/^quizzes\/(\d+)\/attempts\/$/))) {
+    if (c.id === NO_ATTEMPTS_API) return { status: 403, type: 'application/problem+json', body: '{"title":"Forbidden"}' };
     const q = d.quizzes.find((k) => k.QuizId === Number(x[1]));
     if (!q) return json(null);
     return json({ Objects: Date.parse(q.DueDate) < now ? [{ AttemptId: 1, UserId: 42, AttemptNumber: 1 }] : [], Next: null });
@@ -248,4 +303,4 @@ function gradescope(path) {
   return null;
 }
 
-module.exports = { handle, gradescope };
+module.exports = { handle, gradescope, quizSummary, submit };

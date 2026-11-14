@@ -194,11 +194,76 @@ BSX.client = (() => {
     return items;
   }
 
+  // A Brightspace page's HTML (same origin, GET), for facts the API refuses students.
+  const pages = new Map();
+  function page(path) {
+    const hit = pages.get(path);
+    if (hit && Date.now() - hit.at < TTL) return hit.promise;
+    const promise = (async () => {
+      await slot();
+      try {
+        const res = await fetch(path, { credentials: 'same-origin' });
+        if (!res.ok) throw new ApiError(res.status, path);
+        if (/\/d2l\/login/i.test(res.url || '')) throw new ApiError(401, path);
+        return await res.text();
+      } finally {
+        active--;
+        const next = waiting.shift();
+        if (next) next();
+      }
+    })();
+    pages.set(path, { at: Date.now(), promise });
+    promise.catch(() => pages.delete(path));
+    return promise;
+  }
+
+  // The one write the wrapper makes: handing in an assignment, at the student's request.
+  // Brightspace's own pages authorise writes with a short-lived token fetched with the
+  // page's anti-forgery token; the session cookie alone is the fallback.
+  async function token() {
+    let xsrf = null;
+    try {
+      xsrf = localStorage.getItem('XSRF.Token');
+    } catch {}
+    if (!xsrf) return { xsrf: null, bearer: null };
+    try {
+      const res = await fetch('/d2l/lp/auth/oauth2/token', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Csrf-Token': xsrf },
+        body: 'scope=*:*:*',
+      });
+      return { xsrf, bearer: res.ok ? (await res.json()).access_token || null : null };
+    } catch {
+      return { xsrf, bearer: null };
+    }
+  }
+
+  async function send(tail, { body, type }) {
+    const path = await lePath(tail);
+    const t = await token();
+    const headers = { 'Content-Type': type };
+    if (t.bearer) headers.Authorization = `Bearer ${t.bearer}`;
+    else if (t.xsrf) headers['X-Csrf-Token'] = t.xsrf;
+    const res = await fetch(path, { method: 'POST', credentials: 'same-origin', headers, body });
+    if (!res.ok) {
+      let detail = '';
+      try {
+        detail = (await res.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+      } catch {}
+      const e = new ApiError(res.status, path);
+      e.detail = detail;
+      throw e;
+    }
+    return res;
+  }
+
   const clear = () => {
+    pages.clear();
     cache.clear();
     bypass = true;
   };
   const onChange = (fn) => listeners.add(fn);
 
-  return { ApiError, lp, le, lpPath, lePath, lpBookmarked, leObjects, clear, forget, onChange };
+  return { ApiError, lp, le, lpPath, lePath, lpBookmarked, leObjects, page, send, clear, forget, onChange };
 })();

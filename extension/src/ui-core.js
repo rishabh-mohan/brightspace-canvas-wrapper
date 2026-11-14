@@ -24,7 +24,7 @@ BSX.ui = (() => {
     if (/^\/d2l\/lms\/news\/main\.d2l$/i.test(p)) return { kind: 'announcements', id: ou };
     if (/^\/d2l\/lms\/quizzing\/user\/quizzes_list\.d2l$/i.test(p)) return { kind: 'quizzes', id: ou };
     if (/^\/d2l\/lms\/classlist\/classlist\.d2l$/i.test(p)) return { kind: 'people', id: ou };
-    m = p.match(/^\/d2l\/le\/content\/(\d+)\/Home\/?$/i);
+    m = p.match(/^\/d2l\/le\/content\/(\d+)\/Home\/?$/i) || p.match(/^\/d2l\/le\/lessons\/(\d+)\/?$/i); // classic and newer Content
     if (m) return { kind: 'modules', id: Number(m[1]) };
     m = p.match(/^\/d2l\/le\/(\d+)\/discussions\/List\/?$/i);
     if (m) return { kind: 'discussions', id: Number(m[1]) };

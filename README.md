@@ -49,9 +49,10 @@ The wrapper stands in for the Brightspace home page, course home pages, and Brig
 | Every page and interaction renders | Headless Chrome against the made-up Brightspace (`tools/shots.ps1`) |
 | The extension itself loads and runs in Firefox and Edge | Installed as a temporary add-on (Firefox 160 via `web-ext`, Edge via `--load-extension`) against the made-up Brightspace |
 | Brightspace API routes and fields | Your probe report in `fixtures/` for most; D2L's API documentation for quiz attempts, discussion posts, course overview and topic files |
+| Brightspace page addresses for Announcements, Classlist, Discussions, Content, course home and Email | A university's published list of Brightspace link templates ([University of Limerick](https://ul.ie/node/82179)) |
 | Gradescope page structure | The public `gradescope-api` project's parser, and a made-up Gradescope in the dev server |
 
-Not yet checked on a real account: the addresses of the Brightspace pages the wrapper stands in for, the Email address used by Inbox, whether Brightspace and external tools allow being shown in a frame, and the Gradescope reader against real Gradescope. Each has a fallback: a page that is not recognised stays as plain Brightspace, and every frame has an "open in a new tab" button.
+Not yet checked on a real account: the student addresses of Brightspace's Grades, Assignments and Quizzes list pages, whether Brightspace and external tools allow being shown in a frame, and the Gradescope reader against real Gradescope. Each has a fallback: a page that is not recognised stays as plain Brightspace, and every frame has an "open in a new tab" button.
 
 ## Load it
 

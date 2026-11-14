@@ -248,11 +248,19 @@ BSX.data = (() => {
     };
   }
 
+  const topicPosts = async (ou, forumId, topicId) => list(await soft(client.le(`${ou}/discussions/forums/${forumId}/topics/${topicId}/posts/?sort=creationdate&pageSize=1000`), []));
+
+  // Has the student posted in a topic? Each post records who wrote it.
+  async function posted(ou, forumId, topicId) {
+    const [raw, who] = await Promise.all([topicPosts(ou, forumId, topicId), client.lp('users/whoami')]);
+    return raw.some((p) => !p.IsDeleted && sameId(p.PostingUserId, who.Identifier));
+  }
+
   // One discussion topic with its posts (read-only).
   async function discussion(ou, topicId) {
     const t = (await topicList(ou)).find((x) => sameId(x.TopicId, topicId));
     if (!t) return null;
-    const raw = list(await soft(client.le(`${ou}/discussions/forums/${t.ForumId}/topics/${t.TopicId}/posts/?sort=creationdate&pageSize=1000`), []));
+    const [raw, who] = await Promise.all([topicPosts(ou, t.ForumId, t.TopicId), client.lp('users/whoami').catch(() => null)]);
     const posts = raw
       .filter((p) => !p.IsDeleted)
       .map((p) => ({
@@ -262,6 +270,7 @@ BSX.data = (() => {
         message_html: p.Message?.Html || '',
         message: p.Message?.Text || '',
         author: p.IsAnonymous ? 'Anonymous' : p.PostingUserDisplayName || 'Unknown',
+        mine: Boolean(who) && sameId(p.PostingUserId, who.Identifier),
         posted_at: p.DatePosted || null,
       }))
       .sort((a, b) => Date.parse(a.posted_at || 0) - Date.parse(b.posted_at || 0));
@@ -299,7 +308,7 @@ BSX.data = (() => {
           const q = await quizAttempts(a.course_id, a.source_id).catch(() => ({ known: false }));
           return q.known && q.attempts_used > 0 ? null : a;
         }
-        if (a.kind === 'discussion') return a; // no way to tell whether the student has posted
+        if (a.kind === 'discussion') return (await posted(a.course_id, a.forum_id, a.source_id).catch(() => false)) ? null : a;
         const s = await submission(a.course_id, a.source_id).catch(() => ({ submitted: false }));
         return s.submitted ? null : a;
       })
@@ -353,6 +362,8 @@ BSX.data = (() => {
           id: key,
           name: c ? c.Name : null,
           weight: c ? c.Weight : null,
+          drop_lowest: c?.NumberOfLowestToDrop || 0,
+          drop_highest: c?.NumberOfHighestToDrop || 0,
           value: c ? toValue(byId.get(String(c.Id))) || null : null,
           items: [],
         });
@@ -363,6 +374,7 @@ BSX.data = (() => {
         type: item.GradeType,
         points_possible: item.MaxPoints,
         weight: item.Weight,
+        group_weight: categoryById.get(key)?.Weight ?? null,
         bonus: Boolean(item.IsBonus),
         excluded: Boolean(item.ExcludeFromFinalGradeCalculation),
         value: toValue(byId.get(String(item.Id))) || null,
@@ -373,35 +385,49 @@ BSX.data = (() => {
     return result;
   }
 
-  // Can this item take part in an estimate or a What-If score?
-  function estimable(g, i) {
-    if (i.excluded || i.type !== 'Numeric') return false;
-    if (g.system === 'Points') return (i.value?.points_possible ?? i.points_possible) > 0;
-    if (g.system === 'Weighted') return i.value?.weighted_possible > 0 && i.value?.points_possible > 0;
-    return false;
+  // An item's points and its share of the final grade, or null when it cannot count.
+  // Weighted gradebooks report the share on graded items; for ungraded ones it comes from
+  // the item's weight within its category times the category's weight.
+  function share(g, i) {
+    if (i.excluded || i.type !== 'Numeric') return null;
+    const pp = i.value?.points_possible ?? i.points_possible;
+    if (!(pp > 0)) return null;
+    if (g.system === 'Points') return { pp, wp: pp };
+    if (g.system !== 'Weighted') return null;
+    let wp = i.value?.weighted_possible;
+    if (!(wp > 0) && i.weight > 0) wp = i.group_weight != null ? (i.group_weight * i.weight) / 100 : i.weight;
+    return wp > 0 ? { pp, wp } : null;
   }
+
+  // Can this item take part in an estimate or a What-If score?
+  const estimable = (g, i) => share(g, i) != null;
 
   // Unofficial running total from real grade items only (category subtotals and calculated
   // rows are never added in, which would double-count). `overrides` maps item id to a
-  // hypothetical score. Ignores dropped-lowest rules, so the result is always an estimate.
-  // Points gradebooks: plain sum. Weighted: each item's share of the final, as Brightspace reports it.
+  // hypothetical score. Each category's drop-lowest and drop-highest rules are applied
+  // by percentage, as Brightspace does. Points: plain sum. Weighted: each item's share.
   function estimate(g, overrides = new Map()) {
     let score = 0;
     let possible = 0;
     for (const group of g.groups) {
+      let counted = [];
       for (const i of group.items) {
-        if (!estimable(g, i)) continue;
+        const sh = share(g, i);
+        if (!sh) continue;
         const override = overrides.get(i.id);
-        const actual = i.value ? i.value.score : null;
-        const s = override != null ? override : actual;
+        const s = override != null ? override : i.value ? i.value.score : null;
         if (s == null) continue;
-        if (g.system === 'Points') {
-          score += s;
-          if (!i.bonus) possible += i.value?.points_possible ?? i.points_possible;
-        } else {
-          score += (s / i.value.points_possible) * i.value.weighted_possible;
-          if (!i.bonus) possible += i.value.weighted_possible;
-        }
+        counted.push({ ...sh, s, bonus: i.bonus });
+      }
+      const drops = (group.drop_lowest || 0) + (group.drop_highest || 0);
+      const regular = counted.filter((c) => !c.bonus).sort((a, b) => a.s / a.pp - b.s / b.pp);
+      if (drops > 0 && regular.length > drops) {
+        const kept = regular.slice(group.drop_lowest || 0, regular.length - (group.drop_highest || 0));
+        counted = [...kept, ...counted.filter((c) => c.bonus)];
+      }
+      for (const c of counted) {
+        score += (c.s / c.pp) * c.wp;
+        if (!c.bonus) possible += c.wp;
       }
     }
     return possible > 0 ? { score, points_possible: possible } : null;
@@ -523,7 +549,18 @@ BSX.data = (() => {
     if (!courseIds.length) return [];
     const range = `startDateTime=${encodeURIComponent(new Date(from).toISOString())}&endDateTime=${encodeURIComponent(new Date(to).toISOString())}`;
     const events = await client.leObjects(`calendar/events/myEvents/?orgUnitIdsCSV=${courseIds.join(',')}&${range}`);
-    return events
+    // An item with both an availability date and a due date has an event for each; keep
+    // the latest one (the due date), as Canvas shows one entry per assignment.
+    const byEntity = new Map();
+    const loose = [];
+    for (const e of events) {
+      const a = e.AssociatedEntity;
+      if (!a || a.AssociatedEntityId == null) { loose.push(e); continue; }
+      const k = `${e.OrgUnitId}:${a.AssociatedEntityType}:${a.AssociatedEntityId}`;
+      const end = (x) => Date.parse(x.EndDateTime || x.StartDateTime || 0);
+      if (!byEntity.has(k) || end(e) > end(byEntity.get(k))) byEntity.set(k, e);
+    }
+    return [...loose, ...byEntity.values()]
       .map((e) => ({
         id: e.CalendarEventId,
         title: e.Title,

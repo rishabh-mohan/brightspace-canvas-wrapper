@@ -33,14 +33,15 @@ const routes = {
 };
 const calls = [];
 const ctx = {
-  console, URL, Date, Math, JSON, Promise, Map, Set, encodeURIComponent,
-  location: { origin: 'https://x.brightspace.com' },
+  console, URL, Date, Math, JSON, Promise, Map, Set, encodeURIComponent, setTimeout, clearTimeout,
+  location: { origin: 'https://x.brightspace.com', host: 'x.brightspace.com' },
   sessionStorage: { getItem: () => null, setItem() {} },
   fetch: async (p) => {
     calls.push(p);
     if (p.startsWith('/d2l/api/le/1.100/calendar/events/myEvents/')) {
       return { ok: true, json: async () => ({ Objects: [
-        { CalendarEventId: 1, Title: 'HW1 - Due', OrgUnitId: 10, OrgUnitName: 'A', StartDateTime: soon, EndDateTime: soon, IsAssociatedWithEntity: true, AssociatedEntity: { Link: '/x' } },
+        { CalendarEventId: 3, Title: 'HW1 - Available', OrgUnitId: 10, OrgUnitName: 'A', StartDateTime: past, EndDateTime: past, IsAssociatedWithEntity: true, AssociatedEntity: { AssociatedEntityType: 'Dropbox', AssociatedEntityId: 5, Link: '/x' } },
+        { CalendarEventId: 1, Title: 'HW1 - Due', OrgUnitId: 10, OrgUnitName: 'A', StartDateTime: soon, EndDateTime: soon, IsAssociatedWithEntity: true, AssociatedEntity: { AssociatedEntityType: 'Dropbox', AssociatedEntityId: 5, Link: '/x' } },
         { CalendarEventId: 2, Title: 'Lecture', OrgUnitId: 10, OrgUnitName: 'A', StartDateTime: soon, EndDateTime: soon, IsAssociatedWithEntity: false }], Next: null }) };
     }
     if (!(p in routes)) return { ok: false, status: 404, json: async () => ({}) };
@@ -113,8 +114,22 @@ const assert = require('assert');
   assert.deepStrictEqual(Array.from(await data.externalTools(10), (t) => t.title), ['Gradescope']);
 
   const cal = await data.calendar([10], Date.now(), Date.now() + 5 * 864e5);
-  assert.strictEqual(cal.length, 2);
-  assert.strictEqual(cal[0].html_url, '/x');
+  assert.strictEqual(cal.length, 2, 'availability and due events for one item merged');
+  assert.deepStrictEqual(Array.from(cal, (e) => e.id).sort(), [1, 2]);
+  assert.strictEqual(cal.find((e) => e.id === 1).html_url, '/x');
+
+  // Drop-lowest: the worst score in a category is left out.
+  const dropped = { system: 'Points', groups: [{ drop_lowest: 1, items: [
+    { id: 1, type: 'Numeric', points_possible: 10, value: { score: 2, points_possible: 10 } },
+    { id: 2, type: 'Numeric', points_possible: 10, value: { score: 9, points_possible: 10 } },
+    { id: 3, type: 'Numeric', points_possible: 10, value: { score: 7, points_possible: 10 } }] }] };
+  assert.deepEqual({ ...data.estimate(dropped) }, { score: 16, points_possible: 20 });
+  // Weighted What-If on an ungraded item: its share is item weight x category weight.
+  const wu = { system: 'Weighted', groups: [{ items: [
+    { id: 1, type: 'Numeric', value: { score: 8, points_possible: 10, weighted_possible: 20 } },
+    { id: 2, type: 'Numeric', value: null, points_possible: 50, weight: 25, group_weight: 40 }] }] };
+  assert.strictEqual(data.estimable(wu, wu.groups[0].items[1]), true);
+  assert.deepEqual({ ...data.estimate(wu, new Map([[2, 25]])) }, { score: 21, points_possible: 30 });
 
   // Quiz attempts: unknown when Brightspace refuses, counted when it answers.
   assert.strictEqual((await data.quizAttempts(10, 7)).known, false);
@@ -132,6 +147,12 @@ const assert = require('assert');
   assert.deepStrictEqual(Array.from(merged, (a) => `${a.kind}:${a.name}:${a.forum}`), ['discussion:Week 1:Weekly']);
   assert.strictEqual(merged[0].html_url, '/d2l/le/12/discussions/topics/31/View');
   assert.strictEqual((await data.todo([{ id: 12, name: 'C' }])).length, 1);
+  // Once the student has posted in the topic, it leaves To Do.
+  routes['/d2l/api/lp/1.64/users/whoami'] = { Identifier: '42', FirstName: 'A' };
+  routes['/d2l/api/le/1.100/12/discussions/forums/1/topics/31/posts/?sort=creationdate&pageSize=1000'] = [{ PostId: 1, PostingUserId: 42, DatePosted: past, Message: {} }];
+  ctx.BSX.client.clear();
+  assert.strictEqual((await data.todo([{ id: 12, name: 'C' }])).length, 0);
+  assert.strictEqual((await data.discussion(12, 31)).posts[0].mine, true);
 
   // Module items carry the address of the file itself, for the in-page viewer.
   assert.strictEqual(mods[0].items[0].file_url, '/d2l/api/le/1.100/10/content/topics/11/file?stream=true');
@@ -151,8 +172,29 @@ const assert = require('assert');
   assert.strictEqual(gs.match({ course_code: 'wl.202710.CS.18000.BLK', name: 'Fall 2026 CS 18000' }, gsCourses).id, '3');
   assert.strictEqual(gs.match({ course_code: 'wl.202710.ENGL.10600.Y12', name: 'English' }, gsCourses), null);
 
+  await data.courses();
   const before = calls.length;
   await data.courses();
   assert.strictEqual(calls.length, before, 'second read served from cache');
+
+  // Saved answers: a new page draws from the last visit at once, then redraws when
+  // Brightspace's real answer differs.
+  const savedKey = 'bsxCache:x.brightspace.com';
+  const stored = { [savedKey]: { entries: {
+    '/d2l/api/versions/': { at: Date.now(), json: JSON.stringify([{ ProductCode: 'lp', LatestVersion: '1.64' }, { ProductCode: 'le', LatestVersion: '1.100' }]) },
+    '/d2l/api/lp/1.64/users/whoami': { at: Date.now(), json: JSON.stringify({ Identifier: '42', FirstName: 'Old' }) } } } };
+  let written = null;
+  const ctx2 = { ...ctx, BSX: undefined, chrome: { storage: { local: { get: async (k) => ({ [k]: stored[k] }), set: async (o) => (written = o) } } } };
+  ctx2.globalThis = ctx2;
+  vm.createContext(ctx2);
+  vm.runInContext(fs.readFileSync(path.join(ext, 'src/client.js'), 'utf8'), ctx2, { filename: 'client.js' });
+  vm.runInContext(fs.readFileSync(path.join(ext, 'src/data.js'), 'utf8'), ctx2, { filename: 'data.js' });
+  let redraws = 0;
+  ctx2.BSX.client.onChange(() => redraws++);
+  assert.strictEqual((await ctx2.BSX.data.me()).name, 'Old', 'first answer comes from the saved copy');
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.strictEqual(redraws, 1, 'one redraw once the real answer arrived');
+  assert.strictEqual((await ctx2.BSX.data.me()).name, 'A');
+  assert.ok(written && written[savedKey].entries['/d2l/api/lp/1.64/users/whoami'].json.includes('"A"'), 'real answer saved for next time');
   console.log('data tests ok,', calls.length, 'requests');
 })().catch((e) => { console.error('DATA TESTS FAILED', e); process.exit(1); });

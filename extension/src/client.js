@@ -45,13 +45,100 @@ BSX.client = (() => {
     }
   }
 
+  // ---- saved answers ---------------------------------------------------------
+  // The last answer for each address is kept in extension storage (this browser only), so
+  // a freshly opened page shows at once from the previous visit while the real request
+  // runs; when the real answer differs, listeners are told and the page redraws.
+  const store = (globalThis.browser || globalThis.chrome)?.storage?.local;
+  const KEY = `bsxCache:${globalThis.location?.host || ''}`;
+  const KEEP = 7 * 864e5;
+  const MAX_ENTRY = 400e3; // characters; very long answers (big classlists) are not kept
+  const MAX_TOTAL = 4e6;
+  const listeners = new Set();
+  let saved = new Map(); // path -> { at, json }
+  let bypass = false; // after Refresh, this page always waits for Brightspace
+  let saveTimer = null;
+  let changeTimer = null;
+
+  const ready = (async () => {
+    try {
+      const v = (await store.get(KEY))?.[KEY];
+      if (v && typeof v.entries === 'object') {
+        for (const [p, e] of Object.entries(v.entries)) if (e && typeof e.json === 'string' && Date.now() - e.at < KEEP) saved.set(p, e);
+      }
+    } catch {}
+  })();
+
+  function persist() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      const newest = [...saved.entries()].sort((a, b) => b[1].at - a[1].at);
+      const entries = {};
+      let total = 0;
+      for (const [p, e] of newest) {
+        if ((total += e.json.length) > MAX_TOTAL) break;
+        entries[p] = e;
+      }
+      try {
+        store.set({ [KEY]: { entries } });
+      } catch {}
+    }, 1000);
+  }
+
+  function remember(path, data) {
+    const json = JSON.stringify(data);
+    if (json.length > MAX_ENTRY) saved.delete(path);
+    else saved.set(path, { at: Date.now(), json });
+    persist();
+  }
+
+  // Signed out, or a different person may sign in next: drop everything kept.
+  function forget() {
+    saved = new Map();
+    persist();
+  }
+
+  function changed() {
+    clearTimeout(changeTimer);
+    changeTimer = setTimeout(() => listeners.forEach((fn) => fn()), 300);
+  }
+
   function get(path) {
     const hit = cache.get(path);
     if (hit && Date.now() - hit.at < TTL) return hit.promise;
-    const promise = raw(path);
-    cache.set(path, { at: Date.now(), promise });
-    promise.catch(() => cache.delete(path));
-    return promise;
+    const fresh = raw(path);
+    fresh.then(
+      (d) => remember(path, d),
+      (e) => e instanceof ApiError && e.status === 401 && forget()
+    );
+    const entry = { at: Date.now(), promise: null };
+    entry.promise = (async () => {
+      await ready;
+      const old = hit || bypass ? null : saved.get(path);
+      if (!old) return fresh;
+      let data;
+      try {
+        data = JSON.parse(old.json);
+      } catch {
+        return fresh;
+      }
+      fresh.then(
+        (d) => {
+          entry.promise = Promise.resolve(d);
+          if (JSON.stringify(d) !== old.json) changed();
+        },
+        () => {
+          // The saved answer no longer holds; redraw so the page shows the real outcome.
+          saved.delete(path);
+          cache.delete(path);
+          changed();
+        }
+      );
+      return data;
+    })();
+    cache.set(path, entry);
+    entry.promise.catch(() => cache.delete(path));
+    return entry.promise;
   }
 
   function getVersions() {
@@ -61,7 +148,7 @@ BSX.client = (() => {
           const saved = JSON.parse(sessionStorage.getItem('bsx.versions'));
           if (saved && saved.lp && saved.le) return saved;
         } catch {}
-        const list = await raw('/d2l/api/versions/');
+        const list = await get('/d2l/api/versions/');
         const latest = (code) => list.find((p) => p.ProductCode === code)?.LatestVersion;
         const found = { lp: latest('lp'), le: latest('le') };
         if (!found.lp || !found.le) throw new Error('Brightspace did not report its lp and le API versions');
@@ -107,5 +194,11 @@ BSX.client = (() => {
     return items;
   }
 
-  return { ApiError, lp, le, lpPath, lePath, lpBookmarked, leObjects, clear: () => cache.clear() };
+  const clear = () => {
+    cache.clear();
+    bypass = true;
+  };
+  const onChange = (fn) => listeners.add(fn);
+
+  return { ApiError, lp, le, lpPath, lePath, lpBookmarked, leObjects, clear, forget, onChange };
 })();

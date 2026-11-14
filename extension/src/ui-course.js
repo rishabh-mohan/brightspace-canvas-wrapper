@@ -11,8 +11,18 @@
     quiz: { icon: 'quiz', label: 'Quiz', group: 'Quizzes' },
     discussion: { icon: 'discussion', label: 'Discussion', group: 'Discussions' },
   };
-  const TYPE_ICON = { File: 'file', Link: 'link', 'External tool': 'external', Assignment: 'assignment', Quiz: 'quiz', Discussion: 'discussion' };
-  const VIEWABLE = new Set(['File', 'Link', 'External tool']); // module items with a page inside the wrapper
+  const TYPE_ICON = { File: 'file', Link: 'link', 'External tool': 'external', Assignment: 'assignment', Quiz: 'quiz', Discussion: 'discussion', 'Course home': 'home', Syllabus: 'syllabus' };
+  const VIEWABLE = new Set(['File', 'Link', 'External tool', 'Course home']); // module items with a page inside the wrapper
+
+  // The course's content plus a first "Course Home" module: the instructor's Brightspace
+  // homepage (shown in a frame, so its widgets and welcome text stay as they made them)
+  // and the syllabus when there is one.
+  async function courseModules(course) {
+    const [list, s] = await Promise.all([data.modules(course.id), data.syllabus(course.id).catch(() => null)]);
+    const items = [{ id: 0, title: 'Course homepage', type: 'Course home', unread: false, locked: false, url: bs.home(course.id), html_url: bs.home(course.id) }];
+    if (s && (s.html || s.text)) items.push({ id: -1, title: 'Syllabus', type: 'Syllabus', unread: false, locked: false, url: '', html_url: courseHref(course.id, 'syllabus') });
+    return [{ id: 'home', name: 'Course Home', depth: 0, locked: false, items }, ...list];
+  }
   const whatIf = { on: false, courseId: null, overrides: new Map() };
 
   // ---- course navigation -----------------------------------------------------
@@ -62,7 +72,7 @@
   // One module item shown inside the wrapper: a file in a viewer, an external tool in a
   // frame, or a link. Each keeps a button to the original, in case the frame stays blank.
   async function moduleItem(course, r) {
-    const list = await data.modules(course.id);
+    const list = await courseModules(course);
     const flat = list.flatMap((m) => m.items.map((i) => ({ ...i, module: m.name })));
     const at = flat.findIndex((i) => i.id === r.itemId);
     if (at < 0) return notFound('item', course.id, 'modules');
@@ -72,7 +82,10 @@
 
     let view;
     let open;
-    if (i.type === 'File') {
+    if (i.type === 'Course home') {
+      view = frame(i.url, `${nameOf(course)} homepage`);
+      open = [h('a', { class: 'btn', href: `${i.html_url}#brightspace` }, 'Open in Brightspace ', ic('external', 14))];
+    } else if (i.type === 'File') {
       view = frame(i.file_url, i.title);
       open = [h('a', { class: 'btn', href: i.file_url.replace('?stream=true', ''), title: 'Save a copy' }, 'Download'), h('a', { class: 'btn', href: i.html_url }, 'Open in Brightspace ', ic('external', 14))];
     } else if (i.type === 'External tool') {
@@ -97,13 +110,13 @@
 
   async function modules(course, r) {
     if (r && r.itemId != null) return moduleItem(course, r);
-    const [list, work] = await Promise.all([data.modules(course.id), data.assignments(course.id).catch(() => [])]);
+    const [list, work] = await Promise.all([courseModules(course), data.assignments(course.id).catch(() => [])]);
     return { body: list.length ? [moduleList(course.id, list, work), h('p', { class: 'small' }, h('a', { href: bs.content(course.id) }, 'Open Content in Brightspace'))] : ui.empty('No content in this course yet.') };
   }
 
   // ---- home ------------------------------------------------------------------
   async function home(course) {
-    const [news, list, work] = await Promise.all([data.announcements(course.id), data.modules(course.id), data.assignments(course.id).catch(() => [])]);
+    const [news, list, work] = await Promise.all([data.announcements(course.id), courseModules(course), data.assignments(course.id).catch(() => [])]);
     const recent = news.filter((a) => a.posted_at && Date.now() - Date.parse(a.posted_at) < 14 * ui.DAY).slice(0, 2);
     return {
       body: [
@@ -359,7 +372,7 @@
     }
     const draw = (p, depth) => [
       h('div', { class: 'post', style: `margin-left:${Math.min(depth, 5) * 28}px` },
-        h('div', { class: 'phead' }, h('span', { class: 'avatar sm' }, (p.author || '?').slice(0, 1).toUpperCase()), h('div', null, h('div', { class: 't' }, p.author), h('div', { class: 'muted small' }, when(p.posted_at)))),
+        h('div', { class: 'phead' }, h('span', { class: 'avatar sm' }, (p.author || '?').slice(0, 1).toUpperCase()), h('div', null, h('div', { class: 't' }, p.author, p.mine ? ui.tag('you') : null), h('div', { class: 'muted small' }, when(p.posted_at)))),
         depth === 0 && p.subject ? h('div', { class: 'psub' }, p.subject) : null,
         prose(p.message_html, p.message)),
       (kids.get(p.id) || []).map((k) => draw(k, depth + 1)),
@@ -407,7 +420,7 @@
       } else if (g.final) {
         kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'bigscore' }, g.final.displayed || pct(g.final.score, g.final.points_possible) || '–'), g.final.points_possible ? h('div', { class: 'muted small' }, `${num(g.final.score)} / ${num(g.final.points_possible)}`) : null, h('div', { class: 'muted small' }, 'Released by the instructor')];
       } else if (g.estimate) {
-        kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'bigscore' }, pct(g.estimate.score, g.estimate.points_possible)), pair(g.estimate), h('div', { class: 'muted small' }, 'Estimate from graded items. Not official; ignores dropped scores.')];
+        kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'bigscore' }, pct(g.estimate.score, g.estimate.points_possible)), pair(g.estimate), h('div', { class: 'muted small' }, 'Estimate from graded items, with dropped scores applied. Not official.')];
       } else {
         kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'muted' }, 'Not released by the instructor.')];
       }

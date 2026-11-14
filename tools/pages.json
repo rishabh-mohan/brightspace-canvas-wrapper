@@ -8,6 +8,7 @@
   "inbox": "/d2l/home#/inbox",
   "home": "/d2l/home/101",
   "modules": "/d2l/le/content/101/Home",
+  "coursehome": "/d2l/home#/courses/101/modules/0",
   "assignments": "/d2l/lms/dropbox/user/folders_list.d2l?ou=101",
   "assignment": "/d2l/home#/courses/101/assignments/10103",
   "missing": "/d2l/home#/courses/103/assignments/10304",

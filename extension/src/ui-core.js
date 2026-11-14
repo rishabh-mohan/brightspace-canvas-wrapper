@@ -458,7 +458,7 @@ BSX.ui = (() => {
         tip('What this is', 'A Canvas-style view of your Brightspace courses. It only reads: nothing here can submit work, take a quiz or post.'),
         tip('Doing the work', 'Buttons such as “Start Assignment in Brightspace” open the real Brightspace page for that item.'),
         tip('Work outside Brightspace', 'Use “+ To Do” for Gradescope, publisher sites or anything else. Those items appear in To Do, the list view and the calendar.'),
-        tip('Grades', 'A total marked as an estimate is computed here from graded items. It ignores dropped scores and is not official.'),
+        tip('Grades', 'A total marked as an estimate is computed here from graded items. It applies each group\'s dropped-score rules but is not official.'),
         tip('Names and colours', 'The ⋮ button on a course card sets a nickname and colour.'),
         tip('Something looks wrong', 'Use Refresh (top right) to reload data, or the Brightspace button to see the original page.'),
         h('button', { class: 'trayitem', type: 'button', onclick: turnOff }, 'Show the original Brightspace page'),
@@ -588,6 +588,12 @@ BSX.ui = (() => {
 
   function start() {
     window.addEventListener('hashchange', render);
+    // Pages draw first from the answers saved on the last visit; when Brightspace's real
+    // answers differ, redraw in place, unless the student is typing or has a dialog open.
+    client.onChange(() => {
+      const busy = root.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(root.activeElement.tagName);
+      if (!busy && !root.querySelector('.modal, .wi.changed') && route().view !== 'off') render();
+    });
     loadSettings().then(render);
   }
 

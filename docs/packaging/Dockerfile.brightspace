@@ -1,0 +1,38 @@
+# Excerpt from the Hub's Dockerfile: only the parts that build and install the Brightspace reader.
+# Brightspace's own data (app/d2l.py): RohanMuppa/brightspace-mcp-server, a
+# read-only Brightspace reader a Purdue student keeps working against Purdue's
+# Microsoft sign-in. Pinned to commit 38cb605, which npm 3.13.0 was published
+# from (with provenance); The author's copy is byte-identical and was read through on
+# 10/10. It talks only to Brightspace, Microsoft's sign-in, YouTube/Kaltura
+# (lecture transcripts) and npm's update check (D2L_NO_UPDATE_CHECK turns that
+# off). package-lock.json pins every dependency by hash; no install scripts run.
+FROM node:22-trixie-slim AS brightspace
+ARG BSMCP_COMMIT=38cb605d5f4bcdabc414068a62eb7104d3e733c2
+ARG BSMCP_SHA256=7a460c4c7ea97d73586a074813dc44866975afe97310ccfcc02dc1fd626b603f
+WORKDIR /bs
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+ && curl -fsSL -o /tmp/bs.tar.gz https://github.com/RohanMuppa/brightspace-mcp-server/archive/${BSMCP_COMMIT}.tar.gz \
+ && echo "${BSMCP_SHA256}  /tmp/bs.tar.gz" | sha256sum -c - \
+ && tar -xzf /tmp/bs.tar.gz --strip-components=1 \
+ && npm ci --ignore-scripts --no-audit --no-fund \
+ && npm run build \
+
+# ... (in the final python:3.12-slim stage)
+# The Brightspace reader: Node, the built package, Chromium's headless shell
+# for the Purdue sign-in, and a Secret Service for its session key and saved
+# sign-in (gnome-keyring over a private D-Bus, started per process by
+# docker/hub-brightspace).
+COPY --from=brightspace /usr/local/bin/node /usr/local/bin/node
+COPY --from=brightspace /bs/package.json /opt/brightspace-mcp/package.json
+COPY --from=brightspace /bs/build /opt/brightspace-mcp/build
+COPY --from=brightspace /bs/node_modules /opt/brightspace-mcp/node_modules
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends dbus-daemon gnome-keyring libsecret-tools git \
+ && node /opt/brightspace-mcp/node_modules/playwright/cli.js install --with-deps --only-shell chromium \
+ && rm -rf /var/lib/apt/lists/*
+COPY --chmod=755 docker/hub-brightspace /usr/local/bin/hub-brightspace
+COPY docker/hub-brightspace-submissions.mjs docker/hub-brightspace-gradetypes.mjs \
+     docker/hub-brightspace-gradescope.mjs docker/hub-brightspace-pearson.mjs \
+     docker/hub-brightspace-page.mjs docker/hub-brightspace-wiley.mjs \
+     docker/hub-brightspace-mylab.mjs docker/hub-brightspace-live.mjs /usr/local/lib/

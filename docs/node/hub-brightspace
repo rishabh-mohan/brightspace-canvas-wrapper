@@ -1,0 +1,77 @@
+#!/bin/sh
+# One Brightspace process for app/d2l.py, inside its own D-Bus session with a
+# keyring unlocked for it. brightspace-mcp-server keeps its session key, and
+# the student's Purdue password and authenticator key if they saves them, in the
+# desktop Secret Service. A container has none, so this brings one up.
+#
+#   hub-brightspace              the MCP server, on stdin/stdout
+#   hub-brightspace store        save sign-in secrets: one JSON line on stdin,
+#                                {"password": "...", "totp": "..."} (either may
+#                                be left out), with D2L_BASE_URL and D2L_USERNAME
+#                                set. They go straight into the keyring, never to
+#                                a file or the environment.
+#   hub-brightspace submissions  what was really turned in (status, time, files)
+#                                for the folders on stdin; see
+#                                hub-brightspace-submissions.mjs
+#   hub-brightspace gradetypes   which grades are real items and which are
+#                                category totals or calculated/final grades
+#   hub-brightspace gradescope   follow a course's Gradescope LTI link with the
+#                                saved Brightspace session; Gradescope's cookies
+#   hub-brightspace pearson      follow a course's "Access Pearson" link and read
+#                                MyLab's Results page (scores, time spent),
+#                                via All Assignments
+#   hub-brightspace page         follow a Content link (Simple Syllabus) and
+#                                hand back the text of the page it opens
+#   hub-brightspace wiley        a SCI 101 WileyPLUS HW: read its questions, or
+#                                enter one answer the student gave (never a last attempt)
+#   hub-brightspace mylab        MATH 201's Pearson MyLab homework: the same, through
+#                                Access Pearson -> MyLab Math All Assignments
+#   hub-brightspace live         a Brightspace page or WileyPLUS, open and streamed
+#                                to the Hub's Open sites page (their clicks go back)
+#
+# The keyring file and its random unlock password both live in
+# /srv/secrets/brightspace, next to the Hub's other credentials: as safe as
+# google_token.json, no safer. Nothing else may print to stdout: in server
+# mode it is the MCP channel.
+set -eu
+export HOME="${HUB_BRIGHTSPACE_HOME:-/srv/secrets/brightspace}"
+umask 077
+mkdir -p "$HOME"
+[ -s "$HOME/keyring-pass" ] || head -c 32 /dev/urandom | base64 > "$HOME/keyring-pass"
+
+PKG=/opt/brightspace-mcp/build
+case "${1:-server}" in
+  store)
+    script='
+      import { createInterface } from "node:readline";
+      const { setStoredPassword, setStoredTotpUri } = await import(process.argv[1] + "/auth/credential-store.js");
+      const { normalizeTotpEnrollment } = await import(process.argv[1] + "/auth/totp.js");
+      const line = await new Promise((ok) => createInterface({ input: process.stdin }).once("line", ok));
+      const { password, totp } = JSON.parse(line);
+      const base = process.env.D2L_BASE_URL, user = process.env.D2L_USERNAME;
+      if (password) await setStoredPassword(base, user, password);
+      if (totp) await setStoredTotpUri(base, user, normalizeTotpEnrollment(totp, user));
+      console.log("stored");'
+    set -- --input-type=module -e "$script" "$PKG" ;;
+  submissions)
+    set -- /usr/local/lib/hub-brightspace-submissions.mjs ;;
+  gradetypes)
+    set -- /usr/local/lib/hub-brightspace-gradetypes.mjs ;;
+  gradescope)
+    set -- /usr/local/lib/hub-brightspace-gradescope.mjs ;;
+  pearson)
+    set -- /usr/local/lib/hub-brightspace-pearson.mjs ;;
+  page)
+    set -- /usr/local/lib/hub-brightspace-page.mjs ;;
+  wiley)
+    set -- /usr/local/lib/hub-brightspace-wiley.mjs ;;
+  mylab)
+    set -- /usr/local/lib/hub-brightspace-mylab.mjs ;;
+  live)
+    set -- /usr/local/lib/hub-brightspace-live.mjs ;;
+  *)
+    set -- "$PKG/index.js" ;;
+esac
+exec dbus-run-session -- sh -c '
+  gnome-keyring-daemon --unlock --components=secrets <"$HOME/keyring-pass" >/dev/null 2>&1
+  exec node "$@"' sh "$@"

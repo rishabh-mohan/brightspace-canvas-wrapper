@@ -1,0 +1,252 @@
+{% import "_macros.html" as m with context %}
+{% if doubts %}
+<section class="card bad mb-2" id="doubts">
+  <h2>{{ m.i('alert') }} Marked done, but not turned in</h2>
+  <p class="note mt-0">Where these get turned in says otherwise. Fix it while there's time. If you turned one in some other way, say how; if you skipped it on purpose, say so, and it counts against the course's drops.
+    It checks again 10 minutes after anything is marked done.</p>
+  {% for d in doubts %}
+  <div class="row wrap">
+    <span class="grow" style="flex-basis:18rem"><a class="title" href="/assignments/{{ d.id }}">{{ d.title }}</a>
+      {% if d.strength == 'likely' %}<span class="pill tiny warn">likely</span>{% endif %}
+      <span class="meta">{{ d.course }} · {% if d.past_due %}was due {{ d.due_at|fdate }}{% else %}<b class="late-text">due {{ d.due_at|fdate }} {{ d.due_at|fmt_time }}: still time</b>{% endif %} · {{ d.why }}</span></span>
+    {% if d.skip %}
+    <form method="post" action="/work/skip/{{ d.id }}"><button class="btn ghost sm" type="submit" title="It uses one of {{ d.course }}'s {{ d.skip.allowed }} {{ d.skip.short }} drops">I skipped it ({{ d.skip.left }} of {{ d.skip.allowed }} left)</button></form>
+    {% endif %}
+    <form method="post" action="/work/turned-in-elsewhere/{{ d.id }}" class="row wrap" style="flex:1 1 18rem">
+      <input name="note" placeholder="How? (emailed the TA…)" aria-label="How it was turned in" class="w-md" style="flex:1 1 10rem">
+      <button class="btn ghost sm" type="submit">Turned in another way</button>
+    </form>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+{% if not d2l.username %}
+<div class="card">
+  <p><b>Connect Brightspace first.</b> The Hub signs in to Brightspace on its own (no phone needed once it's set up), then shows your grades here, worked out the way each syllabus weighs them.</p>
+  <a class="btn sm" href="/settings#brightspace">Set up in Settings →</a>
+</div>
+{% elif not grade_courses %}
+<div class="card">
+  <p>{% if d2l.running %}Reading Brightspace now… reload in a minute.{% elif d2l.last and d2l.last.error %}The last check failed: {{ d2l.last.error }} <a href="/settings#brightspace">Settings →</a>{% else %}Nothing read from Brightspace yet.{% endif %}</p>
+</div>
+{% else %}
+{% set graded = grade_courses|selectattr('so_far', 'ne', none)|list %}
+{% set quiet = grade_courses|rejectattr('so_far', 'ne', none)|rejectattr('rows')|list %}
+
+{# ---- the term at a glance ---- #}
+<section class="card gr-term mb-2" id="term">
+  <div class="gr-term-head">
+    {% if term.now is not none %}
+    <div><div class="eyebrow">GPA now</div><div class="gr-gpa">{{ '%.2f'|format(term.now) }}</div></div>
+    <div><div class="eyebrow">Heading for</div><div class="gr-gpa {{ 'gr-down' if term.heading is not none and term.heading < term.now - 0.005 else ('gr-up' if term.heading is not none and term.heading > term.now + 0.005 else '') }}">{{ '%.2f'|format(term.heading) if term.heading is not none else '—' }}</div></div>
+    <p class="note grow mb-0" style="flex-basis:16rem">From {{ term.credits|round|int }} credit hours of letter-graded classes. "Heading for" is where each class lands if the rest of the term goes the way it has so far.</p>
+    {% else %}
+    <p class="note mb-0">Each class: where it stands now, and where it's heading if the rest of the term goes the way it has.</p>
+    {% endif %}
+  </div>
+  <div class="gr-table" role="table" aria-label="Every class">
+    <div class="gr-tr gr-th" role="row"><span role="columnheader">Class</span><span role="columnheader">Now</span><span role="columnheader">Heading for</span><span role="columnheader">Drops left</span><span role="columnheader">Next exam</span></div>
+    {% for c in graded %}
+    {% set delta = (c.heading - c.so_far) if c.heading is not none else 0 %}
+    <a class="gr-tr" role="row" href="#grades-{{ c.ou }}" style="--c:{{ c.color or 'var(--line-2)' }}">
+      <span class="gr-c-code" role="cell"><span class="gr-dot"></span>{{ c.code or c.name }}</span>
+      <span class="gr-c-now" role="cell"><b>{{ c.so_far }}%</b>{% if c.pass_fail %} <span class="pill tiny">P/NP</span>{% elif c.letter %} <span class="pill tiny gold">{{ c.letter }}</span>{% endif %}</span>
+      <span class="gr-c-head" role="cell">{% if c.heading is not none %}<span class="{{ 'gr-up' if delta >= 0.5 else ('gr-down' if delta <= -0.5 else 'muted') }}">{{ '↑' if delta >= 0.5 else ('↓' if delta <= -0.5 else '→') }}</span> {{ c.heading }}%{% if c.heading_letter and not c.pass_fail %} <span class="pill tiny">{{ c.heading_letter }}</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</span>
+      <span class="gr-c-skip small{{ ' gr-empty' if not c.skips and not c.allowances }}" role="cell">{% for s in c.skips %}<span class="nowrap {{ 'over-text' if s.left < 0 else ('gr-warn' if s.left == 0 else '') }}">{{ s.short }} {% if s.left < 0 %}{{ -s.left }} over{% else %}{{ s.left }}/{{ s.allowed }}{% endif %}</span>{% if not loop.last or c.allowances %} · {% endif %}{% endfor %}{% for a in c.allowances %}<span class="nowrap {{ 'over-text' if a.left is not none and a.left < 0 else ('gr-warn' if a.left == 0 else '') }}">{{ a.name }} {{ a.left|round|int if a.left is not none and a.left >= 0 else '' }}{% if a.left is not none and a.left < 0 %}{{ -a.left|round|int }} over{% elif a.free is not none %}/{{ a.free|round|int }}{% endif %}</span>{% endfor %}{% if not c.skips and not c.allowances %}<span class="muted">—</span>{% endif %}</span>
+      <span class="gr-c-exam small{{ ' gr-empty' if not c.need }}" role="cell">{% if c.need %}{% set keep = c.need.rows|selectattr('letter', 'equalto', c.letter)|first %}<span class="text-2">{{ c.need.exam|truncate(26, true, '…') }} · {{ c.need.due|fdate }}</span><br>{% if keep %}{% if keep.x <= 0 %}keeps {{ c.letter }} with any score{% elif keep.x > 100 %}{{ c.letter }} is out of reach{% else %}{{ keep.x }}% keeps {{ c.letter }}{% endif %}{% else %}{% set r = c.need.rows|selectattr('x', 'le', 100)|first %}{% if r %}{% if r.x <= 0 %}{{ r.letter }} with any score{% else %}{{ r.x }}% for {{ r.letter }}{% endif %}{% endif %}{% endif %}{% else %}<span class="muted">—</span>{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% if quiet %}<p class="note mb-0 mt-1">Nothing graded yet: {% for c in quiet %}{{ c.code or c.name }}{% if not loop.last %} · {% endif %}{% endfor %}.</p>{% endif %}
+</section>
+
+{# ---- what's coming, and what it's worth ---- #}
+{% if term.coming %}
+<section class="card mb-2" id="coming">
+  <div class="spread"><h2>Coming up, and what each is worth</h2><span class="muted small">next {{ term.days }} days</span></div>
+  <p class="note mt-0">How much of each class's final grade it is. Where a class has drops left for it, missing one costs a drop instead.</p>
+  {% for day, rows in term.coming|groupby('day') %}
+  <div class="gr-day">
+    <div class="eyebrow">{{ rows[0].due|fdate }}</div>
+    {% for c in rows %}
+    <div class="gr-item" style="--c:{{ c.color or 'var(--line-2)' }}">
+      <span class="gr-chip"><span class="gr-dot"></span>{{ c.course }}</span>
+      <a class="gr-title" href="/assignments/{{ c.aid }}">{{ c.title }}</a>
+      <span class="gr-worth{{ ' gr-big' if c.worth and c.worth >= 2 }}">{% if c.worth is not none %}{{ '%.1f'|format(c.worth) if c.worth >= 0.1 else '<0.1' }}%{% else %}—{% endif %}</span>
+      <span class="gr-wbar" aria-hidden="true"><i style="width:{{ c.share }}%"></i></span>
+      <span class="gr-skipnote small muted">{{ c.due|fmt_time }}{% if c.skips_left is not none %} · {% if c.skips_left > 0 %}missing it uses a drop ({{ c.skips_left }} left){% else %}<span class="over-text">no drops left: missing it costs the {{ '%.1f'|format(c.worth or 0) }}%</span>{% endif %}{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{# ---- each class ---- #}
+<div class="stack">
+{% for c in grade_courses if not (c in quiet) %}
+<section class="card gradecard" style="--c:{{ c.color or 'var(--line-2)' }}" id="grades-{{ c.ou }}">
+  <div class="spread">
+    <h2 style="font-size:1.0625rem">{{ c.code or c.name }}{% if c.code %} <span class="muted small" style="font-weight:400">{{ c.name }}</span>{% endif %}</h2>
+    <span class="hstack nowrap">
+      {% if c.so_far is not none %}<span class="grade-big">{{ c.so_far }}%</span>{% if c.letter and not c.pass_fail %} <span class="pill gold">{{ c.letter }}</span>{% elif c.pass_fail %} <span class="pill tiny">pass/no pass</span>{% endif %}
+      {% elif c.brightspace_pct is not none %}<span class="grade-big">{{ c.brightspace_pct }}%</span> <span class="muted tiny">Brightspace</span>
+      {% else %}<span class="muted small">no grades yet</span>{% endif %}
+      <form method="post" action="/brightspace/sync"><input type="hidden" name="ou" value="{{ c.ou }}"><input type="hidden" name="return_to" value="/work?view=grades#grades-{{ c.ou }}">
+        <button class="btn ghost sm" type="submit" title="Read {{ c.code or c.name }} again{% if pe and pe.overall and pe.overall.ou == c.ou %}, with Pearson{% endif %}" aria-label="Refresh {{ c.code or c.name }}" {% if grades_busy %}disabled{% endif %}>{{ m.i('refresh') }}{% if grades_busy and (not d2l.only or d2l.only == c.ou) %} Refreshing…{% endif %}</button></form>
+    </span>
+  </div>
+
+  {% if c.bar %}
+  <div class="gr-bar" aria-hidden="true">
+    <div class="gr-bands">{% for b in c.bar.bands %}<span style="flex-basis:{{ b.w }}%" title="{{ b.letter }}: {{ '%g'|format(b.min) }}+">{% if b.w >= 4 %}{{ b.letter }}{% if b.w >= 11 %}<small>{{ '%g'|format(b.min) }}</small>{% endif %}{% endif %}</span>{% endfor %}</div>
+    {% if c.bar.heading is not none %}<i class="gr-mark gr-mark-head" style="left:{{ c.bar.heading }}%"></i>{% endif %}
+    <i class="gr-mark gr-mark-now" style="left:{{ c.bar.now }}%"></i>
+  </div>
+  <p class="gr-line"><span class="gr-key gr-key-now"></span>Now <b>{{ c.so_far }}%</b>{% if c.letter and not c.pass_fail %} ({{ c.letter }}){% endif %}
+    {% if c.heading is not none %}<span class="gr-key gr-key-head"></span>heading for <b>{{ c.heading }}%</b>{% if c.heading_letter and not c.pass_fail %} ({{ c.heading_letter }}){% endif %} <span class="muted">if the rest of the term goes the way it has</span>{% endif %}</p>
+  {% endif %}
+
+  {% for a in c.allowances %}
+  <div class="banner small mt-1 mb-0 {{ 'bad' if a.left is not none and a.left < 0 else ('warn' if a.left is not none and a.left < 1 else '') }}"><span><b>{{ a.name }}: {{ a.used|round|int if a.used == a.used|round else a.used }}{% if a.free is not none %} of {{ a.free|round|int }} free used{% endif %}.</b>
+    {% if a.cost %}{{ a.cost|capitalize }}.{% endif %}{% if a.fail_over is not none %} More than {{ a.fail_over|round|int }} fails the class.{% endif %}</span></div>
+  {% endfor %}
+
+  {% if c.need %}
+  {% set slider_id = 'whatif-' ~ c.ou %}
+  <div class="gr-whatif" data-curve='{{ c.need.curve|tojson }}' data-scale='{{ c.scale|tojson }}'>
+    <div class="spread"><div class="eyebrow">What if · {{ c.need.exam }} · {{ c.need.due|fdate }}</div>
+      <span class="muted small">your pace: {{ c.need.pace }}%</span></div>
+    <label class="gr-slide" for="{{ slider_id }}">If you get <output data-out="x">{{ c.need.pace }}</output>%</label>
+    <input id="{{ slider_id }}" type="range" min="0" max="100" step="1" value="{{ c.need.pace }}" data-whatif>
+    <p class="mb-1">you finish around <b class="gr-out" data-out="pct">{{ '%.1f'|format(c.need.pace_pct) }}%</b>{% if c.need.pace_letter %} <span class="pill gold" data-out="letter">{{ c.need.pace_letter }}</span>{% endif %}</p>
+    <p class="mb-1">{% for r in c.need.rows %}<span class="pill {{ 'warn' if r.x > 100 else ('good' if r.x <= 0 else '') }}">{{ r.letter }} ({{ '%g'|format(r.min) }}+): {% if r.x > 100 %}{{ r.x }}%, out of reach{% elif r.x <= 0 %}any score{% else %}{{ r.x }}%{% endif %}</span> {% else %}Every letter is out of reach at this pace.{% endfor %}</p>
+    <p class="note mt-0 mb-0">Everything else at your pace: each category's remaining work scores like your work in it so far, misses included, and drops come off at the end.{% if c.categories|selectattr('best_of')|list %} Exams count the syllabus's way: whichever of its options scores higher.{% endif %}</p>
+  </div>
+  {% endif %}
+
+  {% if c.categories %}
+  <div class="mt-2">
+    {% for k in c.categories if not k.extra %}
+    {% set sk = c.skips|selectattr('category', 'equalto', k.name)|first %}
+    {% set end = c.end.get(k.name) %}
+    {% set bar %}
+      <div class="mrow"><span class="mname">{{ k.name }} <span class="muted" style="font-weight:400">· {{ k.weight|round(1) }}%</span></span>
+        <span class="mval">{% if k.pct is not none %}{{ k.pct }}%{% if end is not none and (end - k.pct)|abs >= 0.1 %} <span class="muted">→ {{ end }}% at the end</span>{% endif %} · {{ k.graded|rejectattr('skip')|list|length }} graded{% if c.left.get(k.name) %}, {{ c.left[k.name] }} to come{% endif %}{% elif k.where == 'elsewhere' %}<span class="pill tiny">graded outside Brightspace</span>{% elif end is not none %}<span class="muted">nothing graded yet · at your pace {{ end }}%</span>{% else %}nothing graded yet{% endif %}</span></div>
+      {% if k.pct is not none %}<div class="mtrack gr-track"><i style="width:{{ [k.pct, 100]|min|round|int }}%;background:var(--c)"></i>{% if end is not none %}<b class="gr-endtick" style="left:{{ [end, 100]|min }}%" title="at the end: {{ end }}%"></b>{% endif %}</div>{% endif %}
+      {% if sk %}<div class="gr-skips small"><span class="{{ 'over-text' if sk.left < 0 else ('gr-warn' if sk.left == 0 else 'muted') }}">{% if sk.when == 'missed' %}Exemptions{% else %}Drops{% endif %}: {{ sk.used }} of {{ sk.allowed }} used{% if sk.left < 0 %}, {{ -sk.left }} over (that one counts){% else %}, {{ sk.left }} left{% endif %}</span>{% if sk.names %} <span class="muted">({{ sk.names|join(', ') }})</span>{% endif %}{% if sk.when == 'missed' and sk.left > 0 %} <span class="muted">· any left at the end drop your lowest scores</span>{% endif %}</div>{% endif %}
+    {% endset %}
+    {% if k.graded %}
+    <details class="meter"><summary>{{ bar }}</summary>
+      <div class="tablescroll mt-1"><table class="nut">
+        {% for it in k.graded %}<tr{% if it.dropped %} class="muted"{% endif %}><td>{% if it.dropped %}<s>{{ it.name }}</s> <span class="pill tiny">dropped</span>{% else %}{{ it.name }}{% endif %}{% if it.skip %} <span class="pill tiny warn">skipped</span>{% endif %}</td>
+          <td class="r nowrap">{{ it.display or ((it.points|string) ~ ' / ' ~ (it.out_of|string)) }}</td><td class="r nowrap">{{ it.pct }}%</td></tr>{% endfor %}
+      </table></div>
+    </details>
+    {% else %}<div class="meter">{{ bar }}</div>{% endif %}
+    {% endfor %}
+    {% for k in c.categories if k.extra and k.points_got %}
+    <p class="small mb-0 mt-1">{{ m.i('sparkle') }} <b>Extra credit: {{ k.points_got|round(1) }} points</b>{% if c.bonus %}, +{{ c.bonus }} on top of your grade{% else %} <span class="muted">(not counted: the syllabus gives no point total to set it against)</span>{% endif %}.</p>
+    {% endfor %}
+  </div>
+  {% elif c.have_syllabus %}
+  <p class="note">{% if c.syllabus_error %}{{ c.syllabus_error }}{% else %}Reading the syllabus ({{ c.source }})…{% endif %} Until then: Brightspace's numbers only.</p>
+  {% else %}
+  <p class="note">No syllabus found on Brightspace for this course. Type its grading breakdown below and the Hub will use it.</p>
+  {% endif %}
+
+  {% set mismatch = c.brightspace_pct is not none and c.so_far is not none and (c.brightspace_pct - c.so_far)|abs >= 2 %}
+  {% set scored_unsorted = c.unsorted|selectattr('pct', 'ne', none)|list %}
+  {% if c.pending or c.hub_scores or scored_unsorted or mismatch or c.scale_note %}
+  <div class="gr-notes mt-2">
+    <div class="eyebrow mb-1">Worth knowing</div>
+    <ul class="small">
+      {% for p in c.pending %}<li><b>{{ p.name }}</b> is {{ '%g'|format(p.points or 0) }}{% if p.out_of %} / {{ '%g'|format(p.out_of) }}{% endif %} on Brightspace, and isn't counted: you said "{{ p.note }}"{% if p.noted %} on {{ p.noted|fdate }}{% endif %}.{% if p.cost %} If it stays a zero, it costs you <b class="over-text">{{ p.cost }}%</b>; worth checking with whoever grades it.{% endif %}</li>{% endfor %}
+      {% for h in c.hub_scores %}<li><b>{{ h.name }}</b>: {{ '%g'|format(h.points) }} / {{ '%g'|format(h.out_of) }} is the score you typed in the Hub. Brightspace hasn't posted it yet; its own grade replaces this one when it does.</li>{% endfor %}
+      {% if scored_unsorted %}<li>Not in any syllabus category, so not counted: {% for it in scored_unsorted %}{{ it.name }} ({{ it.display }}){% if not loop.last %}, {% endif %}{% endfor %}.</li>{% endif %}
+      {% if mismatch %}<li>Brightspace's own total says {{ c.brightspace_pct }}%. It weighs things its own way (often counting work not graded yet as zero).</li>{% endif %}
+      {% if c.scale_note %}<li>{{ c.scale_note }}</li>{% endif %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if c.categories %}
+  <details class="mt-1"><summary class="more">How this is worked out</summary>
+    <p class="note mt-1 mb-0">
+      {% if c.mode == 'points' %}Every point counts the same: {{ c.graded_points|round|int }} of {{ (c.total_points or 0)|round|int }} points graded so far.{% else %}By category weight: counts {{ c.counted }}% of the {{ c.weights }}% the syllabus lists.{% endif %}
+      Scores from {% if c.from_file %}your spreadsheet of {{ c.file_date|fdate }} ({{ c.from_file }}), {% endif %}{% if c.from_gradescope %}Gradescope, where Brightspace doesn't have them yet ({{ c.from_gradescope }}), {% endif %}{% if c.from_hub %}the Hub, typed in by you ({{ c.from_hub }}), {% endif %}{% if pe and pe.overall and pe.overall.ou == c.ou %}Pearson MyLab, {% endif %}and Brightspace.
+      {% if c.brightspace_pct is not none and not mismatch %}Brightspace's own weighting: {{ c.brightspace_pct }}%.{% endif %}
+      {% if pe and pe.overall and pe.overall.ou == c.ou %}Pearson's own total: {{ pe.overall.pct }}%.{% endif %}
+      {% if c.credits %}{{ c.credits|round(1) }} credit hours.{% endif %}
+    </p>
+    {% if c.notes %}<p class="note mb-0">{{ c.notes }}</p>{% endif %}
+  </details>
+  {% endif %}
+
+  {% if not_on_list.get(c.ou) %}
+  <div class="banner mt-2 mb-0 small"><span><b>On Brightspace, not on your list:</b>
+    {% for it in not_on_list[c.ou] %}{{ it.name }} (due {{ it.due_at|fdate }}){% if not loop.last %} · {% endif %}{% endfor %}</span></div>
+  {% endif %}
+
+  {% if news.get(c.ou) %}
+  <div class="mt-2">
+    <div class="eyebrow mb-1">Announcements</div>
+    {% for n in news[c.ou] %}
+    {% if loop.index == 3 and news[c.ou]|length > 2 %}<details><summary class="more">{{ news[c.ou]|length - 2 }} older</summary>{% endif %}
+    <p class="small mb-1"><b>{{ n.title }}</b> <span class="muted">{{ n.posted_at|fdate }}</span><br><span class="text-2">{{ n.body[:280] }}{% if n.body|length > 280 %}…{% endif %}</span></p>
+    {% if loop.last and loop.length > 2 %}</details>{% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if c.rows %}
+  <details class="mt-2"><summary class="more">{{ c.rows|length }} grade items{% if c.unsorted %} · {{ c.unsorted|length }} not matched to a syllabus category{% endif %}</summary>
+    <div class="tablescroll mt-1"><table class="nut">
+      {% for it in c.rows %}<tr><td>{{ it.name }}</td><td class="muted">{{ it.category or '—' }}</td><td class="r nowrap">{{ it.display or ((it.points|string) ~ ' / ' ~ (it.out_of|string) if it.out_of else '') }}{% if it.pending %} <span class="muted small">not counted: you turned it in another way</span>{% endif %}</td></tr>{% endfor %}
+    </table></div>
+  </details>
+  {% endif %}
+
+  <details class="mt-1"><summary class="more">{% if c.plan_from == 'student' %}Your weights (you set these){% elif c.plan_from == 'checked' %}Weights, checked against the syllabus by hand{% elif c.categories %}Weights wrong? Fix them{% else %}Type the weights{% endif %}</summary>
+    <form method="post" action="/brightspace/plan/{{ c.ou }}" class="mt-1">
+      <textarea name="plan" rows="4" aria-label="Grading weights" placeholder="Homework 20&#10;Exams 45 drop 1&#10;Labs 15 elsewhere">{% for k in c.categories %}{{ k.name }} {{ k.weight }}{% if k.drop_lowest %} drop {{ k.drop_lowest }}{% endif %}{% if k.where == 'elsewhere' %} elsewhere{% endif %}
+{% endfor %}</textarea>
+      <div class="btnrow mt-1"><button class="btn sm" type="submit">Use these</button>
+        {% if c.plan_from in ('student', 'checked') and c.have_syllabus %}<button class="btn ghost sm" type="submit" formaction="/brightspace/plan/{{ c.ou }}/reread">Go back to the syllabus</button>{% endif %}</div>
+      <p class="note">One category per line: name, percent, then "drop N" or "elsewhere" (graded outside Brightspace) if they apply. Counts, the exam rule and extra credit stay as they are.{% if c.source %} Read from {{ c.source }}.{% endif %}</p>
+    </form>
+  </details>
+</section>
+{% endfor %}
+</div>
+<script>
+(function () {
+  if (window.__hubWhatIf) return;                 // one listener, however often the page is swapped in
+  window.__hubWhatIf = true;
+  document.addEventListener("input", function (e) {
+    var r = e.target.closest && e.target.closest("input[data-whatif]");
+    if (!r) return;
+    var box = r.closest(".gr-whatif"), curve = JSON.parse(box.dataset.curve), scale = JSON.parse(box.dataset.scale);
+    var x = +r.value, pct = curve[x], letter = "";
+    for (var i = 0; i < scale.length; i++) if (pct >= scale[i].min - 1e-9) { letter = scale[i].letter; break; }
+    box.querySelector('[data-out="x"]').textContent = x;
+    box.querySelector('[data-out="pct"]').textContent = pct.toFixed(1) + "%";
+    var l = box.querySelector('[data-out="letter"]');
+    if (l) l.textContent = letter || (scale.length ? scale[scale.length - 1].letter : "");
+  });
+})();
+</script>
+{% if grades_busy %}
+<script>
+(function () {
+  clearInterval(window.__hubGradesPoll);
+  window.__hubGradesPoll = setInterval(function () {
+    if (!document.querySelector(".gradecard")) { clearInterval(window.__hubGradesPoll); return; }
+    fetch("/brightspace/status", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (s) {
+      if (!s.busy) { clearInterval(window.__hubGradesPoll); if (window.HubFast) window.HubFast.reload(); else location.reload(); }
+    }).catch(function () {});
+  }, 4000);
+})();
+</script>
+{% endif %}
+{% endif %}

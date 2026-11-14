@@ -233,6 +233,9 @@
       await c('Classlist', 'classlist/');
       await c('My updates', 'updates/myUpdates');
       await c('Course overview (syllabus)', 'overview');
+      const cats = await c('Group categories', 'groupcategories/', lp);
+      const catId = Array.isArray(cats.body) && cats.body[0]?.GroupCategoryId;
+      if (catId) await probe(group, 'Groups (first category)', 'lp/{ou}/groupcategories/{id}/groups/', `${lp}/${ou}/groupcategories/${catId}/groups/`);
 
       const folderId = Array.isArray(folders.body) && folders.body[0]?.Id;
       if (folderId) {

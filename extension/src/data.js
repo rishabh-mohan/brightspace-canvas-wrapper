@@ -389,6 +389,7 @@ BSX.data = (() => {
         message: p.Message?.Text || '',
         author: p.IsAnonymous ? 'Anonymous' : p.PostingUserDisplayName || 'Unknown',
         mine: Boolean(who) && sameId(p.PostingUserId, who.Identifier),
+        unread: p.IsRead === false,
         posted_at: p.DatePosted || null,
       }))
       .sort((a, b) => Date.parse(a.posted_at || 0) - Date.parse(b.posted_at || 0));
@@ -657,6 +658,35 @@ BSX.data = (() => {
     return { html: o.Description?.Html || '', text: o.Description?.Text || '', has_attachment: Boolean(o.HasAttachment) };
   }
 
+  // The student's groups. Group memberships come from the enrolment list; each course's
+  // group categories (where Brightspace lets a student read them) say which course a
+  // group belongs to, its category and its members.
+  async function groups(courseList) {
+    const mine = (await client.lpBookmarked('enrollments/myenrollments/')).filter((e) => e.OrgUnit?.Type?.Code === 'Group');
+    const ids = new Set(mine.map((e) => String(e.OrgUnit.Id)));
+    const found = new Map();
+    await Promise.all(
+      courseList.map(async (c) => {
+        const cats = list(await soft(client.lp(`${c.id}/groupcategories/`), []).catch(() => []));
+        await Promise.all(
+          cats.map(async (cat) => {
+            const gs = list(await soft(client.lp(`${c.id}/groupcategories/${cat.GroupCategoryId}/groups/`), []).catch(() => []));
+            for (const g of gs) {
+              if (!ids.has(String(g.GroupId))) continue;
+              found.set(String(g.GroupId), { course_id: c.id, category: cat.Name || '', member_ids: (g.Enrollments || []).map(String), description: g.Description?.Text || '' });
+            }
+          })
+        );
+      })
+    );
+    return mine
+      .map((e) => {
+        const f = found.get(String(e.OrgUnit.Id)) || {};
+        return { id: e.OrgUnit.Id, name: e.OrgUnit.Name, code: e.OrgUnit.Code || '', course_id: f.course_id ?? null, category: f.category || '', member_ids: f.member_ids || null, description: f.description || '' };
+      })
+      .sort((a, b) => (a.course_id ?? Infinity) - (b.course_id ?? Infinity) || a.name.localeCompare(b.name));
+  }
+
   async function people(ou) {
     return list(await soft(client.le(`${ou}/classlist/`), []))
       .map((p) => ({ id: p.Identifier, name: p.DisplayName || [p.FirstName, p.LastName].filter(Boolean).join(' '), role: p.ClasslistRoleDisplayName || '' }))
@@ -700,7 +730,7 @@ BSX.data = (() => {
     todo, planner, overdue, recentFeedback,
     grades, estimate, estimable, courseTotals,
     announcements, recentAnnouncements,
-    modules, externalTools, files, syllabus, people,
+    modules, externalTools, files, syllabus, people, groups,
     calendar,
   };
 })();

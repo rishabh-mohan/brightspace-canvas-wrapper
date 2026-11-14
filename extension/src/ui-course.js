@@ -349,13 +349,17 @@
   // Canvas's "Start Assignment": choose a file, add a comment, submit. Brightspace takes one
   // file per submission; it is sent only when the student presses Submit.
   function submitBox(course, a, onDone) {
-    const file = h('input', { type: 'file', class: 'txt', 'aria-label': 'File to submit', accept: a.allowed_extensions ? a.allowed_extensions.map((x) => (x.startsWith('.') ? x : `.${x}`)).join(',') : null });
+    // Brightspace takes one file per submission. Where it keeps every submission (rule 2),
+    // several files are sent one after another, each as its own submission.
+    const several = a.submissions_rule === 2;
+    const file = h('input', { type: 'file', class: 'txt', multiple: several ? true : null, 'aria-label': several ? 'Files to submit' : 'File to submit', accept: a.allowed_extensions ? a.allowed_extensions.map((x) => (x.startsWith('.') ? x : `.${x}`)).join(',') : null });
     const comment = h('textarea', { class: 'txt', rows: '3', 'aria-label': 'Comment' });
     const msg = h('div', { class: 'msg', role: 'status' });
     const go = h('button', { type: 'button', class: 'btn primary' }, 'Submit Assignment');
     const box = h('section', { class: 'submitbox', hidden: true },
       h('h2', null, a.submitted ? 'New Attempt' : 'File Upload'),
-      h('label', null, 'File', file),
+      h('label', null, several ? 'Files' : 'File', file),
+      several ? h('div', { class: 'muted small' }, 'You can choose several files; each is handed in as its own submission.') : null,
       a.allowed_extensions ? h('div', { class: 'muted small' }, `Allowed: ${a.allowed_extensions.join(', ')}`) : null,
       h('label', null, 'Comment (optional)', comment),
       a.submissions_rule === 3 && a.submitted ? h('div', { class: 'muted small' }, 'This replaces your earlier submission.') : null,
@@ -363,24 +367,30 @@
       h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', onclick: () => (box.hidden = true) }, 'Cancel'), go),
       msg);
     go.addEventListener('click', async () => {
-      const f = file.files && file.files[0];
-      if (!f) {
+      const chosen = [...(file.files || [])];
+      if (!chosen.length) {
         msg.className = 'msg bad';
         msg.textContent = 'Choose a file first.';
         return;
       }
       go.disabled = true;
-      msg.className = 'msg';
-      msg.textContent = `Submitting ${f.name}…`;
+      let sent = 0;
       try {
-        const s = await data.submit(course.id, a.source_id, f, comment.value.trim());
+        let s = null;
+        for (const f of chosen) {
+          msg.className = 'msg';
+          msg.textContent = chosen.length > 1 ? `Submitting ${f.name} (${sent + 1} of ${chosen.length})…` : `Submitting ${f.name}…`;
+          s = await data.submit(course.id, a.source_id, f, sent ? '' : comment.value.trim());
+          sent++;
+        }
         msg.className = 'msg ok';
-        msg.textContent = s.submitted ? `Submitted ${f.name}.` : 'Sent. Brightspace has not listed it yet; check again in a moment.';
+        msg.textContent = s.submitted ? `Submitted ${chosen.map((f) => f.name).join(', ')}.` : 'Sent. Brightspace has not listed it yet; check again in a moment.';
         setTimeout(onDone, 1200);
       } catch (e) {
         go.disabled = false;
         msg.className = 'msg bad';
         msg.replaceChildren(
+          sent ? `${sent} of ${chosen.length} files were handed in before this one failed. ` : '',
           e && e.status === 403 ? 'Brightspace refused the submission (not permitted). ' : e && e.status === 401 ? 'Your Brightspace session has ended; sign in again. ' : `Brightspace did not accept the submission${e && e.status ? ` (${e.status})` : ''}. ${e && e.detail ? e.detail + ' ' : ''}`,
           h('a', { href: a.html_url }, 'Submit in Brightspace instead'), '.');
       }
@@ -474,8 +484,8 @@
       } else roots.push(p);
     }
     const draw = (p, depth) => [
-      h('div', { class: 'post', style: `margin-left:${Math.min(depth, 5) * 28}px` },
-        h('div', { class: 'phead' }, h('span', { class: 'avatar sm' }, (p.author || '?').slice(0, 1).toUpperCase()), h('div', null, h('div', { class: 't' }, p.author, p.mine ? ui.tag('you') : null), h('div', { class: 'muted small' }, when(p.posted_at)))),
+      h('div', { class: p.unread ? 'post unread' : 'post', style: `margin-left:${Math.min(depth, 5) * 28}px` },
+        h('div', { class: 'phead' }, h('span', { class: 'avatar sm' }, (p.author || '?').slice(0, 1).toUpperCase()), h('div', null, h('div', { class: 't' }, p.author, p.mine ? ui.tag('you') : null, p.unread ? h('span', { class: 'newdot inline', title: 'Unread' }) : null), h('div', { class: 'muted small' }, when(p.posted_at)))),
         depth === 0 && p.subject ? h('div', { class: 'psub' }, p.subject) : null,
         prose(p.message_html, p.message)),
       (kids.get(p.id) || []).map((k) => draw(k, depth + 1)),
@@ -492,7 +502,7 @@
         h('div', { class: 'dhead' }, h('h1', null, d.name), outButton('Reply in Brightspace', d.html_url)),
         metaBar([['Forum', d.forum], ['Due', d.due_at ? when(d.due_at) : null], ['Points', d.points_possible != null ? num(d.points_possible) : null]]),
         prose(d.description_html, d.description),
-        h('h2', { class: 'sect' }, d.posts.length ? `${d.posts.length} ${d.posts.length === 1 ? 'post' : 'posts'}` : 'Posts'),
+        h('h2', { class: 'sect' }, d.posts.length ? `${d.posts.length} ${d.posts.length === 1 ? 'post' : 'posts'}` : 'Posts', d.posts.some((p) => p.unread) ? h('span', { class: 'muted small' }, ` · ${d.posts.filter((p) => p.unread).length} unread`) : null),
         d.posts.length ? thread(d.posts) : ui.empty(d.must_post_first ? 'You must post before you can see other replies. Open the topic in Brightspace to post.' : 'No posts to show yet.')),
     };
   }

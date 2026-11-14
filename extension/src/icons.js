@@ -1,6 +1,8 @@
 // Line icons, drawn on a 24x24 grid and coloured by the surrounding text colour.
 BSX.icons = {
-  home: 'M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10',
+  groups: 'M8 11a3 3 0 100-6 3 3 0 000 6zM16 11a3 3 0 100-6 3 3 0 000 6zM2 20c0-3 3-5 6-5s6 2 6 5M14 15.3c.6-.2 1.3-.3 2-.3 3 0 6 2 6 5',
+  keyboard: 'M3 6h18v12H3zM7 10h0M11 10h0M15 10h0M8 14h8',
+  home:'M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10',
   dashboard: 'M4 15a8 8 0 0116 0M12 15l4-5M3 19h18',
   courses: 'M5 4h13v15H7a2 2 0 00-2 2zM5 21V4M9 8h6M9 12h6',
   calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',

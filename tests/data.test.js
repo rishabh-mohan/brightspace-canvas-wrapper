@@ -12,7 +12,11 @@ const routes = {
     { OrgUnit: { Id: 10, Type: { Code: 'Course Offering' }, Name: 'A', Code: 'a' }, Access: { IsActive: true, CanAccess: true, EndDate: null, LastAccessed: past }, PinDate: null }] },
   '/d2l/api/lp/1.64/enrollments/myenrollments/?bookmark=b1': { PagingInfo: { Bookmark: 'b2', HasMoreItems: false }, Items: [
     { OrgUnit: { Id: 11, Type: { Code: 'Course Offering' }, Name: 'B', Code: 'b' }, Access: { IsActive: true, CanAccess: true, EndDate: null, LastAccessed: past }, PinDate: past },
-    { OrgUnit: { Id: 12, Type: { Code: 'Course Offering' }, Name: 'Old', Code: 'c' }, Access: { IsActive: true, CanAccess: true, EndDate: past }, PinDate: null }] },
+    { OrgUnit: { Id: 12, Type: { Code: 'Course Offering' }, Name: 'Old', Code: 'c' }, Access: { IsActive: true, CanAccess: true, EndDate: past }, PinDate: null },
+    { OrgUnit: { Id: 70, Type: { Code: 'Group' }, Name: 'Team 7', Code: 'g7' }, Access: { IsActive: true, CanAccess: true }, PinDate: null },
+    { OrgUnit: { Id: 71, Type: { Code: 'Group' }, Name: 'Lonely', Code: 'g8' }, Access: { IsActive: true, CanAccess: true }, PinDate: null }] },
+  '/d2l/api/lp/1.64/10/groupcategories/': [{ GroupCategoryId: 3, Name: 'Projects' }],
+  '/d2l/api/lp/1.64/10/groupcategories/3/groups/': [{ GroupId: 70, Name: 'Team 7', Enrollments: [42, 43] }, { GroupId: 99, Name: 'Not mine', Enrollments: [1] }],
   '/d2l/api/le/1.100/10/dropbox/folders/': [{ Id: 5, Name: 'HW1', DueDate: soon, IsHidden: false, Assessment: { ScoreDenominator: 10 }, GradeItemId: 100 }, { Id: 6, Name: 'Hidden', IsHidden: true }],
   '/d2l/api/le/1.100/11/dropbox/folders/': [{ Id: 20, Name: 'HW2', DueDate: soon, IsHidden: false }, { Id: 21, Name: 'HW3', DueDate: soon, IsHidden: false }, { Id: 22, Name: 'Draft', DueDate: soon, IsHidden: false }],
   '/d2l/api/le/1.100/11/dropbox/folders/21/submissions/mysubmissions/': [{ Status: 1, Submissions: [{ SubmissionDate: past, Files: [{ FileName: 'a.pdf' }] }] }],
@@ -192,6 +196,12 @@ const assert = require('assert');
   const before = calls.length;
   await data.courses();
   assert.strictEqual(calls.length, before, 'second read served from cache');
+
+  // Groups: memberships from enrolments; course, category and members where readable.
+  const grp = await data.groups(courses);
+  assert.deepStrictEqual(Array.from(grp, (g) => `${g.name}:${g.course_id}:${g.category}`), ['Team 7:10:Projects', 'Lonely:null:']);
+  assert.deepStrictEqual(Array.from(grp[0].member_ids), ['42', '43']);
+  assert.strictEqual(grp[1].member_ids, null);
 
   // Assignment detail: rubric, rubric results, feedback files, download addresses.
   routes['/d2l/api/le/1.100/13/dropbox/folders/'] = [{ Id: 5, Name: 'Essay', DueDate: soon, SubmissionType: 0, SubmissionsRule: 4, Availability: null, GradeItemId: null,

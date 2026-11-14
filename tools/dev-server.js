@@ -39,6 +39,7 @@ function page(real) {
     } },
     // Stand-in for the background script's Gradescope fetch.
     runtime: { sendMessage: async (msg) => {
+      if (msg.type === 'bsx-badge') { document.documentElement.setAttribute('data-bsx-badge', String(msg.count)); return null; }
       const res = await fetch('/__gradescope' + msg.path);
       return res.ok ? { status: 200, url: 'https://www.gradescope.com' + msg.path, html: await res.text() } : { status: 200, url: 'https://www.gradescope.com/login', html: '' };
     } },
@@ -53,6 +54,7 @@ function page(real) {
     const verb = step.slice(0, step.indexOf(':'));
     const rest = step.slice(step.indexOf(':') + 1);
     if (verb === 'click') root()?.querySelector(rest)?.click();
+    if (verb === 'key') window.dispatchEvent(new KeyboardEvent('keydown', { key: rest, bubbles: true })); // key:<key>
     if (verb === 'file') { // file:<sel>=<name> picks a small made-up file
       const el = root()?.querySelector(rest.slice(0, rest.lastIndexOf('=')));
       if (el) { const dt = new DataTransfer(); dt.items.add(new File(['made-up work'], rest.slice(rest.lastIndexOf('=') + 1), { type: 'application/pdf' })); el.files = dt.files; }

@@ -223,6 +223,39 @@
     };
   };
 
+  // Canvas's Groups page: each group you belong to, its course and category, and members
+  // where Brightspace lets a student see them.
+  ui.views.groups = async () => {
+    const courses = await data.courses();
+    const list = await data.groups(courses);
+    const byCourse = new Map(courses.map((c) => [c.id, c]));
+    const card = (g) => {
+      const c = g.course_id != null ? byCourse.get(g.course_id) : null;
+      const members = g.member_ids && c
+        ? ui.lazy(data.people(c.id), (people) => {
+            const names = new Map(people.map((p) => [String(p.id), p.name]));
+            const shown = g.member_ids.map((id) => names.get(id)).filter(Boolean);
+            return shown.length ? h('div', { class: 'members' }, shown.map((n) => h('span', { class: 'member' }, h('span', { class: 'avatar xs' }, n.slice(0, 1).toUpperCase()), n))) : null;
+          }, '')
+        : null;
+      return h('div', { class: 'gcard', style: c ? `--c:${colorOf(c.id)}` : null },
+        h('div', { class: 'gtop' },
+          h('span', { class: 'avatar' }, ic('groups', 22)),
+          h('div', { class: 'imid' },
+            h('div', { class: 't' }, g.name),
+            h('div', { class: 'muted small' }, [c ? h('a', { href: courseHref(c.id) }, nameOf(c)) : 'Course not shown to students', g.category ? ` · ${g.category}` : null, g.member_ids ? ` · ${g.member_ids.length} member${g.member_ids.length === 1 ? '' : 's'}` : null])),
+          h('a', { class: 'btn', href: `/d2l/lms/group/user_group_list.d2l?ou=${g.course_id ?? g.id}`, title: 'Open groups in Brightspace' }, 'Brightspace ', ic('external', 14))),
+        g.description ? h('p', { class: 'muted small' }, ui.clip(g.description, 220)) : null,
+        members);
+    };
+    return {
+      title: 'Groups',
+      body: list.length
+        ? [h('p', { class: 'muted small' }, `You belong to ${list.length} group${list.length === 1 ? '' : 's'}.`), h('div', { class: 'gcards' }, list.map(card))]
+        : ui.empty('You are not in any groups.'),
+    };
+  };
+
   // Brightspace mail cannot be read from here, so the Inbox is a doorway to it, with the
   // messages instructors did send through Brightspace (announcements) listed underneath.
   ui.views.inbox = async () => {

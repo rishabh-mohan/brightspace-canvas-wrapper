@@ -9,6 +9,14 @@ api.action.onClicked.addListener((tab) => {
 // cannot read another site, so they ask here. Only two kinds of page are ever fetched, with
 // GET, using the student's own Gradescope session.
 api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Toolbar badge: how many new grades and announcements since the dashboard was last opened.
+  if (msg && msg.type === 'bsx-badge' && sender.id === api.runtime.id) {
+    const n = Math.max(0, Math.min(99, Number(msg.count) || 0));
+    api.action.setBadgeText({ text: n ? String(n) : '' });
+    api.action.setBadgeBackgroundColor({ color: '#0374b5' });
+    api.action.setTitle({ title: n ? `${n} new grade${n === 1 ? '' : 's'} or announcement${n === 1 ? '' : 's'}. Click to run the Brightspace access probe` : 'Run Brightspace access probe' });
+    return undefined;
+  }
   if (!msg || msg.type !== 'bsx-gradescope') return undefined;
   const path = String(msg.path || '');
   if (sender.id !== api.runtime.id || !/^\/(account|courses\/\d+)$/.test(path)) {

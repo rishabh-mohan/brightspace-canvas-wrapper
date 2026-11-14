@@ -197,6 +197,7 @@ BSX.ui = (() => {
       if (typeof saved.showAll === 'boolean') settings.showAll = state.showAll = saved.showAll;
       if (['group', 'due', 'title'].includes(saved.gradeSort)) settings.gradeSort = saved.gradeSort;
       if (typeof saved.gradescope === 'boolean') settings.gradescope = saved.gradescope;
+      if (typeof saved.seenAt === 'number') settings.seenAt = saved.seenAt;
     } catch {}
   }
   function saveSettings() {
@@ -418,6 +419,7 @@ BSX.ui = (() => {
     if (hash === '#/courses') return { view: 'courses', nav: 'courses' };
     if (hash === '#/grades') return { view: 'allgrades', nav: 'dashboard' };
     if (hash === '#/inbox') return { view: 'inbox', nav: 'inbox' };
+    if (hash === '#/groups') return { view: 'groups', nav: 'groups' };
     let m = hash.match(/^#\/calendar(?:\/(\d{4})-(\d{2}))?$/);
     if (m) return { view: 'calendar', nav: 'calendar', year: m[1] ? Number(m[1]) : null, month: m[2] ? Number(m[2]) - 1 : null };
     m = hash.match(/^#\/courses\/(\d+)(?:\/([a-z]+)(?:\/(\d+))?)?$/);
@@ -448,6 +450,7 @@ BSX.ui = (() => {
         lazy(data.courses(), (courses) => [
           focusCourses(courses).map((c) => h('a', { class: 'trayitem', href: courseHref(c.id) }, h('span', { class: 'dot', style: `background:${colorOf(c.id)}` }), h('span', null, h('span', { class: 'tname' }, nameOf(c)), h('span', { class: 'muted small tcode' }, c.course_code)))),
           h('a', { class: 'trayitem all', href: '#/courses' }, 'All Courses'),
+          h('a', { class: 'trayitem all', href: '#/groups' }, 'Your Groups'),
         ]),
       ];
     }
@@ -455,8 +458,9 @@ BSX.ui = (() => {
       const tip = (title, text) => h('div', { class: 'tip' }, h('div', { class: 'tname' }, title), h('div', { class: 'muted small' }, text));
       return [
         h('div', { class: 'trayhead' }, h('h2', null, 'Help'), close),
-        tip('What this is', 'A Canvas-style view of your Brightspace courses. It only reads: nothing here can submit work, take a quiz or post.'),
-        tip('Doing the work', 'Buttons such as “Start Assignment in Brightspace” open the real Brightspace page for that item.'),
+        tip('What this is', 'A Canvas-style view of your Brightspace courses. The only change it makes on Brightspace is handing in an assignment file when you press Submit Assignment.'),
+        tip('Doing the work', 'Start Assignment hands in a file from here. Quizzes, discussion posts and text submissions open the real Brightspace page.'),
+        h('button', { class: 'trayitem', type: 'button', onclick: () => { openTray(null); shortcutsDialog(); } }, ic('keyboard', 18), ' Keyboard shortcuts (press ?)'),
         tip('Work outside Brightspace', 'Use “+ To Do” for Gradescope, publisher sites or anything else. Those items appear in To Do, the list view and the calendar.'),
         tip('Grades', 'A total marked as an estimate is computed here from graded items. It applies each group\'s dropped-score rules but is not official.'),
         tip('Names and colours', 'The ⋮ button on a course card sets a nickname and colour.'),
@@ -478,8 +482,9 @@ BSX.ui = (() => {
       h('div', { class: 'traylabel' }, 'Pages'),
       h('a', { class: 'trayitem', href: '#/grades' }, 'Grades for all courses'),
       h('a', { class: 'trayitem', href: '#/courses' }, 'All Courses'),
+      h('a', { class: 'trayitem', href: '#/groups' }, 'Groups'),
       h('button', { class: 'trayitem', type: 'button', onclick: turnOff }, 'Show the original Brightspace page'),
-      h('p', { class: 'muted small', style: 'padding:14px 4px 0' }, 'This is a read-only view of your Brightspace data. Submitting work, taking quizzes and posting always happen in Brightspace.'),
+      h('p', { class: 'muted small', style: 'padding:14px 4px 0' }, 'Reads your Brightspace data, and hands in assignment files when you press Submit Assignment. Quizzes and posting happen in Brightspace.'),
     ];
   }
 
@@ -500,6 +505,7 @@ BSX.ui = (() => {
       trayBtn('account', 'account', 'Account'),
       item('dashboard', '#/', 'dashboard', 'Dashboard'),
       trayBtn('courses', 'courses', 'Courses'),
+      item('groups', '#/groups', 'groups', 'Groups'),
       item('calendar', '#/calendar', 'calendar', 'Calendar'),
       item('inbox', '#/inbox', 'inbox', 'Inbox'),
       trayBtn('help', 'help', 'Help'),
@@ -586,8 +592,92 @@ BSX.ui = (() => {
     }
   }
 
+  // ---- keyboard shortcuts --------------------------------------------------
+  const SHORTCUTS = [
+    ['?', 'Show this list'],
+    ['g then d', 'Dashboard'],
+    ['g then c', 'All courses'],
+    ['g then l', 'Calendar'],
+    ['g then i', 'Inbox'],
+    ['g then g', 'Grades for all courses'],
+    ['g then p', 'Groups'],
+    ['/', 'Search this page'],
+    ['j / k', 'Next / previous item'],
+    ['[ / ]', 'Previous / next module item'],
+    ['r', 'Refresh'],
+    ['Esc', 'Close a tray or dialog'],
+  ];
+  function shortcutsDialog() {
+    if (!frame || root.querySelector('.modal')) return;
+    const close = () => overlay.remove();
+    const overlay = h('div', { class: 'modal', onclick: (ev) => ev.target === overlay && close(), onkeydown: (ev) => ev.key === 'Escape' && (ev.stopPropagation(), close()) },
+      h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Keyboard shortcuts' },
+        h('div', { class: 'trayhead' }, h('h2', null, 'Keyboard Shortcuts'), h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Close', onclick: close }, ic('close'))),
+        h('table', { class: 'grid tight keys' }, h('tbody', null, SHORTCUTS.map(([k, what]) => h('tr', null, h('td', null, k.split(' ').map((part) => (part === 'then' || part === '/' ? ` ${part} ` : h('kbd', null, part)))), h('td', null, what)))))));
+    frame.app.append(overlay);
+    overlay.querySelector('.iconbtn').focus();
+  }
+
+  const GO = { d: '#/', c: '#/courses', l: '#/calendar', i: '#/inbox', g: '#/grades', p: '#/groups' };
+  let pendingG = 0;
+  function onKey(ev) {
+    if (!frame || ev.ctrlKey || ev.metaKey || ev.altKey || route().view === 'off') return;
+    const target = ev.composedPath()[0];
+    if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)) return;
+    const k = ev.key;
+    if (pendingG && Date.now() - pendingG < 1200 && GO[k]) {
+      pendingG = 0;
+      location.hash = GO[k];
+      ev.preventDefault();
+      return;
+    }
+    pendingG = 0;
+    if (k === 'g') pendingG = Date.now();
+    else if (k === '?') shortcutsDialog();
+    else if (k === 'r') reload();
+    else if (k === '/') {
+      const box = frame.main.querySelector('input.search');
+      if (!box) return;
+      box.focus();
+    } else if (k === 'j' || k === 'k') {
+      const items = [...frame.main.querySelectorAll('.content a.t, .content a.arow, .content .nrow, .content .todo .t[href]')].filter((el) => el.offsetParent);
+      if (!items.length) return;
+      const at = items.indexOf(root.activeElement);
+      const next = items[k === 'j' ? Math.min(items.length - 1, at + 1) : Math.max(0, at < 0 ? 0 : at - 1)];
+      next.focus();
+      next.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    } else if (k === '[' || k === ']') {
+      const steps = frame.main.querySelectorAll('.pager a');
+      const want = [...steps].find((a) => (k === '[' ? /Previous/ : /Next/).test(a.textContent));
+      if (want) want.click();
+    } else return;
+    ev.preventDefault();
+  }
+
+  // ---- toolbar badge ---------------------------------------------------------
+  // New grades and announcements since the dashboard was last opened, on the toolbar icon.
+  async function updateBadge() {
+    const runtime = (globalThis.browser || globalThis.chrome)?.runtime;
+    if (!runtime || !runtime.sendMessage) return;
+    if (route().view === 'dashboard' || settings.seenAt == null) {
+      settings.seenAt = Date.now();
+      saveSettings();
+      runtime.sendMessage({ type: 'bsx-badge', count: 0 })?.catch?.(() => {});
+      return;
+    }
+    try {
+      const courses = focusCourses(await data.courses());
+      const [grades, news] = await Promise.all([data.recentFeedback(courses, 14), data.recentAnnouncements(courses, 14)]);
+      const count = grades.filter((g) => Date.parse(g.grade.graded_at) > settings.seenAt).length + news.filter((a) => Date.parse(a.posted_at) > settings.seenAt).length;
+      runtime.sendMessage({ type: 'bsx-badge', count })?.catch?.(() => {});
+    } catch {}
+  }
+
   function start() {
     window.addEventListener('hashchange', render);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('hashchange', updateBadge);
+    loadSettings().then(() => setTimeout(updateBadge, 3000));
     // Pages draw first from the answers saved on the last visit; when Brightspace's real
     // answers differ, redraw in place, unless the student is typing or has a dialog open.
     client.onChange(() => {

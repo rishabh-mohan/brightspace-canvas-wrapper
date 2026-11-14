@@ -250,6 +250,19 @@ a.t:hover { color: var(--link); }
 .submitbox .msg.bad { color: var(--bad); }
 .btn[disabled] { opacity: .6; cursor: default; }
 
+/* groups */
+.gcards { display: grid; gap: 14px; }
+.gcard { border: 1px solid var(--line); border-left: 4px solid var(--c, var(--line)); border-radius: 4px; padding: 14px 16px; }
+.gtop { display: flex; gap: 14px; align-items: center; }
+.gtop .avatar { color: var(--c, var(--muted)); }
+.members { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; }
+.member { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.avatar.xs { width: 24px; height: 24px; font-size: 11px; color: var(--muted); }
+.post.unread { border-left: 3px solid var(--link); }
+.newdot.inline { display: inline-block; margin-left: 8px; vertical-align: middle; }
+kbd { display: inline-block; min-width: 22px; padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--soft); font: 13px/1.4 ui-monospace, Consolas, monospace; text-align: center; }
+.keys td:first-child { white-space: nowrap; width: 40%; }
+
 /* tables and grades */
 table.grid { border-collapse: collapse; width: 100%; }
 .grid th, .grid td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--line2); vertical-align: top; }

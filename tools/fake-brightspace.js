@@ -105,7 +105,7 @@ function build(c) {
     { PostId: 1, ParentPostId: null, ThreadId: 1, Subject: 'Recursion finally clicked', Message: rich('<p>The call-stack drawing from lecture made it obvious. Anyone else?</p>'), PostingUserDisplayName: 'Avery Chen', DatePosted: at(-6, 10, 12), IsAnonymous: false, IsDeleted: false },
     { PostId: 2, ParentPostId: 1, ThreadId: 1, Subject: 'Re: Recursion finally clicked', Message: rich('<p>Same. Drawing the frames helped more than the code.</p>'), PostingUserDisplayName: 'Jordan Patel', DatePosted: at(-6, 13, 40), IsAnonymous: false, IsDeleted: false },
     { PostId: 3, ParentPostId: 2, ThreadId: 1, Subject: 'Re: Recursion finally clicked', Message: rich('<p>Try the visualiser linked in Week 3.</p>'), PostingUserDisplayName: 'Sam Rivera (TA)', DatePosted: at(-5, 9, 2), IsAnonymous: false, IsDeleted: false },
-    { PostId: 4, ParentPostId: null, ThreadId: 4, Subject: 'Question about the midterm format', Message: rich('<p>Is it multiple choice or free response?</p>'), PostingUserDisplayName: 'Riley Kim', DatePosted: at(-4, 18, 30), IsAnonymous: false, IsDeleted: false },
+    { PostId: 4, ParentPostId: null, ThreadId: 4, Subject: 'Question about the midterm format', Message: rich('<p>Is it multiple choice or free response?</p>'), PostingUserDisplayName: 'Riley Kim', DatePosted: at(-4, 18, 30), IsAnonymous: false, IsDeleted: false, IsRead: false },
   ];
 
   const news = (c.extra ? [1] : [1, 2, 3, 4]).map((i) => ({
@@ -221,9 +221,17 @@ function handle(pathname, query) {
     if (p === 'users/whoami') return json({ Identifier: '42', FirstName: 'Student', LastName: 'One', Pronouns: '', UniqueName: 'student1', ProfileIdentifier: 'x' });
     if (p === 'enrollments/myenrollments/') {
       const unit = (id, code, name, ucode, pin) => ({ OrgUnit: { Id: id, Type: { Id: 3, Code: code, Name: code }, Name: name, Code: ucode, HomeUrl: '', ImageUrl: '' }, Access: { IsActive: true, StartDate: null, EndDate: null, CanAccess: true, ClasslistRoleName: 'Student', LISRoles: [], LastAccessed: at(-(id % 9)) }, PinDate: pin ? at(-30) : null });
-      return json({ PagingInfo: { Bookmark: '', HasMoreItems: false }, Items: [unit(6606, 'Organization', 'Purdue', 'purdue'), ...COURSES.map((c) => unit(c.id, 'Course Offering', c.name, c.code, false)), unit(900, 'Group', 'Lab group 4', 'grp')] });
+      return json({ PagingInfo: { Bookmark: '', HasMoreItems: false }, Items: [unit(6606, 'Organization', 'Purdue', 'purdue'), ...COURSES.map((c) => unit(c.id, 'Course Offering', c.name, c.code, false)), unit(900, 'Group', 'Lab group 4', 'grp'), unit(950, 'Group', 'Calculus study group', 'grp-ma')] });
     }
     if ((r = p.match(/^courses\/(\d+)\/image$/))) return { status: 200, type: 'image/svg+xml', body: image(Number(r[1])) };
+    // Group categories: course 101 lets students read them; 102 refuses, as some schools do.
+    if ((r = p.match(/^(\d+)\/groupcategories\/$/))) {
+      if (r[1] === '102') return { status: 403, type: 'application/problem+json', body: '{}' };
+      return json(r[1] === '101' ? [{ GroupCategoryId: 1, Name: 'Project teams', Description: rich('') }] : []);
+    }
+    if ((r = p.match(/^101\/groupcategories\/1\/groups\/$/))) {
+      return json([{ GroupId: 900, Name: 'Lab group 4', Code: 'grp', Description: rich('Team for projects 2-4. Meet Thursdays after lab.'), Enrollments: [42, 501, 502, 506] }, { GroupId: 901, Name: 'Lab group 5', Code: 'grp5', Description: rich(''), Enrollments: [503, 504] }]);
+    }
     return json(null);
   }
   if (!(r = rest.match(/^le\/[\d.]+\/(.*)$/))) return json(null);

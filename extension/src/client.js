@@ -34,6 +34,9 @@ BSX.client = (() => {
     try {
       const res = await fetch(path, { credentials: 'same-origin' });
       if (!res.ok) throw new ApiError(res.status, path);
+      // An expired session answers with a sign-in page instead of data.
+      const type = res.headers ? res.headers.get('content-type') : null;
+      if (type != null && !/json/i.test(type)) throw new ApiError(401, path);
       return await res.json();
     } finally {
       active--;

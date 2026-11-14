@@ -1,23 +1,24 @@
 {
   "manifest_version": 3,
   "name": "Brightspace Canvas Wrapper",
-  "version": "0.4.0",
-  "description": "Canvas-style dashboard, calendar, grades, assignments, announcements and modules over Brightspace. Read-only.",
+  "version": "0.5.0",
+  "description": "A Canvas-style, read-only view of Brightspace: dashboard, calendar, and per-course home, modules, assignments, quizzes, discussions, grades, announcements, files, syllabus and people.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://*.brightspace.com/*"],
   "content_scripts": [
     {
-      "matches": [
-        "https://*.brightspace.com/d2l/home*",
-        "https://*.brightspace.com/d2l/lms/grades/my_grades/main.d2l*",
-        "https://*.brightspace.com/d2l/lms/dropbox/user/folders_list.d2l*",
-        "https://*.brightspace.com/d2l/lms/dropbox/dropbox.d2l*",
-        "https://*.brightspace.com/d2l/lms/news/main.d2l*",
-        "https://*.brightspace.com/d2l/lms/quizzing/user/quizzes_list.d2l*",
-        "https://*.brightspace.com/d2l/le/content/*/Home*",
-        "https://*.brightspace.com/d2l/le/*/discussions/List*"
+      "matches": ["https://*.brightspace.com/d2l/*"],
+      "exclude_matches": ["https://*.brightspace.com/d2l/api/*"],
+      "js": [
+        "src/client.js",
+        "src/data.js",
+        "src/styles.js",
+        "src/icons.js",
+        "src/ui-core.js",
+        "src/ui-dashboard.js",
+        "src/ui-course.js",
+        "src/ui-calendar.js"
       ],
-      "js": ["src/client.js", "src/data.js", "src/styles.js", "src/ui.js"],
       "run_at": "document_start"
     }
   ],

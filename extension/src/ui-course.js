@@ -1,0 +1,445 @@
+// Layer 3, part 3: everything inside a course.
+(() => {
+  const ui = BSX.ui;
+  if (!ui) return;
+  const { data } = BSX;
+  const { h, ic, settings, nameOf, when, num, pct, courseHref, itemHref, bs, prose } = ui;
+
+  const LABEL = { home: 'Home', announcements: 'Announcements', assignments: 'Assignments', discussions: 'Discussions', grades: 'Grades', people: 'People', files: 'Files', syllabus: 'Syllabus', quizzes: 'Quizzes', modules: 'Modules' };
+  const KIND = {
+    assignment: { icon: 'assignment', label: 'Assignment', group: 'Assignments' },
+    quiz: { icon: 'quiz', label: 'Quiz', group: 'Quizzes' },
+    discussion: { icon: 'discussion', label: 'Discussion', group: 'Discussions' },
+  };
+  const TYPE_ICON = { File: 'file', Link: 'link', 'External tool': 'external', Assignment: 'assignment', Quiz: 'quiz', Discussion: 'discussion' };
+  const whatIf = { on: false, courseId: null, overrides: new Map() };
+
+  // ---- course navigation -----------------------------------------------------
+  function courseNav(course, current) {
+    const tools = h('div');
+    data.externalTools(course.id)
+      .then((list) => {
+        if (list.length) tools.replaceChildren(h('div', { class: 'sep' }, 'External tools'), ...list.slice(0, 8).map((t) => h('a', { href: t.html_url, title: 'Opens through Brightspace' }, t.title, ' ', ic('external', 13))));
+      })
+      .catch(() => {});
+    return h('nav', { class: 'cnav', 'aria-label': 'Course navigation' },
+      Object.keys(LABEL).map((key) => h('a', { href: courseHref(course.id, key === 'home' ? null : key), class: current === key ? 'on' : null }, LABEL[key])),
+      h('div', { class: 'sep' }, 'Brightspace'),
+      h('a', { href: bs.home(course.id) }, 'Original course home'),
+      tools);
+  }
+
+  const metaBar = (pairs) => h('dl', { class: 'meta' }, pairs.filter((p) => p && p[1] != null && p[1] !== '').map(([k, v]) => h('div', null, h('dt', null, k), h('dd', null, v))));
+  const outButton = (label, href) => h('a', { class: 'btn primary', href }, label, ' ', ic('external', 14));
+  const notFound = (what, id, section) => ({ body: [ui.empty(`That ${what} is no longer available.`), h('a', { href: courseHref(id, section) }, `Back to ${LABEL[section]}`)] });
+
+  // ---- modules ---------------------------------------------------------------
+  // `work` is the course's assignment list. A module item that is an assignment, quiz or
+  // discussion with the same name opens the wrapper's page for it, with its due date.
+  function moduleList(courseId, list, work) {
+    const byName = new Map();
+    for (const a of work) {
+      const k = `${a.kind}:${a.name.trim().toLowerCase()}`;
+      byName.set(k, byName.has(k) ? null : a); // an ambiguous name matches nothing
+    }
+    const match = (i) => byName.get(`${i.type.toLowerCase()}:${i.title.trim().toLowerCase()}`) || null;
+    return list.map((m) =>
+      h('details', { class: 'group', open: true, style: `margin-left:${Math.min(m.depth, 4) * 22}px` },
+        h('summary', null, ic('down', 16), h('span', { class: 'gname' }, m.name), m.locked ? ui.tag('locked') : null),
+        m.items.length
+          ? m.items.map((i) => {
+              const a = match(i);
+              const sub = a ? [a.due_at ? `Due ${when(a.due_at)}` : null, a.grade ? `${num(a.grade.score)}/${num(a.grade.points_possible)} pts` : a.points_possible != null ? `${num(a.points_possible)} pts` : null].filter(Boolean).join('  |  ') || i.type : i.type;
+              return h('div', { class: 'irow' },
+                h('span', { class: a ? 'iic ok' : 'iic' }, ic(TYPE_ICON[i.type] || 'item', 22)),
+                h('div', { class: 'imid' }, h('a', { class: i.unread ? 't' : 't read', href: a ? itemHref(courseId, a) : i.html_url }, i.title), h('div', { class: 'muted small' }, sub)),
+                i.locked ? h('span', { class: 'muted' }, ic('lock', 16)) : a && a.grade ? h('span', { class: 'ok', title: 'Graded' }, ic('check', 18)) : i.unread ? h('span', { class: 'newdot', title: 'Not viewed yet' }) : null);
+            })
+          : h('div', { class: 'irow muted small' }, 'No items in this module.')));
+  }
+
+  async function modules(course) {
+    const [list, work] = await Promise.all([data.modules(course.id), data.assignments(course.id).catch(() => [])]);
+    return { body: list.length ? [moduleList(course.id, list, work), h('p', { class: 'small' }, h('a', { href: bs.content(course.id) }, 'Open Content in Brightspace'))] : ui.empty('No content in this course yet.') };
+  }
+
+  // ---- home ------------------------------------------------------------------
+  async function home(course) {
+    const [news, list, work] = await Promise.all([data.announcements(course.id), data.modules(course.id), data.assignments(course.id).catch(() => [])]);
+    const recent = news.filter((a) => a.posted_at && Date.now() - Date.parse(a.posted_at) < 14 * ui.DAY).slice(0, 2);
+    return {
+      body: [
+        recent.length
+          ? h('div', { class: 'notice' }, h('div', { class: 'nhead' }, ic('announcement', 18), ' Recent Announcements'),
+              recent.map((a) => h('a', { class: 'nrow', href: courseHref(course.id, 'announcements', a.id) }, h('span', { class: 't' }, a.title), h('span', { class: 'muted small' }, ui.clip(ui.plainOf(a.message_html, a.message), 110)), h('span', { class: 'muted small nowrap' }, when(a.posted_at)))))
+          : null,
+        list.length ? moduleList(course.id, list, work) : ui.empty('No content in this course yet.'),
+      ],
+      side: [
+        h('div', { class: 'sidebtns' }, ui.linkButton('View Announcements', courseHref(course.id, 'announcements'), 'wide'), ui.linkButton('View Calendar', '#/calendar', 'wide')),
+        ui.todoSide([course], { labels: false, gradesHref: courseHref(course.id, 'grades'), only: course.id }),
+      ],
+    };
+  }
+
+  // ---- announcements -----------------------------------------------------------
+  async function announcements(course, r) {
+    const list = await data.announcements(course.id);
+    if (r.itemId != null) {
+      const a = list.find((x) => x.id === r.itemId);
+      if (!a) return notFound('announcement', course.id, 'announcements');
+      return { crumb: a.title, body: h('article', { class: 'detail' }, h('h1', null, a.title), h('div', { class: 'muted small' }, a.posted_at ? `Posted ${when(a.posted_at)}` : ''), prose(a.message_html, a.message)) };
+    }
+    if (!list.length) return { body: ui.empty('No announcements in this course.') };
+    const rows = list.map((a) => {
+      const text = ui.plainOf(a.message_html, a.message);
+      const el = h('a', { class: 'arow', href: courseHref(course.id, 'announcements', a.id) },
+        h('span', { class: 'avatar sm' }, ic('announcement', 18)),
+        h('div', { class: 'imid' }, h('div', { class: 't' }, a.title, a.pinned ? ui.tag('pinned') : null), h('div', { class: 'muted small' }, ui.clip(text, 200))),
+        h('div', { class: 'muted small nowrap' }, a.posted_at ? `Posted on ${when(a.posted_at)}` : ''));
+      return [el, `${a.title} ${text}`];
+    });
+    return { body: [h('div', { class: 'toolbar' }, ui.filterBox('Search announcements', rows)), h('div', { class: 'rows' }, rows.map((x) => x[0])), h('p', { class: 'small' }, h('a', { href: bs.news(course.id) }, 'Open Announcements in Brightspace'))] };
+  }
+
+  // ---- assignments, quizzes, discussions (lists) -------------------------------
+  function workRow(courseId, a) {
+    const now = Date.now();
+    const status = h('span', { class: 'small nowrap' });
+    const show = (done, text) => {
+      status.textContent = text;
+      status.className = `small nowrap ${done ? 'ok' : a.due_at && Date.parse(a.due_at) < now ? 'bad' : 'muted'}`;
+    };
+    if (a.kind === 'assignment' && !a.grade) {
+      data.submission(courseId, a.source_id).then((s) => show(s.submitted, s.submitted ? 'Submitted' : a.due_at && Date.parse(a.due_at) < now ? 'Missing' : 'Not submitted')).catch(() => {});
+    } else if (a.kind === 'quiz' && !a.grade) {
+      data.quizAttempts(courseId, a.source_id).then((q) => q.known && show(q.attempts_used > 0, q.attempts_used > 0 ? 'Attempted' : 'Not attempted')).catch(() => {});
+    } else if (a.grade) {
+      show(true, 'Graded');
+    }
+    const possible = a.grade ? a.grade.points_possible : a.points_possible;
+    const score = a.grade ? `${num(a.grade.score)}/${num(possible)} pts` : possible != null ? `-/${num(possible)} pts` : null;
+    const sub = [a.forum, a.due_at ? h('span', null, h('b', null, 'Due'), ` ${when(a.due_at)}`) : 'No due date', score].filter(Boolean);
+    const el = h('div', { class: 'irow' },
+      h('span', { class: 'iic ok' }, ic(KIND[a.kind].icon, 22)),
+      h('div', { class: 'imid' }, h('a', { class: 't', href: itemHref(courseId, a) }, a.name), h('div', { class: 'muted small' }, sub.map((s, i) => [i ? '  |  ' : null, s]))),
+      status);
+    return [el, a.name];
+  }
+
+  function groupBox(title, rows) {
+    if (!rows.length) return null;
+    return h('details', { class: 'group', open: true }, h('summary', null, ic('down', 16), h('span', { class: 'gname' }, title), h('span', { class: 'count' }, rows.length)), rows.map((x) => x[0]));
+  }
+
+  async function workList(course, kind) {
+    const section = kind ? ui.PLURAL[kind] : 'assignments';
+    const [everything, groups] = await Promise.all([data.assignments(course.id), kind ? null : data.assignmentGroups(course.id).catch(() => new Map())]);
+    const all = everything.filter((a) => !kind || a.kind === kind);
+    const now = Date.now();
+    const byDue = (a, b) => Date.parse(a.due_at) - Date.parse(b.due_at);
+    const rows = [];
+    const make = (a) => {
+      const row = workRow(course.id, a);
+      rows.push(row);
+      return row;
+    };
+
+    let boxes;
+    if (!kind && settings.asgBy === 'type') {
+      const buckets = new Map();
+      for (const a of all) {
+        const name = (a.grade_item_id != null && groups.get(String(a.grade_item_id))) || KIND[a.kind].group;
+        if (!buckets.has(name)) buckets.set(name, []);
+        buckets.get(name).push(a);
+      }
+      boxes = [...buckets.entries()].map(([name, items]) => groupBox(name, items.sort((a, b) => (a.due_at && b.due_at ? byDue(a, b) : a.due_at ? -1 : 1)).map(make)));
+    } else {
+      const label = kind ? KIND[kind].group : 'Assignments';
+      boxes = [
+        groupBox(`Upcoming ${label}`, all.filter((a) => a.due_at && Date.parse(a.due_at) >= now).sort(byDue).map(make)),
+        groupBox(`Undated ${label}`, all.filter((a) => !a.due_at).map(make)),
+        groupBox(`Past ${label}`, all.filter((a) => a.due_at && Date.parse(a.due_at) < now).sort(byDue).reverse().map(make)),
+      ];
+    }
+
+    // Work that is graded outside Brightspace (Gradescope, publisher sites) shows as links.
+    const external = kind
+      ? null
+      : ui.lazy(data.externalTools(course.id), (tools) =>
+          tools.length
+            ? h('details', { class: 'group', open: true }, h('summary', null, ic('down', 16), h('span', { class: 'gname' }, 'External Tools'), h('span', { class: 'count' }, tools.length)),
+                tools.map((t) => h('div', { class: 'irow' }, h('span', { class: 'iic' }, ic('external', 22)), h('div', { class: 'imid' }, h('a', { class: 't', href: t.html_url }, t.title), h('div', { class: 'muted small' }, 'Work and grades for this tool live outside Brightspace. Opens through Brightspace.')))))
+            : null, '');
+
+    const pick = (key, text) => h('button', { type: 'button', class: settings.asgBy === key ? 'on' : null, onclick: () => { settings.asgBy = key; ui.saveSettings(); ui.render(); } }, text);
+    const original = { assignments: bs.assignments, quizzes: bs.quizzes, discussions: bs.discussions }[section](course.id);
+    return {
+      body: [
+        h('div', { class: 'toolbar' }, ui.filterBox(`Search ${LABEL[section].toLowerCase()}`, rows, () => {
+          // A group with nothing left after filtering is hidden rather than shown empty.
+          for (const box of boxes) if (box) box.hidden = ![...box.querySelectorAll('.irow')].some((el) => !el.hidden);
+        }), kind ? null : h('div', { class: 'seg' }, pick('date', 'Show by Date'), pick('type', 'Show by Type'))),
+        all.length ? boxes : ui.empty(`No ${LABEL[section].toLowerCase()} in this course.`),
+        external,
+        h('p', { class: 'small' }, h('a', { href: original }, `Open ${LABEL[section]} in Brightspace`)),
+      ],
+    };
+  }
+
+  // ---- assignment, quiz, discussion (detail) ------------------------------------
+  function gradePanel(grade, possible) {
+    return ui.sideSection('Grade', grade
+      ? [h('div', { class: 'bigscore' }, num(grade.score), h('span', { class: 'muted' }, ` / ${num(grade.points_possible ?? possible)}`)), grade.displayed ? h('div', { class: 'muted small' }, grade.displayed) : null, grade.comment ? h('div', { class: 'quote small' }, grade.comment) : null]
+      : h('div', { class: 'muted small pad' }, possible != null ? `Not graded yet. ${num(possible)} points possible.` : 'Not graded yet.'));
+  }
+
+  async function assignmentDetail(course, r) {
+    const a = await data.assignment(course.id, r.itemId);
+    if (!a) return notFound('assignment', course.id, 'assignments');
+    const late = a.due_at && Date.parse(a.due_at) < Date.now();
+    const statusLine = a.submitted
+      ? h('div', { class: 'substat ok' }, ic('check', 18), ' Submitted', a.submitted_at ? h('div', { class: 'muted small' }, when(a.submitted_at)) : null)
+      : a.status === 'draft'
+        ? h('div', { class: 'substat' }, 'Draft saved, not submitted')
+        : h('div', { class: late ? 'substat bad' : 'substat' }, late ? 'Missing' : 'Not submitted');
+    const files = a.submissions.flatMap((s) => s.files);
+    return {
+      crumb: a.name,
+      body: h('article', { class: 'detail' },
+        h('div', { class: 'dhead' }, h('h1', null, a.name), outButton(a.submitted ? 'View or resubmit in Brightspace' : 'Start Assignment in Brightspace', a.html_url)),
+        metaBar([['Due', a.due_at ? when(a.due_at) : 'No due date'], ['Points', a.points_possible != null ? num(a.points_possible) : null], ['Submitting', 'a file upload']]),
+        prose(a.description_html, a.description) || h('p', { class: 'muted' }, 'No additional details were added for this assignment.'),
+        a.attachments.length ? [h('h2', { class: 'sect' }, 'Attached files'), h('ul', { class: 'filelist' }, a.attachments.map((f) => h('li', null, ic('file', 16), ' ', h('a', { href: a.html_url, title: 'Download from the Brightspace page' }, f.name), h('span', { class: 'muted small' }, ` ${ui.bytes(f.size)}`)))) ] : null),
+      side: [
+        ui.sideSection('Submission', [statusLine, files.length ? h('ul', { class: 'filelist' }, files.map((f) => h('li', null, ic('file', 16), ' ', f.name, h('span', { class: 'muted small' }, ` ${ui.bytes(f.size)}`)))) : null]),
+        gradePanel(a.grade || (a.feedback && a.feedback.score != null ? { score: a.feedback.score, points_possible: a.points_possible, displayed: '', comment: '' } : null), a.points_possible),
+        a.feedback && (a.feedback.comment_html || a.feedback.comment) ? ui.sideSection('Comments', prose(a.feedback.comment_html, a.feedback.comment)) : null,
+      ],
+    };
+  }
+
+  async function quizDetail(course, r) {
+    const q = await data.quiz(course.id, r.itemId);
+    if (!q) return notFound('quiz', course.id, 'quizzes');
+    const attempts = q.attempts.known ? `${q.attempts.attempts_used}${q.allowed_attempts != null ? ` of ${q.allowed_attempts}` : ''} used` : null;
+    const closed = q.lock_at && Date.parse(q.lock_at) < Date.now();
+    const notOpen = q.unlock_at && Date.parse(q.unlock_at) > Date.now();
+    return {
+      crumb: q.name,
+      body: h('article', { class: 'detail' },
+        h('div', { class: 'dhead' }, h('h1', null, q.name), outButton(closed ? 'View in Brightspace' : 'Take the Quiz in Brightspace', q.html_url)),
+        metaBar([
+          ['Due', q.real_due_at ? when(q.real_due_at) : 'No due date'],
+          ['Points', q.grade ? num(q.grade.points_possible) : null],
+          ['Available', q.unlock_at || q.lock_at ? `${q.unlock_at ? when(q.unlock_at) : 'now'} – ${q.lock_at ? when(q.lock_at) : 'no end'}` : null],
+          ['Time Limit', q.time_limit != null ? `${q.time_limit} Minutes` : 'None'],
+          ['Allowed Attempts', q.allowed_attempts != null ? String(q.allowed_attempts) : 'Unlimited'],
+        ]),
+        notOpen ? h('div', { class: 'banner' }, ic('lock', 16), ` This quiz is locked until ${when(q.unlock_at)}.`) : closed ? h('div', { class: 'banner' }, ic('lock', 16), ` This quiz closed ${when(q.lock_at)}.`) : null,
+        q.description_html || q.description ? [h('h2', { class: 'sect' }, 'Description'), prose(q.description_html, q.description)] : null,
+        q.instructions_html || q.instructions ? [h('h2', { class: 'sect' }, 'Instructions'), prose(q.instructions_html, q.instructions)] : null),
+      side: [
+        ui.sideSection('Attempts', h('div', { class: 'pad' }, attempts || h('span', { class: 'muted small' }, 'Brightspace does not report attempts for this quiz.'))),
+        gradePanel(q.grade, null),
+      ],
+    };
+  }
+
+  function thread(posts) {
+    const ids = new Set(posts.map((p) => p.id));
+    const kids = new Map();
+    const roots = [];
+    for (const p of posts) {
+      if (p.parent_id != null && ids.has(p.parent_id)) {
+        if (!kids.has(p.parent_id)) kids.set(p.parent_id, []);
+        kids.get(p.parent_id).push(p);
+      } else roots.push(p);
+    }
+    const draw = (p, depth) => [
+      h('div', { class: 'post', style: `margin-left:${Math.min(depth, 5) * 28}px` },
+        h('div', { class: 'phead' }, h('span', { class: 'avatar sm' }, (p.author || '?').slice(0, 1).toUpperCase()), h('div', null, h('div', { class: 't' }, p.author), h('div', { class: 'muted small' }, when(p.posted_at)))),
+        depth === 0 && p.subject ? h('div', { class: 'psub' }, p.subject) : null,
+        prose(p.message_html, p.message)),
+      (kids.get(p.id) || []).map((k) => draw(k, depth + 1)),
+    ];
+    return roots.map((p) => draw(p, 0));
+  }
+
+  async function discussionDetail(course, r) {
+    const d = await data.discussion(course.id, r.itemId);
+    if (!d) return notFound('discussion', course.id, 'discussions');
+    return {
+      crumb: d.name,
+      body: h('article', { class: 'detail' },
+        h('div', { class: 'dhead' }, h('h1', null, d.name), outButton('Reply in Brightspace', d.html_url)),
+        metaBar([['Forum', d.forum], ['Due', d.due_at ? when(d.due_at) : null], ['Points', d.points_possible != null ? num(d.points_possible) : null]]),
+        prose(d.description_html, d.description),
+        h('h2', { class: 'sect' }, d.posts.length ? `${d.posts.length} ${d.posts.length === 1 ? 'post' : 'posts'}` : 'Posts'),
+        d.posts.length ? thread(d.posts) : ui.empty(d.must_post_first ? 'You must post before you can see other replies. Open the topic in Brightspace to post.' : 'No posts to show yet.')),
+    };
+  }
+
+  // ---- grades ------------------------------------------------------------------
+  async function grades(course) {
+    const id = course.id;
+    if (whatIf.courseId !== id) Object.assign(whatIf, { on: false, courseId: id, overrides: new Map() });
+    const [g, work, courses] = await Promise.all([data.grades(id), data.assignments(id).catch(() => []), data.courses()]);
+    // Switch between courses without leaving Grades, as Canvas's course menu does.
+    const listed = ui.state.showAll ? courses : ui.focusCourses(courses);
+    const choices = listed.includes(course) || !courses.includes(course) ? listed : [...listed, course];
+    const picker = h('select', { class: 'txt pick', 'aria-label': 'Course' }, choices.map((c) => h('option', { value: String(c.id), selected: c.id === id }, nameOf(c))));
+    picker.addEventListener('change', () => (location.hash = courseHref(Number(picker.value), 'grades')));
+    const byItem = new Map(work.filter((a) => a.grade_item_id != null).map((a) => [String(a.grade_item_id), a]));
+    const points = g.system === 'Points';
+    const weighted = g.system === 'Weighted';
+    const canEstimate = points || weighted;
+
+    const totalBox = h('div', { class: 'totalbox' });
+    function drawTotal() {
+      const hyp = whatIf.on && whatIf.overrides.size ? data.estimate(g, whatIf.overrides) : null;
+      const pair = (t) => (points ? h('div', { class: 'muted small' }, `${num(t.score)} / ${num(t.points_possible)} points`) : null);
+      let kids;
+      if (hyp) {
+        const actual = g.final ? g.final.displayed || pct(g.final.score, g.final.points_possible) : g.estimate ? pct(g.estimate.score, g.estimate.points_possible) : 'not released';
+        kids = [h('div', { class: 'tlabel' }, 'What-If Total'), h('div', { class: 'bigscore hyp' }, pct(hyp.score, hyp.points_possible)), pair(hyp), h('div', { class: 'muted small' }, `Actual: ${actual}`)];
+      } else if (g.final) {
+        kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'bigscore' }, g.final.displayed || pct(g.final.score, g.final.points_possible) || '–'), g.final.points_possible ? h('div', { class: 'muted small' }, `${num(g.final.score)} / ${num(g.final.points_possible)}`) : null, h('div', { class: 'muted small' }, 'Released by the instructor')];
+      } else if (g.estimate) {
+        kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'bigscore' }, pct(g.estimate.score, g.estimate.points_possible)), pair(g.estimate), h('div', { class: 'muted small' }, 'Estimate from graded items. Not official; ignores dropped scores.')];
+      } else {
+        kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'muted' }, 'Not released by the instructor.')];
+      }
+      totalBox.replaceChildren(...kids.filter(Boolean));
+    }
+    drawTotal();
+
+    const rows = [];
+    for (const group of g.groups) {
+      if (group.name) {
+        const v = group.value;
+        rows.push(h('tr', { class: 'grouprow' }, h('td', { colspan: '2' }, group.name), h('td', { class: 'num' }, v ? num(v.score) : ''), h('td', { class: 'num' }, v ? num(v.points_possible) : ''), h('td', { class: 'num' }, v ? pct(v.score, v.points_possible) : '')));
+      }
+      for (const i of group.items) {
+        const v = i.value;
+        const a = byItem.get(String(i.id));
+        const possible = v ? v.points_possible : i.points_possible;
+        const pctCell = h('td', { class: 'num' }, v ? pct(v.score, v.points_possible) : '');
+        let scoreCell;
+        if (whatIf.on && data.estimable(g, i)) {
+          const input = h('input', { class: 'wi', type: 'number', min: '0', step: 'any', value: v && v.score != null ? String(v.score) : '', 'aria-label': `What-If score for ${i.name}` });
+          input.addEventListener('input', () => {
+            const typed = input.value === '' ? null : Number(input.value);
+            const valid = typed != null && Number.isFinite(typed);
+            const changed = valid && typed !== (v ? v.score : null);
+            if (changed) whatIf.overrides.set(i.id, typed);
+            else whatIf.overrides.delete(i.id);
+            input.classList.toggle('changed', changed);
+            pctCell.textContent = valid ? pct(typed, possible) : '';
+            drawTotal();
+          });
+          scoreCell = h('td', { class: 'num' }, input);
+        } else {
+          scoreCell = h('td', { class: 'num' }, v ? h('span', { title: v.displayed || null }, num(v.score)) : '–');
+        }
+        rows.push(h('tr', null,
+          h('td', null, a ? h('a', { class: 't', href: itemHref(id, a) }, i.name) : h('span', { class: 't dark' }, i.name), i.bonus ? ui.tag('bonus') : null, i.excluded ? ui.tag('not counted') : null, v && v.comment ? h('div', { class: 'note' }, v.comment) : null),
+          h('td', { class: 'muted small nowrap' }, a && a.due_at ? when(a.due_at) : ''),
+          scoreCell,
+          h('td', { class: 'num' }, num(possible)),
+          pctCell));
+      }
+    }
+    const table = rows.length
+      ? h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Due'), h('th', { class: 'num' }, 'Score'), h('th', { class: 'num' }, 'Out of'), h('th', { class: 'num' }, '%'))), h('tbody', null, rows))
+      : ui.empty('No grade items in this course.');
+
+    const weights = weighted && g.groups.some((x) => x.name && x.weight != null)
+      ? ui.sideSection('Assignments are weighted by group', h('table', { class: 'grid tight' }, h('thead', null, h('tr', null, h('th', null, 'Group'), h('th', { class: 'num' }, 'Weight'))), h('tbody', null, g.groups.filter((x) => x.name).map((x) => h('tr', null, h('td', null, x.name), h('td', { class: 'num' }, x.weight != null ? `${num(x.weight)}%` : ''))))))
+      : null;
+    return {
+      body: [
+        h('div', { class: 'dhead' }, h('h1', null, 'Grades'), picker),
+        whatIf.on ? h('div', { class: 'banner' }, weighted ? 'What-If scores: type a score to see the effect. In a weighted gradebook only graded items can be changed.' : 'What-If scores: type a score to see the effect, including for work that is not graded yet.') : null,
+        table,
+        h('p', { class: 'small' }, h('a', { href: bs.grades(id) }, 'Open Grades in Brightspace')),
+      ],
+      side: [
+        totalBox,
+        canEstimate ? ui.button(whatIf.on ? 'Revert to Actual Scores' : 'Show What-If Scores', () => { whatIf.on = !whatIf.on; whatIf.overrides = new Map(); ui.render(); }, 'wide') : null,
+        weights,
+        ui.lazy(data.externalTools(id), (tools) => tools.length ? ui.sideSection('Graded elsewhere', [h('p', { class: 'muted small' }, 'Some work in this course is graded in an external tool and may not appear here.'), tools.map((t) => h('a', { class: 'sidelink', href: t.html_url }, t.title, ' ', ic('external', 13)))]) : null, ''),
+      ],
+    };
+  }
+
+  // ---- people, files, syllabus ---------------------------------------------------
+  async function people(course) {
+    const list = await data.people(course.id);
+    if (!list.length) return { body: [ui.empty('The class list is not available for this course.'), h('a', { href: bs.classlist(course.id) }, 'Open Classlist in Brightspace')] };
+    const rows = list.map((p) => [h('tr', null, h('td', null, h('span', { class: 'avatar sm' }, (p.name || '?').slice(0, 1).toUpperCase()), ' ', h('span', { class: 't dark' }, p.name)), h('td', null, p.role)), `${p.name} ${p.role}`]);
+    const count = h('span', { class: 'muted small' }, `${list.length} people`);
+    return {
+      body: [
+        h('div', { class: 'toolbar' }, ui.filterBox('Search people', rows, (n) => (count.textContent = `${n} of ${list.length} people`)), count),
+        h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Role'))), h('tbody', null, rows.map((x) => x[0]))),
+      ],
+    };
+  }
+
+  async function files(course) {
+    const list = await data.files(course.id);
+    if (!list.length) return { body: ui.empty('No files in this course.') };
+    const rows = list.map((f) => [h('tr', null, h('td', null, ic('file', 18), ' ', h('a', { href: f.html_url }, f.title)), h('td', { class: 'muted' }, f.module), h('td', { class: 'muted small nowrap' }, f.updated_at ? ui.fmt.short.format(new Date(f.updated_at)) : '')), `${f.title} ${f.module}`]);
+    return {
+      body: [
+        h('div', { class: 'toolbar' }, ui.filterBox('Search files', rows)),
+        h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Module'), h('th', null, 'Date Modified'))), h('tbody', null, rows.map((x) => x[0]))),
+      ],
+    };
+  }
+
+  async function syllabus(course) {
+    const [s, work, fileList] = await Promise.all([data.syllabus(course.id).catch(() => null), data.assignments(course.id).catch(() => []), data.files(course.id).catch(() => [])]);
+    const docs = fileList.filter((f) => /syllabus|schedule/i.test(f.title));
+    const dated = work.filter((a) => a.due_at).sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at));
+    return {
+      body: [
+        h('div', { class: 'dhead' }, h('h1', null, 'Course Syllabus')),
+        s && (s.html || s.text) ? prose(s.html, s.text) : h('p', { class: 'muted' }, 'This course has no overview text in Brightspace.'),
+        docs.length ? [h('h2', { class: 'sect' }, 'Syllabus files'), h('ul', { class: 'filelist' }, docs.map((f) => h('li', null, ic('file', 16), ' ', h('a', { href: f.html_url }, f.title))))] : null,
+        h('h2', { class: 'sect' }, 'Course Summary'),
+        dated.length
+          ? h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, 'Details'), h('th', { class: 'num' }, 'Due'))),
+              h('tbody', null, dated.map((a) => h('tr', null, h('td', { class: 'nowrap' }, ui.fmt.short.format(new Date(a.due_at))), h('td', null, h('span', { class: 'iic ok inline' }, ic(KIND[a.kind].icon, 18)), ' ', h('a', { href: itemHref(course.id, a) }, a.name)), h('td', { class: 'num muted small' }, `due by ${ui.fmt.time.format(new Date(a.due_at))}`)))))
+          : ui.empty('No dated work in this course.'),
+      ],
+      side: ui.todoSide([course], { labels: false, gradesHref: courseHref(course.id, 'grades'), only: course.id }),
+    };
+  }
+
+  // ---- dispatcher ------------------------------------------------------------------
+  const SECTION = {
+    home,
+    announcements,
+    assignments: (c, r) => (r.itemId != null ? assignmentDetail(c, r) : workList(c, null)),
+    quizzes: (c, r) => (r.itemId != null ? quizDetail(c, r) : workList(c, 'quiz')),
+    discussions: (c, r) => (r.itemId != null ? discussionDetail(c, r) : workList(c, 'discussion')),
+    grades,
+    people,
+    files,
+    syllabus,
+    modules,
+  };
+
+  ui.views.course = async (r) => {
+    const courses = await data.courses();
+    const course = courses.find((c) => c.id === r.courseId);
+    if (!course) return { title: 'Course not found', body: [ui.empty('That course is not in your course list.'), h('a', { href: '#/' }, 'Back to the Dashboard')] };
+    const out = await SECTION[r.section](course, r);
+    const crumbs = [{ label: nameOf(course), href: courseHref(course.id) }];
+    if (r.section !== 'home') crumbs.push({ label: LABEL[r.section], href: courseHref(course.id, r.section) });
+    if (out.crumb) crumbs.push({ label: out.crumb });
+    return { crumbs, leftNav: courseNav(course, r.section), body: out.body, side: out.side, actions: out.actions };
+  };
+})();

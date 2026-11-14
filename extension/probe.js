@@ -232,6 +232,7 @@
       await c('Calendar events', `calendar/events/myEvents/?${range}`);
       await c('Classlist', 'classlist/');
       await c('My updates', 'updates/myUpdates');
+      await c('Course overview (syllabus)', 'overview');
 
       const folderId = Array.isArray(folders.body) && folders.body[0]?.Id;
       if (folderId) {
@@ -248,12 +249,21 @@
       }
       const forumId = Array.isArray(forums.body) && forums.body[0]?.ForumId;
       if (forumId) {
-        await probe(
+        const topics = await probe(
           group,
           'Discussion topics (first forum)',
           'le/{ou}/discussions/forums/{id}/topics/',
           `${le}/${ou}/discussions/forums/${forumId}/topics/`
         );
+        const topicId = Array.isArray(topics.body) && topics.body[0]?.TopicId;
+        if (topicId) {
+          await probe(
+            group,
+            'Discussion posts (first topic)',
+            'le/{ou}/discussions/forums/{id}/topics/{id}/posts/',
+            `${le}/${ou}/discussions/forums/${forumId}/topics/${topicId}/posts/`
+          );
+        }
       }
     }
 

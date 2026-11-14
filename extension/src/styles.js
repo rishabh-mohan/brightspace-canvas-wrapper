@@ -79,7 +79,8 @@ p { margin: 12px 0; }
 .avatar.sm { width: 34px; height: 34px; font-size: 14px; color: var(--muted); }
 
 /* page frame */
-.main { flex: 1; overflow: auto; min-width: 0; }
+.main { flex: 1; overflow: auto; min-width: 0; overscroll-behavior: contain; }
+.tray, .menu, .dialog { overscroll-behavior: contain; }
 .head, .crumbs { position: sticky; top: 0; z-index: 1; background: var(--bg); }
 .pday { scroll-margin-top: 84px; }
 .head { display: flex; align-items: center; gap: 12px; margin: 0 24px; padding: 18px 0 14px; border-bottom: 1px solid var(--line); }
@@ -330,6 +331,8 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
 .btn:active, .iconbtn:active { transform: translateY(1px); }
 .card { transition: box-shadow .2s var(--ease); }
 .card:hover { box-shadow: 0 4px 12px var(--shadow); }
+.app[data-wide="on"] .cards { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
+.app[data-wide="on"] .card .hero { height: auto; aspect-ratio: 12 / 5; }
 .app[data-overlay="off"] .card .hero img { opacity: 1; }
 .app[data-overlay="off"] .card:hover .hero img { opacity: .9; }
 .card .hero img { transition: opacity .25s; }

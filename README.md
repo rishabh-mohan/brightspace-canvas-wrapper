@@ -26,13 +26,14 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 - Announcement pages include their attachments.
 - Grades: every item with due date and score, group subtotals, the released total or a labelled estimate, group weights, What-If scores, Canvas's "Calculate based only on graded assignments" switch (untick to count ungraded work as zero), arranging by group, due date or title, and a course switcher.
 - Modules, led by a **Course Home** module (the instructor's Brightspace course homepage, shown in a frame, and the syllabus), with each item opening inside the wrapper: files in a viewer, external tools in a frame, links as a card, each with Previous and Next.
-- People, Files, Syllabus (course overview plus a summary of dated work), Quizzes, Discussions.
+- Syllabus: the course's syllabus tool (Simple Syllabus at Purdue) shown in place, found as a Content link or on the course navigation bar, then the course overview and a summary of dated work.
+- People, Files, Quizzes, Discussions.
 
 **Calendar**: month and agenda views, a checkbox per course, and your own To Do items.
 
 **Inbox**: Brightspace's own Email tool shown in a frame, with recent announcements underneath.
 
-**Gradescope** (optional, off by default; Account → Gradescope): for courses with a Gradescope link, reads your Gradescope assignments, due dates and scores and shows them in Assignments, Grades, To Do, List View and the Calendar. It uses your own Gradescope sign-in, reads two kinds of page, and changes nothing there. Open Gradescope once from a course if it says you are signed out.
+**Gradescope** (optional, off by default; Account → Gradescope; in Firefox, the first time, press **Allow Gradescope access** where it appears and allow gradescope.com): for courses with a Gradescope link, reads your Gradescope assignments, due dates and scores and shows them in Assignments, Grades, To Do, List View and the Calendar. It uses your own Gradescope sign-in, reads two kinds of page, and changes nothing there. Open Gradescope once from a course if it says you are signed out.
 
 **Preferences** (Account): light, dark or automatic theme, and whether to show current courses or all. Preferences and your To Do items are stored in the extension, in this browser only.
 
@@ -65,7 +66,7 @@ The wrapper stands in for the Brightspace home page, course home pages, and Brig
 | Brightspace page addresses for Announcements, Classlist, Discussions, Content, course home and Email | A university's published list of Brightspace link templates ([University of Limerick](https://ul.ie/node/82179)) |
 | Gradescope page structure | The public `gradescope-api` project's parser, and a made-up Gradescope in the dev server |
 
-Not yet checked on a real account: the Brightspace notification-settings address behind "View Course Notifications", the wording of the quiz summary page (the probe now records its attempt labels with digits masked), submitting a file (the request follows D2L's documented format and is exercised against the made-up Brightspace), rubric and feedback-file fields on a marked assignment, the student addresses of Brightspace's Grades, Assignments and Quizzes list pages, whether Brightspace and external tools allow being shown in a frame, and the Gradescope reader against real Gradescope. Each has a fallback: a page that is not recognised stays as plain Brightspace, and every frame has an "open in a new tab" button.
+Not yet checked on a real account: finding the Simple Syllabus and notification-settings links on a course home page (the probe now reports both), the wording of the quiz summary page (the probe now records its attempt labels with digits masked), submitting a file (the request follows D2L's documented format and is exercised against the made-up Brightspace), rubric and feedback-file fields on a marked assignment, the student addresses of Brightspace's Grades, Assignments and Quizzes list pages, whether Brightspace and external tools allow being shown in a frame, and the Gradescope reader against real Gradescope. Each has a fallback: a page that is not recognised stays as plain Brightspace, and every frame has an "open in a new tab" button.
 
 ## Load it
 

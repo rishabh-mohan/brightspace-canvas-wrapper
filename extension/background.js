@@ -17,14 +17,26 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     api.action.setTitle({ title: n ? `${n} new grade${n === 1 ? '' : 's'} or announcement${n === 1 ? '' : 's'}. Click to run the Brightspace access probe` : 'Run Brightspace access probe' });
     return undefined;
   }
+  // Firefox does not grant site access to a temporary add-on by itself: this opens a page
+  // where one click asks for gradescope.com (a permission request needs a click on an
+  // extension page, not on Brightspace).
+  if (msg && msg.type === 'bsx-grant' && sender.id === api.runtime.id) {
+    api.tabs.create({ url: api.runtime.getURL('grant.html') });
+    return undefined;
+  }
   if (!msg || msg.type !== 'bsx-gradescope') return undefined;
   const path = String(msg.path || '');
   if (sender.id !== api.runtime.id || !/^\/(account|courses\/\d+)$/.test(path)) {
     sendResponse({ error: 'Not allowed.' });
     return undefined;
   }
-  fetch(`https://www.gradescope.com${path}`, { credentials: 'include', redirect: 'follow' })
-    .then(async (res) => sendResponse({ status: res.status, url: res.url, html: await res.text() }))
+  const allowed = api.permissions && api.permissions.contains ? api.permissions.contains({ origins: ['https://www.gradescope.com/*'] }) : Promise.resolve(true);
+  allowed
+    .then((ok) => {
+      if (!ok) return sendResponse({ error: 'permission' });
+      return fetch(`https://www.gradescope.com${path}`, { credentials: 'include', redirect: 'follow' })
+        .then(async (res) => sendResponse({ status: res.status, url: res.url, html: await res.text() }));
+    })
     .catch((e) => sendResponse({ error: String(e) }));
   return true; // the answer is sent later
 });

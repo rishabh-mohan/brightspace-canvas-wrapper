@@ -20,15 +20,16 @@ function page(real) {
   const scripts = real ? '' : manifest.content_scripts[0].js.map((f) => `<script src="/ext/${f}"></script>`).join('\n');
   return `<!doctype html><html><head><meta charset="utf-8"><title>Fake Brightspace</title>
 <style>body{margin:0;font:16px sans-serif;background:#eee}.banner{position:fixed;top:0;left:20%;right:20%;z-index:1000;background:#444;color:#fff;padding:24px;font-size:28px}</style>
-</head><body><div class="banner">Original Brightspace page</div><p style="padding:120px 40px">This stands in for the page the wrapper covers.</p>
+</head><body><div class="banner">Original Brightspace page</div>
+<nav hidden aria-label="Course navigation"><a href="/d2l/le/lti/101/simplesyllabus">Simple Syllabus</a><d2l-menu-item-link text="Notifications" href="/d2l/lp/notifications/made-up"></d2l-menu-item-link></nav><p style="padding:120px 40px">This stands in for the page the wrapper covers.</p>
 <script>
 // Stand-in for extension storage, backed by localStorage.
 (() => {
   const q = new URLSearchParams(location.search);
   if (q.get('bsxframe')) window.BSX_DEV_FRAME = true; // phone-width preview, see /__phone
   localStorage.setItem('XSRF.Token', 'dev-xsrf'); // Brightspace keeps its anti-forgery token here
-  const preset = { theme: q.get('bsxtheme'), dash: q.get('bsxdash'), gradescope: q.get('bsxgs') ? true : null };
-  const any = preset.theme || preset.dash || preset.gradescope;
+  const preset = { theme: q.get('bsxtheme'), dash: q.get('bsxdash'), gradescope: q.get('bsxgs') ? true : null, wideCards: q.get('bsxwide') ? true : null };
+  const any = preset.theme || preset.dash || preset.gradescope || preset.wideCards;
   const read = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   // When the real extension is loaded (tools/dev-extension.js) it has its own storage and
   // background script; these stand-ins are only for the plain page.
@@ -40,6 +41,8 @@ function page(real) {
     // Stand-in for the background script's Gradescope fetch.
     runtime: { sendMessage: async (msg) => {
       if (msg.type === 'bsx-badge') { document.documentElement.setAttribute('data-bsx-badge', String(msg.count)); return null; }
+      if (msg.type !== 'bsx-gradescope') return null;
+      if (q.get('bsxgsperm') === '0') return { error: 'permission' }; // as Firefox before access is allowed
       const res = await fetch('/__gradescope' + msg.path);
       return res.ok ? { status: 200, url: 'https://www.gradescope.com' + msg.path, html: await res.text() } : { status: 200, url: 'https://www.gradescope.com/login', html: '' };
     } },

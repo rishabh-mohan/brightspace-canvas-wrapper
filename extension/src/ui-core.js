@@ -199,6 +199,7 @@ BSX.ui = (() => {
       if (typeof saved.gradescope === 'boolean') settings.gradescope = saved.gradescope;
       if (typeof saved.seenAt === 'number') settings.seenAt = saved.seenAt;
       if (typeof saved.overlay === 'boolean') settings.overlay = saved.overlay;
+      if (typeof saved.wideCards === 'boolean') settings.wideCards = saved.wideCards;
     } catch {}
   }
   function saveSettings() {
@@ -559,9 +560,21 @@ BSX.ui = (() => {
   }
 
   // ---- render loop ---------------------------------------------------------
+  // While the wrapper covers the page, the Brightspace page underneath must not scroll:
+  // otherwise the wheel scrolls it once the wrapper reaches its end, and the two get out of step.
+  function lockPage(on) {
+    for (const el of [document.documentElement, document.body]) {
+      if (!el) continue;
+      if (on) el.style.setProperty('overflow', 'hidden', 'important');
+      else el.style.removeProperty('overflow');
+    }
+    if (on) window.scrollTo(0, 0);
+  }
+
   async function render() {
     const id = ++renderId;
     const r = route();
+    lockPage(r.view !== 'off');
 
     if (r.view === 'off') {
       frame = null;
@@ -572,6 +585,7 @@ BSX.ui = (() => {
     }
     if (!frame) buildFrame();
     frame.app.setAttribute('data-overlay', settings.overlay === false ? 'off' : 'on');
+    frame.app.setAttribute('data-wide', settings.wideCards ? 'on' : 'off');
     const sameRoute = location.hash === lastHash;
     const scroll = sameRoute ? frame.main.scrollTop : 0;
     if (!sameRoute && state.tray) openTray(null);

@@ -18,9 +18,10 @@
   // homepage (shown in a frame, so its widgets and welcome text stay as they made them)
   // and the syllabus when there is one.
   async function courseModules(course) {
-    const [list, s] = await Promise.all([data.modules(course.id), data.syllabus(course.id).catch(() => null)]);
+    const list = await data.modules(course.id);
     const items = [{ id: 0, title: 'Course homepage', type: 'Course home', unread: false, locked: false, url: bs.home(course.id), html_url: bs.home(course.id) }];
-    if (s && (s.html || s.text)) items.push({ id: -1, title: 'Syllabus', type: 'Syllabus', unread: false, locked: false, url: '', html_url: courseHref(course.id, 'syllabus') });
+    // Always listed: the syllabus page shows the school's syllabus tool or the course overview.
+    items.push({ id: -1, title: 'Syllabus', type: 'Syllabus', unread: false, locked: false, url: '', html_url: courseHref(course.id, 'syllabus') });
     return [{ id: 'home', name: 'Course Home', depth: 0, locked: false, items }, ...list];
   }
   const whatIf = { on: false, courseId: null, overrides: new Map() };
@@ -130,7 +131,8 @@
         h('div', { class: 'sidebtns' },
           h('a', { class: 'btn wide', href: courseHref(course.id, 'stream') }, ic('announcement', 16), 'View Course Stream'),
           h('a', { class: 'btn wide', href: '#/calendar' }, ic('calendar', 16), 'View Course Calendar'),
-          h('a', { class: 'btn wide', href: '/d2l/lp/notifications/settings', title: 'Brightspace notification settings' }, ic('inbox', 16), 'View Course Notifications')),
+          // Shown only once the notification settings link is found on the Brightspace page.
+          ui.lazy(data.notificationsLink(course.id).catch(() => null), (href) => (href ? h('a', { class: 'btn wide', href }, ic('inbox', 16), 'View Course Notifications') : null), '')),
         ui.todoSide([course], { labels: false, gradesHref: courseHref(course.id, 'grades'), only: course.id }),
       ],
     };
@@ -258,6 +260,7 @@
 
   const gradescopeNote = (g) =>
     g.state === 'signed_out' ? ['You are not signed in to Gradescope in this browser. ', h('a', { href: g.launch }, 'Open Gradescope from this course'), ' once, then press Refresh.']
+    : g.state === 'no_permission' ? ['Firefox has not allowed this extension on gradescope.com yet. ', h('button', { class: 'btn', type: 'button', onclick: () => (globalThis.browser || globalThis.chrome)?.runtime?.sendMessage({ type: 'bsx-grant' }) }, 'Allow Gradescope access'), ' then press Refresh.']
     : g.state === 'no_match' ? 'No Gradescope course matching this one was found on your Gradescope account.'
     : g.state === 'error' ? `Gradescope could not be read. ${g.why || ''}`
     : null;
@@ -649,13 +652,17 @@
   }
 
   async function syllabus(course) {
-    const [s, work, fileList] = await Promise.all([data.syllabus(course.id).catch(() => null), data.assignments(course.id).catch(() => []), data.files(course.id).catch(() => [])]);
+    const [s, work, fileList, tool] = await Promise.all([data.syllabus(course.id).catch(() => null), data.assignments(course.id).catch(() => []), data.files(course.id).catch(() => []), data.syllabusLink(course.id).catch(() => null)]);
     const docs = fileList.filter((f) => /syllabus|schedule/i.test(f.title));
     const dated = work.filter((a) => a.due_at).sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at));
+    const launch = tool ? ui.safeHref(tool.url) : null;
+    const overview = s && (s.html || s.text) ? prose(s.html, s.text) : null;
     return {
       body: [
-        h('div', { class: 'dhead' }, h('h1', null, 'Course Syllabus')),
-        s && (s.html || s.text) ? prose(s.html, s.text) : h('p', { class: 'muted' }, 'This course has no overview text in Brightspace.'),
+        h('div', { class: 'dhead' }, h('h1', null, 'Course Syllabus'), launch ? h('a', { class: 'btn', href: launch, target: '_blank', rel: 'noopener' }, 'Open in a new tab ', ic('external', 14)) : null),
+        // The school's syllabus tool (Simple Syllabus at Purdue), shown in place.
+        launch ? h('iframe', { class: 'viewer', src: launch, title: tool.title || 'Syllabus', referrerpolicy: 'same-origin' }) : null,
+        overview ? [launch ? h('h2', { class: 'sect' }, 'Course overview') : null, overview] : launch ? null : h('p', { class: 'muted' }, 'This course has no syllabus tool or overview text in Brightspace.'),
         docs.length ? [h('h2', { class: 'sect' }, 'Syllabus files'), h('ul', { class: 'filelist' }, docs.map((f) => h('li', null, ic('file', 16), ' ', h('a', { href: courseHref(course.id, 'modules', f.id) }, f.title))))] : null,
         h('h2', { class: 'sect' }, 'Course Summary'),
         dated.length

@@ -198,6 +198,8 @@
         pick('cards', 'Card View'), pick('list', 'List View'), pick('activity', 'Recent Activity'),
         mode === 'cards' ? null : undefined,
         mode === 'cards' ? { label: 'Color Overlay', on: overlay, onclick: () => { settings.overlay = !overlay; ui.saveSettings(); ui.render(); } } : undefined,
+        // Brightspace course images are wide banners; wide cards show them uncropped.
+        mode === 'cards' ? { label: 'Wide Cards', on: Boolean(settings.wideCards), onclick: () => { settings.wideCards = !settings.wideCards; ui.saveSettings(); ui.render(); } } : undefined,
       ].filter((x) => x !== undefined)),
     ];
     const toggle = focus.length < courses.length

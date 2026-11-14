@@ -158,6 +158,9 @@ const assert = require('assert');
   assert.deepStrictEqual([p('Attempts Allowed: 3 Attempts Remaining: 1').attempts_used, p('Attempts Allowed: 3 Attempts Remaining: 1').remaining], [2, 1]);
   assert.strictEqual(p('Allowed - Unlimited, Completed - 4').remaining, null);
   assert.strictEqual(p('<p>Nothing useful</p>').known, false);
+  // Purdue's wording, from the probe: "<due date> PM Attempts Allowed - 1, Completed - 0".
+  const purdue = p('<td>Due 11/12/2026 11:59 PM</td><td>Attempts</td><td>Allowed - 2, Completed - 1</td>');
+  assert.deepStrictEqual([purdue.known, purdue.attempts_used, purdue.allowed, purdue.remaining], [true, 1, 2, 1]);
   routes['/d2l/api/le/1.100/10/quizzes/8/attempts/'] = { Objects: [{ AttemptId: 1, UserId: 42 }, { AttemptId: 2, UserId: 42 }], Next: null };
   const q = await data.quizAttempts(10, 8);
   assert.strictEqual(q.known, true);

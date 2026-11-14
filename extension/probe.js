@@ -233,6 +233,21 @@
       await c('Classlist', 'classlist/');
       await c('My updates', 'updates/myUpdates');
       await c('Course overview (syllabus)', 'overview');
+      // Links on the course home page that the wrapper looks for (Simple Syllabus, notification
+      // settings). Records whether each was found and the shape of its address (digits masked).
+      try {
+        const res = await fetch(`/d2l/home/${ou}`, { credentials: 'same-origin' });
+        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+        const links = [...doc.querySelectorAll('[href]')].map((el) => ({ text: (el.getAttribute('text') || el.textContent || '').replace(/\s+/g, ' ').trim(), href: el.getAttribute('href') || '' })).filter((l) => l.text && /^\/d2l\//.test(l.href));
+        const shape = (re) => {
+          const l = links.find((x) => re.test(x.text));
+          return l ? l.href.replace(/\d+/g, '#').replace(/rcode=[^&]+/, 'rcode=…') : null;
+        };
+        row('Course home page links', { status: res.status });
+        report.results.push({ group, label: 'Course home page links', status: res.status, linkCount: links.length, syllabus: shape(/syllabus/i), notifications: shape(/notification/i) });
+      } catch (e) {
+        report.results.push({ group, label: 'Course home page links', error: String(e) });
+      }
       const cats = await c('Group categories', 'groupcategories/', lp);
       const catId = Array.isArray(cats.body) && cats.body[0]?.GroupCategoryId;
       if (catId) await probe(group, 'Groups (first category)', 'lp/{ou}/groupcategories/{id}/groups/', `${lp}/${ou}/groupcategories/${catId}/groups/`);

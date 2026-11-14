@@ -21,6 +21,7 @@ BSX.gradescope = (() => {
     const promise = (async () => {
       if (!runtime || !runtime.sendMessage) throw new Error('Gradescope reading is not available here.');
       const res = await runtime.sendMessage({ type: 'bsx-gradescope', path });
+      if (res && res.error === 'permission') throw Object.assign(new Error('Gradescope access is not allowed yet.'), { code: 'permission' });
       if (!res || res.error) throw new Error((res && res.error) || 'No answer from the extension.');
       return res; // { status, url, html }
     })();
@@ -104,8 +105,17 @@ BSX.gradescope = (() => {
     return (key && gsCourses.find((g) => subjectKey(g.short_name) === key || subjectKey(g.name) === key)) || null;
   }
 
-  // Work for one Brightspace course. state: ok | signed_out | no_match
+  // Work for one Brightspace course. state: ok | signed_out | no_match | no_permission
   async function forCourse(course) {
+    try {
+      return await readCourse(course);
+    } catch (e) {
+      if (e && e.code === 'permission') return { state: 'no_permission', items: [] };
+      throw e;
+    }
+  }
+
+  async function readCourse(course) {
     const account = await page('/account');
     if (signedOut(account)) return { state: 'signed_out', items: [] };
     const gs = match(course, parseCourses(account.html));

@@ -654,6 +654,40 @@ BSX.data = (() => {
   const externalTools = (ou) => itemsOfType(ou, 'External tool');
   const files = (ou) => itemsOfType(ou, 'File');
 
+  // Links on the course's own Brightspace home page (its navigation bar and menus), for
+  // tools the API does not list, such as Simple Syllabus or the notification settings.
+  // Only same-site /d2l/ addresses are kept.
+  async function homeLinks(ou) {
+    const html = await client.page(`/d2l/home/${encodeURIComponent(ou)}`).catch((e) => {
+      if (e instanceof client.ApiError && e.status === 401) throw e;
+      return '';
+    });
+    if (!html || typeof DOMParser === 'undefined') return [];
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const out = [];
+    for (const el of doc.querySelectorAll('[href]')) {
+      const href = el.getAttribute('href') || '';
+      const text = (el.getAttribute('text') || el.textContent || el.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
+      if (text && /^\/d2l\//.test(href)) out.push({ text, href });
+    }
+    return out;
+  }
+
+  // The course's syllabus tool (Purdue uses Simple Syllabus): a Content link or tool named
+  // "syllabus" first, then the course navigation bar.
+  async function syllabusLink(ou) {
+    const items = (await modules(ou)).flatMap((m) => m.items).filter((i) => /syllabus/i.test(i.title) && (i.type === 'External tool' || i.type === 'Link'));
+    if (items.length) return { title: items[0].title, url: items[0].url || items[0].html_url };
+    const l = (await homeLinks(ou)).find((x) => /syllabus/i.test(x.text));
+    return l ? { title: l.text, url: l.href } : null;
+  }
+
+  // Brightspace's notification settings, found by its link (its address differs between schools).
+  async function notificationsLink(ou) {
+    const l = (await homeLinks(ou)).find((x) => /notification/i.test(x.text));
+    return l ? l.href : null;
+  }
+
   // The course overview, which is where Brightspace keeps a syllabus description.
   async function syllabus(ou) {
     const o = await soft(client.le(`${ou}/overview`), null);
@@ -733,7 +767,7 @@ BSX.data = (() => {
     todo, planner, overdue, recentFeedback,
     grades, estimate, estimable, courseTotals,
     announcements, recentAnnouncements,
-    modules, externalTools, files, syllabus, people, groups,
+    modules, externalTools, files, syllabus, syllabusLink, notificationsLink, homeLinks, people, groups,
     calendar,
   };
 })();

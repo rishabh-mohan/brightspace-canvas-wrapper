@@ -187,10 +187,16 @@
     const focus = ui.focusCourses(courses);
     const visible = state.showAll ? courses : focus;
     const mode = settings.dash;
-    const pick = (key, label) => h('button', { type: 'button', class: mode === key ? 'on' : null, onclick: () => { settings.dash = key; listSeen = false; ui.saveSettings(); ui.render(); } }, label);
+    // Canvas's "Dashboard Options" menu: the three views, and the colour overlay on cards.
+    const pick = (key, label) => ({ label, on: mode === key, onclick: () => { settings.dash = key; listSeen = false; ui.saveSettings(); ui.render(); } });
+    const overlay = settings.overlay !== false;
     const actions = [
       h('button', { class: 'btn', type: 'button', onclick: () => ui.todoDialog(null, visible) }, ic('plus', 16), 'To Do'),
-      h('div', { class: 'seg' }, pick('cards', 'Card View'), pick('list', 'List View'), pick('activity', 'Recent Activity')),
+      ui.menu('Dashboard Options', [
+        pick('cards', 'Card View'), pick('list', 'List View'), pick('activity', 'Recent Activity'),
+        mode === 'cards' ? null : undefined,
+        mode === 'cards' ? { label: 'Color Overlay', on: overlay, onclick: () => { settings.overlay = !overlay; ui.saveSettings(); ui.render(); } } : undefined,
+      ].filter((x) => x !== undefined)),
     ];
     const toggle = focus.length < courses.length
       ? h('div', { class: 'small', style: 'margin-top:20px' }, h('a', { href: '#/', onclick: (ev) => { ev.preventDefault(); settings.showAll = state.showAll = !state.showAll; ui.saveSettings(); ui.render(); } }, state.showAll ? 'Show current courses only' : `Show all ${courses.length} courses`))

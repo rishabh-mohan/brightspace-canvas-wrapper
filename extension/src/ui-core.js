@@ -198,6 +198,7 @@ BSX.ui = (() => {
       if (['group', 'due', 'title'].includes(saved.gradeSort)) settings.gradeSort = saved.gradeSort;
       if (typeof saved.gradescope === 'boolean') settings.gradescope = saved.gradescope;
       if (typeof saved.seenAt === 'number') settings.seenAt = saved.seenAt;
+      if (typeof saved.overlay === 'boolean') settings.overlay = saved.overlay;
     } catch {}
   }
   function saveSettings() {
@@ -270,6 +271,7 @@ BSX.ui = (() => {
       saveSettings();
       close();
       render();
+      flash(t ? 'To Do updated.' : `Added “${item.title}” to your To Do.`);
     };
     const remove = () => {
       settings.todos = settings.todos.filter((x) => x.id !== t.id);
@@ -277,6 +279,7 @@ BSX.ui = (() => {
       saveSettings();
       close();
       render();
+      flash('To Do deleted.');
     };
     const overlay = h('div', { class: 'modal', onclick: (ev) => ev.target === overlay && close() },
       h('div', { class: 'dialog', role: 'dialog', 'aria-label': t ? 'Edit To Do' : 'Add To Do' },
@@ -340,20 +343,27 @@ BSX.ui = (() => {
   function lazy(promise, build, placeholder = 'Loading…') {
     // An empty placeholder marks an optional block: it takes no room until it has content.
     const optional = placeholder === '';
-    const box = h('div', { class: 'muted small pad', hidden: optional }, placeholder);
+    // While waiting: grey bars in the shape of content, as Canvas shows, with the words for screen readers.
+    const box = optional
+      ? h('div', { class: 'muted small pad', hidden: true })
+      : h('div', { class: 'skel', 'aria-busy': 'true' }, h('span', { class: 'sr' }, placeholder), h('i'), h('i'), h('i', { class: 'short' }));
     promise
       .then((value) => {
         const built = [build(value)].flat(Infinity).filter(Boolean);
         if (optional && !built.length) return;
         box.hidden = false;
-        box.className = '';
+        box.className = 'arrived';
+        box.removeAttribute('aria-busy');
         box.replaceChildren(...(built.length ? built : [h('div', { class: 'muted small pad' }, 'Nothing for now.')]));
         // A page redrawn in place (ticking an item, changing a setting) keeps its scroll position
         // even though this block arrived after the redraw.
         if (frame && keepScroll != null) frame.main.scrollTop = keepScroll;
       })
       .catch((e) => {
-        if (!optional) box.textContent = `Unavailable. ${e.message || e}`;
+        if (optional) return;
+        box.className = 'muted small pad';
+        box.removeAttribute('aria-busy');
+        box.textContent = `Unavailable. ${e.message || e}`;
       });
     return box;
   }
@@ -517,10 +527,12 @@ BSX.ui = (() => {
     const app = h('div', { class: 'app', 'data-theme': settings.theme }, rail, tray, main);
     app.addEventListener('keydown', (ev) => ev.key === 'Escape' && state.tray && openTray(null));
     main.addEventListener('click', () => state.tray && openTray(null));
+    main.addEventListener('click', animateDetails);
     for (const type of ['wheel', 'touchmove', 'keydown']) main.addEventListener(type, () => (keepScroll = null), { passive: true });
     frame = { app, rail, tray, main };
     mount.replaceChildren(app);
-    main.replaceChildren(h('div', { class: 'empty' }, 'Loading…'));
+    // First paint: the shape of a page in grey while Brightspace answers.
+    main.replaceChildren(h('div', { class: 'head' }, h('i', { class: 'skelbar title' })), h('div', { class: 'layout' }, h('div', { class: 'content skel big', 'aria-busy': 'true' }, h('span', { class: 'sr' }, 'Loading…'), h('i'), h('i'), h('i'), h('i', { class: 'short' }), h('i'), h('i', { class: 'short' }))));
   }
 
   function pageNodes(page, inPlace) {
@@ -559,6 +571,7 @@ BSX.ui = (() => {
       return;
     }
     if (!frame) buildFrame();
+    frame.app.setAttribute('data-overlay', settings.overlay === false ? 'off' : 'on');
     const sameRoute = location.hash === lastHash;
     const scroll = sameRoute ? frame.main.scrollTop : 0;
     if (!sameRoute && state.tray) openTray(null);
@@ -590,6 +603,88 @@ BSX.ui = (() => {
     } catch (e) {
       if (id === renderId && frame) frame.main.replaceChildren(errorBox(e));
     }
+  }
+
+  // ---- typeface ------------------------------------------------------------
+  // Canvas is set in Lato. The bundled files (SIL Open Font Licence, see fonts/) are read as
+  // bytes and added with the FontFace API, which the page's font policy does not block.
+  async function loadFonts() {
+    if (!globalThis.FontFace || !document.fonts) return;
+    const runtime = (globalThis.browser || globalThis.chrome)?.runtime;
+    const url = (f) => (runtime && runtime.getURL ? runtime.getURL(`fonts/${f}`) : `/ext/fonts/${f}`);
+    const faces = [['300', 'normal'], ['400', 'normal'], ['400', 'italic'], ['700', 'normal'], ['700', 'italic']];
+    await Promise.all(faces.map(async ([weight, style]) => {
+      try {
+        const bytes = await (await fetch(url(`lato-${weight}-${style}.woff2`))).arrayBuffer();
+        const face = new FontFace('BSX Lato', bytes, { weight, style });
+        await face.load();
+        document.fonts.add(face);
+      } catch {}
+    }));
+  }
+
+  // ---- flash messages (Canvas's alerts at the top of the page) -------------
+  function flash(text, kind = 'ok') {
+    if (!frame) return;
+    let host = frame.app.querySelector('.flashes');
+    if (!host) frame.app.append((host = h('div', { class: 'flashes', role: 'status', 'aria-live': 'polite' })));
+    const close = () => {
+      note.classList.add('out');
+      setTimeout(() => note.remove(), 220);
+    };
+    const note = h('div', { class: `flash ${kind}` }, ic(kind === 'bad' ? 'close' : 'check', 18), h('span', null, text), h('button', { class: 'iconbtn xs', type: 'button', 'aria-label': 'Dismiss', onclick: close }, ic('close', 14)));
+    host.append(note);
+    setTimeout(close, 7000);
+  }
+
+  // ---- small popup menu (Canvas's ⋮ menus) ---------------------------------
+  // items: [{ label, on, onclick }] or null for a divider.
+  function menu(label, items, icon = 'dots') {
+    const pop = h('div', { class: 'menu', role: 'menu', hidden: true });
+    const btn = h('button', { class: 'iconbtn', type: 'button', 'aria-label': label, title: label, 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, ic(icon, 22));
+    const shut = () => {
+      pop.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', away, true);
+    };
+    const away = (ev) => !ev.composedPath().includes(wrap) && shut();
+    pop.append(...items.map((it) => (it ? h('button', { type: 'button', role: it.on != null ? 'menuitemradio' : 'menuitem', 'aria-checked': it.on != null ? String(Boolean(it.on)) : null, class: it.on ? 'on' : null, onclick: () => { shut(); it.onclick(); } }, h('span', { class: 'mcheck' }, it.on ? ic('check', 16) : null), it.label) : h('div', { class: 'mdiv' }))));
+    btn.addEventListener('click', () => {
+      const open = pop.hidden;
+      pop.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+      if (open) {
+        document.addEventListener('click', away, true);
+        pop.querySelector('button')?.focus();
+      } else shut();
+    });
+    pop.addEventListener('keydown', (ev) => {
+      const all = [...pop.querySelectorAll('button')];
+      const at = all.indexOf(root.activeElement);
+      if (ev.key === 'Escape') { ev.stopPropagation(); shut(); btn.focus(); }
+      else if (ev.key === 'ArrowDown') { ev.preventDefault(); all[(at + 1) % all.length].focus(); }
+      else if (ev.key === 'ArrowUp') { ev.preventDefault(); all[(at - 1 + all.length) % all.length].focus(); }
+    });
+    const wrap = h('div', { class: 'menuwrap' }, btn, pop);
+    return wrap;
+  }
+
+  // Collapsible groups (modules, assignment groups) open and close with a height animation.
+  function animateDetails(ev) {
+    const summary = ev.target.closest && ev.target.closest('details.group > summary');
+    if (!summary || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const box = summary.parentElement;
+    ev.preventDefault();
+    const start = box.offsetHeight;
+    const closing = box.open;
+    if (!closing) box.open = true;
+    const end = closing ? summary.offsetHeight : box.scrollHeight;
+    box.style.overflow = 'hidden';
+    const anim = box.animate([{ height: `${start}px` }, { height: `${end}px` }], { duration: 200, easing: 'cubic-bezier(.2,.7,.3,1)' });
+    anim.onfinish = () => {
+      if (closing) box.open = false;
+      box.style.overflow = '';
+    };
   }
 
   // ---- keyboard shortcuts --------------------------------------------------
@@ -676,6 +771,7 @@ BSX.ui = (() => {
   function start() {
     window.addEventListener('hashchange', render);
     window.addEventListener('keydown', onKey);
+    loadFonts();
     window.addEventListener('hashchange', updateBadge);
     loadSettings().then(() => setTimeout(updateBadge, 3000));
     // Pages draw first from the answers saved on the last visit; when Brightspace's real
@@ -692,7 +788,7 @@ BSX.ui = (() => {
     settings, saveSettings, colorOf, nameOf, focusCourses, state,
     keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork,
     courseHref, itemHref, wrapHref, bs, PLURAL,
-    empty, tag, button, linkButton, lazy, sideSection, filterBox,
+    empty, tag, button, linkButton, lazy, sideSection, filterBox, flash, menu,
     views, render, reload, start,
   };
 })();

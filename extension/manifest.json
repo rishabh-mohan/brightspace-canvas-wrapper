@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Brightspace Canvas Wrapper",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "A Canvas-style view of Brightspace, with file submission: dashboard, calendar, and per-course home, modules, assignments, quizzes, discussions, grades, announcements, files, syllabus and people.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://*.brightspace.com/*", "https://www.gradescope.com/*"],
@@ -23,6 +23,7 @@
       "run_at": "document_start"
     }
   ],
+  "web_accessible_resources": [{ "resources": ["fonts/*.woff2"], "matches": ["https://*.brightspace.com/*"] }],
   "action": { "default_title": "Run Brightspace access probe" },
   "background": { "scripts": ["background.js"], "service_worker": "background.js" },
   "browser_specific_settings": { "gecko": { "id": "brightspace-canvas-wrapper@local", "strict_min_version": "121.0", "data_collection_permissions": { "required": ["none"] } } }

@@ -385,7 +385,8 @@
         }
         msg.className = 'msg ok';
         msg.textContent = s.submitted ? `Submitted ${chosen.map((f) => f.name).join(', ')}.` : 'Sent. Brightspace has not listed it yet; check again in a moment.';
-        setTimeout(onDone, 1200);
+        ui.flash(s.submitted ? `Submission successful: ${a.name}` : `Sent ${a.name}. Brightspace has not listed it yet.`, 'ok');
+        setTimeout(onDone, 600);
       } catch (e) {
         go.disabled = false;
         msg.className = 'msg bad';

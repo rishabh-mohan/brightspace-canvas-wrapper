@@ -11,7 +11,7 @@ const statuses = []; // what pages reported back about themselves (see the page 
 
 const ext = path.join(__dirname, '..', 'extension');
 const port = Number(process.argv[2]) || 8765;
-const TYPES = { '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
+const TYPES = { '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 
 // `real` is for a browser that has the extension itself loaded (tools/dev-extension.js):
 // the page then leaves the scripts to the extension.

@@ -36,6 +36,14 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 
 **Preferences** (Account): light, dark or automatic theme, and whether to show current courses or all. Preferences and your To Do items are stored in the extension, in this browser only.
 
+**Groups** (left rail): the groups you belong to, with their course, category and members where Brightspace lets a student see them.
+
+**Keyboard shortcuts**: press `?` for the list (`g` then `d`/`c`/`l`/`i`/`g`/`p` to jump, `/` to search, `j`/`k` to move through items, `[`/`]` for module items, `r` to refresh).
+
+**Toolbar badge**: the extension icon counts new grades and announcements since you last opened the Dashboard.
+
+**Look and motion**: set in Lato, Canvas's typeface (bundled in `extension/fonts/` under the SIL Open Font Licence). Canvas-style Dashboard Options menu (views and colour overlay), flash alerts for actions, grey placeholder bars while data loads, and short transitions on trays, dialogs, menus and collapsing groups. All motion is switched off when the system asks for reduced motion.
+
 **Speed**: the last answer from each Brightspace address is kept in extension storage (this browser only, up to a week, about 4 MB), so pages appear at once from your previous visit while fresh data loads; the page redraws in place if anything changed. Refresh always waits for Brightspace. Signing out of Brightspace clears the kept copy.
 
 The wrapper stands in for the Brightspace home page, course home pages, and Brightspace's own Grades, Assignments, Announcements, Quizzes, Discussions, Classlist and Content list pages. On every other Brightspace page a small "← Canvas view" button leads back. The layout adapts down to phone width.

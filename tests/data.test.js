@@ -136,6 +136,11 @@ const assert = require('assert');
     { id: 2, type: 'Numeric', points_possible: 10, value: { score: 9, points_possible: 10 } },
     { id: 3, type: 'Numeric', points_possible: 10, value: { score: 7, points_possible: 10 } }] }] };
   assert.deepEqual({ ...data.estimate(dropped) }, { score: 16, points_possible: 20 });
+  // Unticked "based only on graded assignments": ungraded items count as zero.
+  const some = { system: 'Points', groups: [{ items: [
+    { id: 1, type: 'Numeric', points_possible: 10, value: { score: 8, points_possible: 10 } },
+    { id: 2, type: 'Numeric', points_possible: 10, value: null }] }] };
+  assert.deepEqual({ ...data.estimate(some, new Map(), { allItems: true }) }, { score: 8, points_possible: 20 });
   // Weighted What-If on an ungraded item: its share is item weight x category weight.
   const wu = { system: 'Weighted', groups: [{ items: [
     { id: 1, type: 'Numeric', value: { score: 8, points_possible: 10, weighted_possible: 20 } },

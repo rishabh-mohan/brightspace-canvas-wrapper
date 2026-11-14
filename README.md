@@ -16,7 +16,7 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 - **+ To Do** adds your own item, for anything that lives outside Brightspace. Your items appear in To Do, List View and the Calendar.
 
 **Courses**
-- Home: recent announcements, modules, and a To Do and feedback sidebar.
+- Home: recent announcements, modules, and a sidebar with View Course Stream (the course's recent announcements and grades), View Course Calendar, View Course Notifications, To Do and Recent Feedback.
 - Announcements: searchable list and a page per announcement.
 - Assignments: assignments, quizzes and discussions in one list, by date or by grade category, with search, submission status and an External Tools group.
 - Assignment pages: instructions and attached files, the rubric (with your ratings, points and per-criterion comments once marked), your submitted files, your grade, and feedback comments and files. Every file downloads in place.
@@ -24,7 +24,7 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 - Quiz pages: attempts completed and remaining (from Brightspace's quiz summary page where, as at Purdue, the attempts list is refused to students), time limit, availability, grade.
 - Discussion pages: posts as a thread, with your own posts marked.
 - Announcement pages include their attachments.
-- Grades: every item with due date and score, group subtotals, the released total or a labelled estimate, group weights, What-If scores, arranging by group, due date or title, and a course switcher.
+- Grades: every item with due date and score, group subtotals, the released total or a labelled estimate, group weights, What-If scores, Canvas's "Calculate based only on graded assignments" switch (untick to count ungraded work as zero), arranging by group, due date or title, and a course switcher.
 - Modules, led by a **Course Home** module (the instructor's Brightspace course homepage, shown in a frame, and the syllabus), with each item opening inside the wrapper: files in a viewer, external tools in a frame, links as a card, each with Previous and Next.
 - People, Files, Syllabus (course overview plus a summary of dated work), Quizzes, Discussions.
 
@@ -65,7 +65,7 @@ The wrapper stands in for the Brightspace home page, course home pages, and Brig
 | Brightspace page addresses for Announcements, Classlist, Discussions, Content, course home and Email | A university's published list of Brightspace link templates ([University of Limerick](https://ul.ie/node/82179)) |
 | Gradescope page structure | The public `gradescope-api` project's parser, and a made-up Gradescope in the dev server |
 
-Not yet checked on a real account: the wording of the quiz summary page (the probe now records its attempt labels with digits masked), submitting a file (the request follows D2L's documented format and is exercised against the made-up Brightspace), rubric and feedback-file fields on a marked assignment, the student addresses of Brightspace's Grades, Assignments and Quizzes list pages, whether Brightspace and external tools allow being shown in a frame, and the Gradescope reader against real Gradescope. Each has a fallback: a page that is not recognised stays as plain Brightspace, and every frame has an "open in a new tab" button.
+Not yet checked on a real account: the Brightspace notification-settings address behind "View Course Notifications", the wording of the quiz summary page (the probe now records its attempt labels with digits masked), submitting a file (the request follows D2L's documented format and is exercised against the made-up Brightspace), rubric and feedback-file fields on a marked assignment, the student addresses of Brightspace's Grades, Assignments and Quizzes list pages, whether Brightspace and external tools allow being shown in a frame, and the Gradescope reader against real Gradescope. Each has a fallback: a page that is not recognised stays as plain Brightspace, and every frame has an "open in a new tab" button.
 
 ## Load it
 

@@ -181,6 +181,8 @@
     });
   }
 
+  ui.activityView = activityView; // also a course's own Recent Activity
+
   // ---- pages ---------------------------------------------------------------
   ui.views.dashboard = async () => {
     const courses = await data.courses();

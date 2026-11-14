@@ -73,7 +73,7 @@ BSX.ui = (() => {
   const OFF = '#brightspace';
   const DAY = 864e5;
   const COLORS = ['#0b874b', '#bd3c14', '#0374b5', '#8f3e97', '#d97900', '#4554a4', '#06a3b7', '#e71f63', '#65499d', '#177b63'];
-  const SECTIONS = ['home', 'announcements', 'assignments', 'discussions', 'grades', 'people', 'files', 'syllabus', 'quizzes', 'modules'];
+  const SECTIONS = ['home', 'announcements', 'assignments', 'discussions', 'grades', 'people', 'files', 'syllabus', 'quizzes', 'modules', 'stream'];
 
   // ---- elements ------------------------------------------------------------
   function h(tag, attrs, ...kids) {

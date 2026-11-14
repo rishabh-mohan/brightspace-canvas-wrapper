@@ -127,7 +127,10 @@
         list.length ? moduleList(course.id, list, work) : ui.empty('No content in this course yet.'),
       ],
       side: [
-        h('div', { class: 'sidebtns' }, ui.linkButton('View Announcements', courseHref(course.id, 'announcements'), 'wide'), ui.linkButton('View Calendar', '#/calendar', 'wide')),
+        h('div', { class: 'sidebtns' },
+          h('a', { class: 'btn wide', href: courseHref(course.id, 'stream') }, ic('announcement', 16), 'View Course Stream'),
+          h('a', { class: 'btn wide', href: '#/calendar' }, ic('calendar', 16), 'View Course Calendar'),
+          h('a', { class: 'btn wide', href: '/d2l/lp/notifications/settings', title: 'Brightspace notification settings' }, ic('inbox', 16), 'View Course Notifications')),
         ui.todoSide([course], { labels: false, gradesHref: courseHref(course.id, 'grades'), only: course.id }),
       ],
     };
@@ -524,13 +527,14 @@
     const canEstimate = points || weighted;
 
     const totalBox = h('div', { class: 'totalbox' });
+    const allItems = whatIf.allItems && canEstimate;
     function drawTotal() {
-      const hyp = whatIf.on && whatIf.overrides.size ? data.estimate(g, whatIf.overrides) : null;
+      const hyp = (whatIf.on && whatIf.overrides.size) || allItems ? data.estimate(g, whatIf.on ? whatIf.overrides : new Map(), { allItems }) : null;
       const pair = (t) => (points ? h('div', { class: 'muted small' }, `${num(t.score)} / ${num(t.points_possible)} points`) : null);
       let kids;
       if (hyp) {
         const actual = g.final ? g.final.displayed || pct(g.final.score, g.final.points_possible) : g.estimate ? pct(g.estimate.score, g.estimate.points_possible) : 'not released';
-        kids = [h('div', { class: 'tlabel' }, 'What-If Total'), h('div', { class: 'bigscore hyp' }, pct(hyp.score, hyp.points_possible)), pair(hyp), h('div', { class: 'muted small' }, `Actual: ${actual}`)];
+        kids = [h('div', { class: 'tlabel' }, whatIf.on && whatIf.overrides.size ? 'What-If Total' : 'Total, counting ungraded work as 0'), h('div', { class: 'bigscore hyp' }, pct(hyp.score, hyp.points_possible)), pair(hyp), h('div', { class: 'muted small' }, `Actual: ${actual}`)];
       } else if (g.final) {
         kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'bigscore' }, g.final.displayed || pct(g.final.score, g.final.points_possible) || '–'), g.final.points_possible ? h('div', { class: 'muted small' }, `${num(g.final.score)} / ${num(g.final.points_possible)}`) : null, h('div', { class: 'muted small' }, 'Released by the instructor')];
       } else if (g.estimate) {
@@ -609,6 +613,9 @@
       side: [
         totalBox,
         canEstimate ? ui.button(whatIf.on ? 'Revert to Actual Scores' : 'Show What-If Scores', () => { whatIf.on = !whatIf.on; whatIf.overrides = new Map(); ui.render(); }, 'wide') : null,
+        canEstimate
+          ? h('label', { class: 'calrow', style: 'margin-bottom:22px' }, h('input', { type: 'checkbox', checked: !allItems, onchange: (ev) => { whatIf.allItems = !ev.target.checked; ui.render(); } }), 'Calculate based only on graded assignments')
+          : null,
         weights,
         ui.lazy(data.externalTools(id), (tools) => tools.length ? ui.sideSection('Graded elsewhere', [h('p', { class: 'muted small' }, 'Some work in this course is graded in an external tool and may not appear here.'), tools.map((t) => h('a', { class: 'sidelink', href: courseHref(id, 'modules', t.id) }, t.title, ' ', ic('external', 13)))]) : null, ''),
       ],
@@ -672,7 +679,10 @@
     files,
     syllabus,
     modules,
+    // Canvas's "View Course Stream": this course's recent announcements and grades.
+    stream: async (c) => ({ body: ui.activityView([c]) }),
   };
+  const CRUMB = { ...LABEL, stream: 'Recent Activity' };
 
   ui.views.course = async (r) => {
     const courses = await data.courses();
@@ -680,7 +690,7 @@
     if (!course) return { title: 'Course not found', body: [ui.empty('That course is not in your course list.'), h('a', { href: '#/' }, 'Back to the Dashboard')] };
     const out = await SECTION[r.section](course, r);
     const crumbs = [{ label: nameOf(course), href: courseHref(course.id) }];
-    if (r.section !== 'home') crumbs.push({ label: LABEL[r.section], href: courseHref(course.id, r.section) });
+    if (r.section !== 'home') crumbs.push({ label: CRUMB[r.section], href: courseHref(course.id, r.section) });
     if (out.crumb) crumbs.push({ label: out.crumb });
     return { crumbs, leftNav: courseNav(course, r.section), body: out.body, side: out.side, actions: out.actions };
   };

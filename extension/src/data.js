@@ -525,7 +525,9 @@ BSX.data = (() => {
   // rows are never added in, which would double-count). `overrides` maps item id to a
   // hypothetical score. Each category's drop-lowest and drop-highest rules are applied
   // by percentage, as Brightspace does. Points: plain sum. Weighted: each item's share.
-  function estimate(g, overrides = new Map()) {
+  // `allItems`: Canvas's unticked "Calculate based only on graded assignments", where every
+  // ungraded item counts as zero.
+  function estimate(g, overrides = new Map(), { allItems = false } = {}) {
     let score = 0;
     let possible = 0;
     for (const group of g.groups) {
@@ -534,7 +536,8 @@ BSX.data = (() => {
         const sh = share(g, i);
         if (!sh) continue;
         const override = overrides.get(i.id);
-        const s = override != null ? override : i.value ? i.value.score : null;
+        let s = override != null ? override : i.value ? i.value.score : null;
+        if (s == null && allItems && !i.bonus) s = 0;
         if (s == null) continue;
         counted.push({ ...sh, s, bonus: i.bonus });
       }

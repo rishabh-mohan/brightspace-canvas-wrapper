@@ -315,6 +315,7 @@
     drawTotal();
 
     const rows = [];
+    const flat = [];
     for (const group of g.groups) {
       if (group.name) {
         const v = group.value;
@@ -342,7 +343,8 @@
         } else {
           scoreCell = h('td', { class: 'num' }, v ? h('span', { title: v.displayed || null }, num(v.score)) : '–');
         }
-        rows.push(h('tr', null,
+        flat.push({ i, a, el: null });
+        rows.push(flat[flat.length - 1].el = h('tr', null,
           h('td', null, a ? h('a', { class: 't', href: itemHref(id, a) }, i.name) : h('span', { class: 't dark' }, i.name), i.bonus ? ui.tag('bonus') : null, i.excluded ? ui.tag('not counted') : null, v && v.comment ? h('div', { class: 'note' }, v.comment) : null),
           h('td', { class: 'muted small nowrap' }, a && a.due_at ? when(a.due_at) : ''),
           scoreCell,
@@ -350,8 +352,19 @@
           pctCell));
       }
     }
+    // Arrange by group (with subtotals), or as one flat list by due date or title.
+    const dueOf = (x) => (x.a && x.a.due_at ? Date.parse(x.a.due_at) : Infinity);
+    const ordered = settings.gradeSort === 'due' ? flat.sort((x, y) => dueOf(x) - dueOf(y)).map((x) => x.el)
+      : settings.gradeSort === 'title' ? flat.sort((x, y) => x.i.name.localeCompare(y.i.name, undefined, { numeric: true })).map((x) => x.el)
+      : rows;
+    const arrange = h('select', { class: 'txt pick', 'aria-label': 'Arrange by' }, [['group', 'Arrange by Assignment Group'], ['due', 'Arrange by Due Date'], ['title', 'Arrange by Title']].map(([k, label]) => h('option', { value: k, selected: (settings.gradeSort || 'group') === k }, label)));
+    arrange.addEventListener('change', () => {
+      settings.gradeSort = arrange.value;
+      ui.saveSettings();
+      ui.render();
+    });
     const table = rows.length
-      ? h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Due'), h('th', { class: 'num' }, 'Score'), h('th', { class: 'num' }, 'Out of'), h('th', { class: 'num' }, '%'))), h('tbody', null, rows))
+      ? h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Due'), h('th', { class: 'num' }, 'Score'), h('th', { class: 'num' }, 'Out of'), h('th', { class: 'num' }, '%'))), h('tbody', null, ordered))
       : ui.empty('No grade items in this course.');
 
     const weights = weighted && g.groups.some((x) => x.name && x.weight != null)
@@ -359,7 +372,7 @@
       : null;
     return {
       body: [
-        h('div', { class: 'dhead' }, h('h1', null, 'Grades'), picker),
+        h('div', { class: 'dhead' }, h('h1', null, 'Grades'), h('div', { class: 'row' }, arrange, picker)),
         whatIf.on ? h('div', { class: 'banner' }, weighted ? 'What-If scores: type a score to see the effect. In a weighted gradebook only graded items can be changed.' : 'What-If scores: type a score to see the effect, including for work that is not graded yet.') : null,
         table,
         h('p', { class: 'small' }, h('a', { href: bs.grades(id) }, 'Open Grades in Brightspace')),

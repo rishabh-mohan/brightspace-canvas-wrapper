@@ -257,8 +257,16 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
 
 @media (max-width: 1100px) { .right { width: 240px; } .cnav { width: 150px; } }
 @media (max-width: 860px) {
-  .layout { flex-direction: column; }
+  .layout { flex-direction: column; align-items: stretch; gap: 18px; padding: 16px; }
   .right, .cnav { width: 100%; }
+  .cnav { display: flex; flex-wrap: wrap; gap: 0 2px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+  .cnav a { border-left: 0; border-bottom: 2px solid transparent; padding: 4px 9px; }
+  .cnav a.on { border-bottom-color: var(--fg); }
+  .cnav .sep { width: 100%; margin: 8px 0 0; padding: 0 9px; }
+  .cnav > div:not(.sep) { display: contents; }
+  .head, .crumbs { margin: 0 16px; }
+  .head h1 { font-size: 24px; }
+  .head { flex-wrap: wrap; }
   .rail { width: 60px; }
   .rail a span, .rail button span { display: none; }
   .tray { left: 60px; width: min(320px, calc(100vw - 60px)); }

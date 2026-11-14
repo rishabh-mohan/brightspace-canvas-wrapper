@@ -20,7 +20,7 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 - Announcements: searchable list and a page per announcement.
 - Assignments: assignments, quizzes and discussions in one list, by date or by grade category, with search, submission status and an External Tools group.
 - Assignment, quiz and discussion pages: instructions, dates, points, your submission and files, your grade and feedback, quiz attempts, and discussion posts as a thread.
-- Grades: every item with due date and score, group subtotals, the released total or a labelled estimate, group weights, What-If scores, and a course switcher.
+- Grades: every item with due date and score, group subtotals, the released total or a labelled estimate, group weights, What-If scores, arranging by group, due date or title, and a course switcher.
 - People, Files, Syllabus (course overview plus a summary of dated work), Quizzes, Discussions, Modules.
 
 **Calendar**: month and agenda views, a checkbox per course, and your own To Do items.
@@ -32,7 +32,7 @@ The wrapper stands in for the Brightspace home page, course home pages, and Brig
 ## Limits
 
 - **External tools are links.** Work in Gradescope or publisher sites is not read; add it yourself with **+ To Do**.
-- **Inbox** opens Brightspace email; Brightspace has no usable mail interface for this.
+- **Inbox** cannot read Brightspace mail. It links to Brightspace Email and lists recent announcements instead.
 - **Estimated totals** come from graded items, ignore dropped-score rules and are not official.
 - **Discussions in To Do** cannot tell whether you have already posted.
 - **Not yet checked against real Brightspace:** quiz attempts, discussion posts, the course overview, the Inbox address, and the addresses of the pages the wrapper stands in for. The probe (below) checks the first three.

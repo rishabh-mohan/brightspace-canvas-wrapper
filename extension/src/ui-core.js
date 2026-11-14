@@ -193,6 +193,7 @@ BSX.ui = (() => {
       if (saved.done && typeof saved.done === 'object') settings.done = { ...saved.done };
       if (saved.dismissed && typeof saved.dismissed === 'object') settings.dismissed = { ...saved.dismissed };
       if (typeof saved.showAll === 'boolean') settings.showAll = state.showAll = saved.showAll;
+      if (['group', 'due', 'title'].includes(saved.gradeSort)) settings.gradeSort = saved.gradeSort;
     } catch {}
   }
   function saveSettings() {
@@ -390,6 +391,7 @@ BSX.ui = (() => {
     if (hash === '#/') return { view: 'dashboard', nav: 'dashboard' };
     if (hash === '#/courses') return { view: 'courses', nav: 'courses' };
     if (hash === '#/grades') return { view: 'allgrades', nav: 'dashboard' };
+    if (hash === '#/inbox') return { view: 'inbox', nav: 'inbox' };
     let m = hash.match(/^#\/calendar(?:\/(\d{4})-(\d{2}))?$/);
     if (m) return { view: 'calendar', nav: 'calendar', year: m[1] ? Number(m[1]) : null, month: m[2] ? Number(m[2]) - 1 : null };
     m = hash.match(/^#\/courses\/(\d+)(?:\/([a-z]+)(?:\/(\d+))?)?$/);
@@ -469,7 +471,7 @@ BSX.ui = (() => {
       item('dashboard', '#/', 'dashboard', 'Dashboard'),
       trayBtn('courses', 'courses', 'Courses'),
       item('calendar', '#/calendar', 'calendar', 'Calendar'),
-      h('a', { href: bs.email(), title: 'Opens Brightspace email' }, ic('inbox', 26), h('span', null, 'Inbox')),
+      item('inbox', '#/inbox', 'inbox', 'Inbox'),
       trayBtn('help', 'help', 'Help'),
       h('span', { class: 'gap' }),
       h('button', { type: 'button', onclick: turnOff, title: 'Show the original Brightspace page' }, ic('swap', 26), h('span', null, 'Brightspace'))

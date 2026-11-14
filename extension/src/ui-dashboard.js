@@ -219,6 +219,28 @@
     };
   };
 
+  // Brightspace mail cannot be read from here, so the Inbox is a doorway to it, with the
+  // messages instructors did send through Brightspace (announcements) listed underneath.
+  ui.views.inbox = async () => {
+    const courses = await data.courses();
+    const visible = state.showAll ? courses : ui.focusCourses(courses);
+    const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
+    return {
+      title: 'Inbox',
+      body: [
+        h('div', { class: 'banner' }, 'Brightspace mail and instant messages cannot be read here. Open Brightspace Email to read or send messages.'),
+        h('p', null, h('a', { class: 'btn primary', href: ui.bs.email() }, 'Open Brightspace Email ', ic('external', 14))),
+        h('h2', { class: 'sect' }, 'Announcements from your instructors'),
+        ui.lazy(data.recentAnnouncements(visible, 30), (news) => news.length
+          ? h('div', { class: 'rows' }, news.map((a) => h('a', { class: 'arow', href: courseHref(a.course_id, 'announcements', a.id) },
+              h('span', { class: 'avatar sm', style: `color:${colorOf(a.course_id)}` }, ic('announcement', 18)),
+              h('div', { class: 'imid' }, h('div', { class: 'ctx', style: `--c:${colorOf(a.course_id)}` }, names.get(a.course_id) || ''), h('div', { class: 't' }, a.title), h('div', { class: 'muted small' }, ui.clip(ui.plainOf(a.message_html, a.message), 180))),
+              h('div', { class: 'muted small nowrap' }, when(a.posted_at)))))
+          : ui.empty('No announcements in the last 30 days.')),
+      ],
+    };
+  };
+
   ui.views.allgrades = async () => {
     const courses = await data.courses();
     const visible = state.showAll ? courses : ui.focusCourses(courses);

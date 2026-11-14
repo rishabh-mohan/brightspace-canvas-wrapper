@@ -5,6 +5,7 @@
   "courses": "/d2l/home#/courses",
   "allgrades": "/d2l/home#/grades",
   "calendar": "/d2l/home#/calendar",
+  "inbox": "/d2l/home#/inbox",
   "home": "/d2l/home/101",
   "modules": "/d2l/le/content/101/Home",
   "assignments": "/d2l/lms/dropbox/user/folders_list.d2l?ou=101",

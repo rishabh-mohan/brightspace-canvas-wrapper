@@ -307,7 +307,8 @@ const assert = require('assert');
     { id: 5, title: 'No date', status: 'unattempted' },
     { id: 6, title: 'Unlisted', due_at: soon, is_unlisted: true },
     { id: 7, title: 'HW 3', due_at: soon, status: 'attempted', submitted_at: past }], modules: [{ id: 3, name: 'Week 1' }] }, bsCourses[0], 'us');
-  assert.deepStrictEqual(Array.from(lessons, (l) => `${l.name}:${l.submitted}`), ['HW 1:true', 'HW 2:false', 'HW 3:true']);
+  assert.deepStrictEqual(Array.from(lessons, (l) => `${l.name}:${l.submitted}`), ['HW 1:true', 'HW 2:false', 'No date:false', 'HW 3:true'], 'undated lessons are kept for the [Ed] module');
+  assert.strictEqual(lessons[2].due_at, null);
   assert.strictEqual(lessons[1].due_at, soon, 'the student’s effective due date wins');
   assert.strictEqual(lessons[0].group, 'Week 1');
   assert.strictEqual(lessons[0].html_url, 'https://edstem.org/us/courses/7/lessons/1');

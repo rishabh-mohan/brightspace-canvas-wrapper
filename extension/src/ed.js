@@ -68,7 +68,9 @@ BSX.ed = (() => {
     const list = Array.isArray(json) ? json : json.lessons || [];
     const moduleNames = new Map((json.modules || []).map((m) => [m.id, m.name]));
     return list
-      .filter((l) => l && l.id != null && !l.is_hidden && !l.is_unlisted && l.state !== 'draft' && dueOf(l))
+      // Undated lessons (readings, slides) are kept too: they show in the [Ed] module, while
+      // To Do, the calendar and the planner only take dated work.
+      .filter((l) => l && l.id != null && !l.is_hidden && !l.is_unlisted && l.state !== 'draft')
       .map((l) => {
         const status = doneStatus(l);
         return {
@@ -101,6 +103,32 @@ BSX.ed = (() => {
     }
   }
 
+  // Ed announcements (threads of type "announcement") for the given Brightspace courses.
+  // GET /api/courses/{id}/threads?limit=&offset=0&sort=new returns { threads: [...] } with
+  // id, type, title, document (plain text), created_at, is_seen, is_pinned (per the edapi project).
+  async function announcements(bsCourses, { map = {}, region = 'us' } = {}) {
+    try {
+      const eds = await courses();
+      const pairs = eds.map((e) => [e, brightspaceFor(e, bsCourses, map)]).filter(([, b]) => b);
+      const lists = await Promise.all(pairs.map(([e, b]) => get(`/api/courses/${e.id}/threads?limit=50&offset=0&sort=new`).then((j) => (j.threads || [])
+        .filter((t) => t && t.type === 'announcement' && !t.deleted_at)
+        .map((t) => ({
+          source: 'Ed',
+          id: `ed-${t.id}`,
+          course_id: b.id,
+          title: t.title || 'Ed announcement',
+          message: String(t.document || '').trim(),
+          posted_at: t.created_at || null,
+          pinned: Boolean(t.is_pinned),
+          unread: t.is_seen === false,
+          html_url: `https://edstem.org/${region}/courses/${e.id}/discussion/${t.id}`,
+        }))).catch(() => [])));
+      return lists.flat().sort((a, b) => Date.parse(b.posted_at || 0) - Date.parse(a.posted_at || 0));
+    } catch {
+      return [];
+    }
+  }
+
   // Field names and types of Ed's answers, with no values, for checking the reader against
   // a real account (like the Brightspace access probe).
   function shape(v, depth = 0) {
@@ -127,6 +155,9 @@ BSX.ed = (() => {
         // Which status words appear, so completion can be read correctly (words only, no titles).
         out.lessonStatusValues = [...new Set(list.map((l) => String(l.status ?? '')).filter(Boolean))].slice(0, 20);
         out.lessonStateValues = [...new Set(list.map((l) => String(l.state ?? '')).filter(Boolean))].slice(0, 20);
+        const threads = await get(`/api/courses/${first.id}/threads?limit=50&offset=0&sort=new`).catch((e) => ({ error: e.code || e.message }));
+        out.threads = shape(threads);
+        out.threadTypeValues = [...new Set((threads.threads || []).map((t) => String(t.type ?? '')).filter(Boolean))];
       } else out.notes.push('No current course found.');
     } catch (e) {
       out.notes.push(`Error: ${e.code || e.message}`);
@@ -134,5 +165,5 @@ BSX.ed = (() => {
     return out;
   }
 
-  return { courses, forCourses, brightspaceFor, lessonItems, subjectKey, report, clear: () => cache.clear() };
+  return { courses, forCourses, announcements, brightspaceFor, lessonItems, subjectKey, report, clear: () => cache.clear() };
 })();

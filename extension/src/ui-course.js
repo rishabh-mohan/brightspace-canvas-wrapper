@@ -216,7 +216,14 @@
       return { crumb: a.title, body: h('article', { class: 'detail' }, h('h1', null, a.title), h('div', { class: 'muted small' }, a.posted_at ? `Posted ${when(a.posted_at)}` : ''), prose(a.message_html, a.message),
         a.attachments.length ? [h('h2', { class: 'sect' }, 'Attachments'), h('ul', { class: 'filelist' }, a.attachments.map(fileItem))] : null) };
     }
-    if (!list.length) return { body: ui.empty('No announcements in this course.') };
+    // Ed announcements for this course, when the Ed reader is on; they open on Ed.
+    const fromEd = ui.lazy(ui.outsideAnnouncements([course]), (eds) => eds.length
+      ? [h('h2', { class: 'sect' }, 'From Ed Discussion'), h('div', { class: 'rows' }, eds.map((a) => h('a', { class: 'arow', href: a.html_url, target: '_blank', rel: 'noopener noreferrer' },
+          h('span', { class: 'avatar sm' }, ic('announcement', 18)),
+          h('div', { class: 'imid' }, h('div', { class: 't' }, a.title, ' ', ic('external', 12), a.pinned ? ui.tag('pinned') : null, a.unread ? h('span', { class: 'newdot inline', title: 'Unread on Ed' }) : null), h('div', { class: 'muted small' }, ui.clip(a.message, 200))),
+          h('div', { class: 'muted small nowrap' }, a.posted_at ? `Posted on ${when(a.posted_at)}` : ''))))]
+      : null, '');
+    if (!list.length) return { body: [ui.empty('No announcements in this course.'), fromEd] };
     const rows = list.map((a) => {
       const text = ui.plainOf(a.message_html, a.message);
       const el = h('a', { class: 'arow', href: courseHref(course.id, 'announcements', a.id) },
@@ -225,10 +232,43 @@
         h('div', { class: 'muted small nowrap' }, a.posted_at ? `Posted on ${when(a.posted_at)}` : ''));
       return [el, `${a.title} ${text}`];
     });
-    return { body: [h('div', { class: 'toolbar' }, ui.filterBox('Search announcements', rows)), h('div', { class: 'rows' }, rows.map((x) => x[0])), h('p', { class: 'small' }, h('a', { href: bs.news(course.id) }, 'Open Announcements in Brightspace'))] };
+    return { body: [h('div', { class: 'toolbar' }, ui.filterBox('Search announcements', rows)), h('div', { class: 'rows' }, rows.map((x) => x[0])), fromEd, h('p', { class: 'small' }, h('a', { href: bs.news(course.id) }, 'Open Announcements in Brightspace'))] };
   }
 
   // ---- assignments, quizzes, discussions (lists) -------------------------------
+  // Where a piece of work stands, as Canvas labels it: 'late' (handed in after the due
+  // date), 'missing' (past due, not graded, not handed in / attempted / posted), 'submitted',
+  // or 'open' (not due yet). Null when it cannot be told.
+  async function workState(courseId, a) {
+    const due = a.due_at ? Date.parse(a.due_at) : null;
+    const past = due != null && due < Date.now();
+    if (a.kind === 'assignment') {
+      const s = await data.submission(courseId, a.source_id);
+      if (s.submitted) return due != null && s.submitted_at && Date.parse(s.submitted_at) > due ? 'late' : 'submitted';
+      return a.grade ? null : past ? 'missing' : 'open';
+    }
+    if (a.grade) return null;
+    if (a.kind === 'quiz') {
+      const q = await data.quizAttempts(courseId, a.source_id);
+      if (!q.known) return null;
+      return q.attempts_used > 0 ? 'submitted' : past ? 'missing' : 'open';
+    }
+    if (a.kind === 'discussion') {
+      if (due == null) return null;
+      const posted = (await data.discussion(courseId, a.source_id))?.posts.some((p) => p.mine);
+      return posted ? 'submitted' : past ? 'missing' : 'open';
+    }
+    return null;
+  }
+  // A small "missing" or "late" tag that fills in once the state is known.
+  function stateTag(courseId, a) {
+    const box = h('span');
+    workState(courseId, a).then((st) => {
+      if (st === 'missing' || st === 'late') box.replaceChildren(ui.tag(st, 'badt'));
+    }).catch(() => {});
+    return box;
+  }
+
   function workRow(course, a) {
     const courseId = course.id;
     const now = Date.now();
@@ -237,13 +277,14 @@
       status.textContent = text;
       status.className = `small nowrap ${done ? 'ok' : a.due_at && Date.parse(a.due_at) < now ? 'bad' : 'muted'}`;
     };
-    if (a.kind === 'assignment' && !a.grade) {
-      data.submission(courseId, a.source_id).then((s) => show(s.submitted, s.submitted ? 'Submitted' : a.due_at && Date.parse(a.due_at) < now ? 'Missing' : 'Not submitted')).catch(() => {});
-    } else if (a.kind === 'quiz' && !a.grade) {
-      data.quizAttempts(courseId, a.source_id).then((q) => q.known && show(q.attempts_used > 0, q.attempts_used > 0 ? 'Attempted' : 'Not attempted')).catch(() => {});
-    } else if (a.grade) {
-      show(true, 'Graded');
-    }
+    if (a.grade) show(true, 'Graded');
+    workState(courseId, a).then((st) => {
+      if (!st) return;
+      if (st === 'late') {
+        status.textContent = a.grade ? 'Graded · Late' : 'Late';
+        status.className = 'small nowrap bad';
+      } else if (!a.grade) show(st === 'submitted', { submitted: a.kind === 'quiz' ? 'Attempted' : a.kind === 'discussion' ? 'Posted' : 'Submitted', missing: 'Missing', open: a.kind === 'quiz' ? 'Not attempted' : a.kind === 'discussion' ? 'Not posted' : 'Not submitted' }[st]);
+    }).catch(() => {});
     const possible = a.grade ? a.grade.points_possible : a.points_possible;
     const score = a.grade ? `${num(a.grade.score)}/${num(possible)} pts` : possible != null ? `-/${num(possible)} pts` : null;
     const sub = [a.forum, a.due_at ? h('span', null, h('b', null, 'Due'), ` ${when(a.due_at)}`) : 'No due date', score].filter(Boolean);
@@ -349,7 +390,8 @@
       const ed = settings.ed?.on && settings.ed.token ? ui.edStatus() : null;
       if (ed && (ed.state !== 'ok' || kept.some((i) => i.source === 'Ed'))) {
         const note = edNote(ed.state);
-        const rows = kept.filter((i) => i.source === 'Ed').map((i) => h('div', { class: 'irow' },
+        // Dated lessons only here; undated readings and slides are in the [Ed] module.
+        const rows = kept.filter((i) => i.source === 'Ed' && i.due_at).map((i) => h('div', { class: 'irow' },
           h('span', { class: 'iic ok' }, ic('assignment', 22)),
           h('div', { class: 'imid' }, ui.itemLink(i), h('div', { class: 'muted small' }, i.due_at ? [h('b', null, 'Due'), ` ${when(i.due_at)}`] : 'No due date')),
           h('span', { class: `small nowrap ${i.submitted ? 'ok' : i.due_at && Date.parse(i.due_at) < now ? 'bad' : 'muted'}` }, i.status)));
@@ -660,21 +702,42 @@
     const picker = h('select', { class: 'txt pick', 'aria-label': 'Course' }, choices.map((c) => h('option', { value: String(c.id), selected: c.id === id }, nameOf(c))));
     picker.addEventListener('change', () => (location.hash = courseHref(Number(picker.value), 'grades')));
     const byItem = new Map(work.filter((a) => a.grade_item_id != null).map((a) => [String(a.grade_item_id), a]));
+    // Scores Brightspace has not posted but an outside copy has (Gradescope, folded into the
+    // Brightspace assignment): used in their place, scaled to the item's points, and tagged.
+    // Waits at most a few seconds for the outside sites.
+    const outside = new Map();
+    if (settings.gradescope || (settings.ed?.on && settings.ed.token)) {
+      await Promise.race([ui.externalWork([course]).catch(() => []), new Promise((r) => setTimeout(r, 4000))]);
+      const bag = ui.folded.get(id);
+      for (const group of g.groups) {
+        for (const i of group.items) {
+          if (i.value && i.value.score != null) continue;
+          const a = byItem.get(String(i.id));
+          const copy = a && (bag?.get(a.id) || []).find((c) => c.grade && c.grade.score != null);
+          if (!copy) continue;
+          const pp = i.value?.points_possible ?? i.points_possible;
+          const score = pp > 0 && copy.grade.points_possible > 0 ? (copy.grade.score / copy.grade.points_possible) * pp : copy.grade.score;
+          outside.set(i.id, { score, source: copy.source });
+        }
+      }
+    }
+    const base = new Map([...outside].map(([k, o]) => [k, o.score]));
     const points = g.system === 'Points';
     const weighted = g.system === 'Weighted';
     const canEstimate = points || weighted;
     // Items Brightspace marks "not counted" join the totals when the student says so.
     const anyExcluded = g.groups.some((x) => x.items.some((i) => i.excluded));
     g.count_excluded = Boolean(settings.countExcluded);
-    if (g.count_excluded) g.estimate = data.estimate(g);
+    if (g.count_excluded || base.size) g.estimate = data.estimate(g, base);
+    const inputs = () => new Map([...base, ...(whatIf.on ? whatIf.overrides : [])]);
     // In a course that counts an empty grade as 0, the total does too, unless the student
     // ticks "based only on graded assignments".
     const allItems = (whatIf.allItems ?? g.null_is_zero) && canEstimate;
     const totalBox = h('div', { class: 'totalbox' });
     const blank = g.null_is_zero ? '0' : '–';
-    const scoreText = (v) => (v && v.score != null ? num(v.score) : blank);
+    const scoreText = (v, i) => (v && v.score != null ? num(v.score) : i && outside.has(i.id) ? num(outside.get(i.id).score) : blank);
     function drawTotal() {
-      const hyp = (whatIf.on && whatIf.overrides.size) || allItems ? data.estimate(g, whatIf.on ? whatIf.overrides : new Map(), { allItems }) : null;
+      const hyp = (whatIf.on && whatIf.overrides.size) || allItems ? data.estimate(g, inputs(), { allItems }) : null;
       const pair = (t) => (points ? h('div', { class: 'muted small' }, `${num(t.score)} / ${num(t.points_possible)} points`) : null);
       let kids;
       if (hyp) {
@@ -694,7 +757,7 @@
     // Worked out again on every What-If change, since a new score can change what is dropped.
     const rowById = new Map();
     function markDropped() {
-      const out = data.dropped(g, whatIf.on ? whatIf.overrides : new Map(), { allItems });
+      const out = data.dropped(g, inputs(), { allItems });
       for (const [itemId, tr] of rowById) {
         const on = out.has(itemId);
         tr.classList.toggle('dropped', on);
@@ -714,10 +777,10 @@
         const v = i.value;
         const a = byItem.get(String(i.id));
         const possible = v ? v.points_possible : i.points_possible;
-        const pctCell = h('td', { class: 'num' }, v && v.score != null ? pct(v.score, v.points_possible) : g.null_is_zero && possible > 0 ? '0%' : '');
+        const pctCell = h('td', { class: 'num' }, v && v.score != null ? pct(v.score, v.points_possible) : outside.has(i.id) && possible > 0 ? pct(outside.get(i.id).score, possible) : g.null_is_zero && possible > 0 ? '0%' : '');
         let scoreCell;
         if (whatIf.on && data.estimable(g, i)) {
-          const input = h('input', { class: 'wi', type: 'number', min: '0', step: 'any', value: v && v.score != null ? String(v.score) : '', 'aria-label': `What-If score for ${i.name}` });
+          const input = h('input', { class: 'wi', type: 'number', min: '0', step: 'any', value: v && v.score != null ? String(v.score) : outside.has(i.id) ? String(+outside.get(i.id).score.toFixed(2)) : '', 'aria-label': `What-If score for ${i.name}` });
           input.addEventListener('input', () => {
             const typed = input.value === '' ? null : Number(input.value);
             const valid = typed != null && Number.isFinite(typed);
@@ -732,14 +795,14 @@
         } else if (whatIf.on) {
           // Locked in What-If: say why, so it is not a mystery.
           const why = data.whyNot(g, i) || 'Cannot be changed here';
-          scoreCell = h('td', { class: 'num' }, h('span', { class: 'wilock', title: why, 'aria-label': `${why}. Score: ${scoreText(v)}` }, ic('lock', 13), ' ', scoreText(v)));
+          scoreCell = h('td', { class: 'num' }, h('span', { class: 'wilock', title: why, 'aria-label': `${why}. Score: ${scoreText(v, i)}` }, ic('lock', 13), ' ', scoreText(v, i)));
         } else {
           const ungraded = !v || v.score == null;
-          scoreCell = h('td', { class: 'num' }, h('span', { title: ungraded ? (g.null_is_zero ? 'Not graded yet; this course counts it as 0' : 'Not graded yet') : v.displayed || null }, scoreText(v)));
+          scoreCell = h('td', { class: 'num' }, h('span', { title: ungraded ? (g.null_is_zero ? 'Not graded yet; this course counts it as 0' : 'Not graded yet') : v.displayed || null }, scoreText(v, i)));
         }
         flat.push({ i, a, el: null });
         rows.push(flat[flat.length - 1].el = h('tr', null,
-          h('td', null, a ? h('a', { class: 't', href: itemHref(id, a) }, i.name) : h('span', { class: 't dark' }, i.name), i.bonus ? ui.tag('bonus') : null, i.excluded ? ui.tag('not counted') : null, h('span', { class: 'droptag', hidden: true, title: 'Left out by this group’s drop rule' }, ui.tag('dropped')), v && v.comment ? h('div', { class: 'note' }, v.comment) : null),
+          h('td', null, a ? h('a', { class: 't', href: itemHref(id, a) }, i.name) : h('span', { class: 't dark' }, i.name), i.bonus ? ui.tag('bonus') : null, i.excluded ? ui.tag('not counted') : null, a ? stateTag(id, a) : null, outside.has(i.id) ? h('span', { title: `Brightspace has not posted this score yet; this one is from ${outside.get(i.id).source}` }, ui.tag(`from ${outside.get(i.id).source}`)) : null, h('span', { class: 'droptag', hidden: true, title: 'Left out by this group’s drop rule' }, ui.tag('dropped')), v && v.comment ? h('div', { class: 'note' }, v.comment) : null),
           h('td', { class: 'muted small nowrap' }, a && a.due_at ? when(a.due_at) : ''),
           scoreCell,
           h('td', { class: 'num' }, num(possible)),

@@ -168,15 +168,17 @@
   // ---- recent activity -------------------------------------------------------
   function activityView(courses) {
     const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
-    return ui.lazy(Promise.all([data.recentAnnouncements(courses, 21), data.recentFeedback(courses, 21)]), ([news, feedback]) => {
+    const since = Date.now() - 21 * ui.DAY;
+    return ui.lazy(Promise.all([data.recentAnnouncements(courses, 21), data.recentFeedback(courses, 21), ui.outsideAnnouncements(courses)]), ([news, feedback, eds]) => {
       const rows = [
         ...news.map((a) => ({ at: a.posted_at, icon: 'announcement', title: a.title, href: courseHref(a.course_id, 'announcements', a.id), course: a.course_id, kind: 'Announcement', text: ui.clip(ui.plainOf(a.message_html, a.message), 160) })),
+        ...eds.filter((a) => a.posted_at && Date.parse(a.posted_at) >= since).map((a) => ({ at: a.posted_at, icon: 'announcement', title: a.title, href: a.html_url, external: true, course: a.course_id, kind: 'Ed announcement', text: ui.clip(a.message, 160) })),
         ...feedback.map((f) => ({ at: f.grade.graded_at, icon: 'check', title: f.title, href: courseHref(f.course_id, 'grades'), course: f.course_id, kind: 'Grade', text: `${num(f.grade.score)} out of ${num(f.grade.points_possible)}${f.grade.comment ? ` · ${ui.clip(f.grade.comment, 100)}` : ''}` })),
       ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
       if (!rows.length) return ui.empty('No recent announcements or grades.');
       return h('div', { class: 'stream' }, rows.map((r) => h('div', { class: 'srow' },
         h('span', { class: 'todoic', style: `color:${colorOf(r.course)}` }, ic(r.icon, 22)),
-        h('div', { class: 'pmid' }, h('div', { class: 'ctx', style: `--c:${colorOf(r.course)}` }, `${r.kind} · ${names.get(r.course) || ''}`), h('a', { class: 't', href: r.href }, r.title), r.text ? h('div', { class: 'muted small' }, r.text) : null),
+        h('div', { class: 'pmid' }, h('div', { class: 'ctx', style: `--c:${colorOf(r.course)}` }, `${r.kind} · ${names.get(r.course) || ''}`), r.external ? h('a', { class: 't', href: r.href, target: '_blank', rel: 'noopener noreferrer' }, r.title, ' ', ic('external', 12)) : h('a', { class: 't', href: r.href }, r.title), r.text ? h('div', { class: 'muted small' }, r.text) : null),
         h('div', { class: 'muted small nowrap' }, when(r.at)))));
     });
   }

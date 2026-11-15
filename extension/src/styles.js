@@ -108,6 +108,7 @@ p { margin: 12px 0; }
 .seg button.on { background: var(--fg); color: var(--bg); }
 .tag { display: inline-block; font-size: 12px; line-height: 1.5; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); margin-left: 8px; font-weight: 400; vertical-align: middle; }
 .tag.okt { color: var(--ok); border-color: var(--ok); }
+.tag.badt { color: var(--bad); border-color: var(--bad); }
 input.txt { width: 100%; padding: 7px 10px; font: inherit; font-size: 15px; border: 1px solid var(--line); border-radius: 4px; color: var(--fg); background: var(--bg); }
 input.search { max-width: 340px; }
 .toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; }
@@ -187,7 +188,10 @@ select.pick { width: auto; max-width: 320px; }
 .agrow .event { white-space: normal; font-size: 15px; }
 
 /* course pages */
-.cnav { width: 180px; flex: none; }
+.cnav { width: 180px; flex: none; overflow: hidden; transition: width .26s var(--ease), margin-right .26s var(--ease), opacity .2s ease, visibility 0s linear 0s; }
+.cnav > * { min-width: 180px; }
+/* Closed: no width, the layout gap taken back, faded; hidden from view once the slide ends. */
+.cnav.closed { width: 0; margin-right: -28px; opacity: 0; visibility: hidden; transition: width .26s var(--ease), margin-right .26s var(--ease), opacity .16s ease, visibility 0s linear .26s; }
 .cnav a { display: block; padding: 5px 10px 5px 12px; border-left: 2px solid transparent; font-size: 15.5px; }
 .cnav a.on { color: var(--fg); border-left-color: var(--fg); }
 .cnav .sep { margin: 16px 0 4px; padding: 0 12px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
@@ -400,11 +404,14 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
   .app *, .app *::before, .app *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 }
 
-@media (max-width: 1100px) { .right { width: 240px; } .cnav { width: 150px; } }
+@media (max-width: 1100px) { .right { width: 240px; } .cnav { width: 150px; } .cnav > * { min-width: 150px; } }
 @media (max-width: 860px) {
   .layout { flex-direction: column; align-items: stretch; gap: 18px; padding: 16px; }
   .right, .cnav { width: 100%; }
-  .cnav { display: flex; flex-wrap: wrap; gap: 0 2px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+  .cnav { display: flex; flex-wrap: wrap; gap: 0 2px; border-bottom: 1px solid var(--line); padding-bottom: 8px; max-height: 480px; transition: max-height .26s var(--ease), opacity .2s ease, padding .26s var(--ease); }
+  .cnav > * { min-width: 0; }
+  /* On narrow screens the menu is a strip above the page: it folds up instead of sideways. */
+  .cnav.closed { width: 100%; margin-right: 0; max-height: 0; padding-bottom: 0; border-bottom-width: 0; }
   .cnav a { border-left: 0; border-bottom: 2px solid transparent; padding: 4px 9px; }
   .cnav a.on { border-bottom-color: var(--fg); }
   .cnav .sep { width: 100%; margin: 8px 0 0; padding: 0 9px; }

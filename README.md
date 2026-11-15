@@ -1,122 +1,131 @@
-# Canvas-style wrapper for Brightspace
+# Brightspace Canvas Wrapper
 
-A browser extension that shows your Brightspace courses in Canvas's layout. It changes things on Brightspace only when you press a button for it: **Submit Assignment** (hands in a file) and **Post Reply** (posts in a discussion). Taking a quiz and text submissions happen on Brightspace's own page, shown inside the wrapper.
+A Firefox (and Chrome/Edge) extension that shows your Brightspace courses in a Canvas-style layout: course cards, a To Do list, modules, assignments, grades with What-If scores, and a calendar. Optionally, it also pulls in your Gradescope and Ed Discussion work.
 
-Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brightspace-vs-canvas-wrapper-plan.md).
+It works on any school's Brightspace (`*.brightspace.com`) with a student account, using your own sign-in. It is unofficial and not affiliated with D2L or Instructure.
 
-## What it does
+## Install
 
-**Global navigation** (left rail): Account, Dashboard, Courses, Calendar, Inbox, Help, and a Brightspace switch that shows the original page.
+- **Firefox, permanently:** install the signed version from Firefox Add-ons (your own link from the Developer Hub).
+- **Firefox, for testing:** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on…**, and pick `extension/manifest.json`. It is removed when Firefox closes.
+- **Firefox for Android:** install the signed version from Firefox Add-ons.
+- **Chrome or Edge:** open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, and pick the `extension` folder.
+
+Needs Firefox 140 or later (Firefox for Android 142 or later). Then sign in to Brightspace and open its home page.
+
+If nothing appears in Firefox, open `about:addons`, choose the extension, and under **Permissions** allow brightspace.com.
+
+## Using it
+
+**Left menu:** Account, Dashboard, Courses, Groups, Calendar, Inbox, Help, and **Brightspace**, which switches back to plain Brightspace for this tab until you pick **Canvas view** again.
 
 **Dashboard**
-- Card View: this term's course cards with a colour, picture, shortcuts and unread badges. The â‹® button sets a nickname and colour.
-- List View: a planner of dated work, grouped by day and opened on today. Items can be ticked off.
-- Recent Activity: recent announcements and newly posted grades.
-- Sidebar: To Do (overdue first, each item dismissible), Recent Feedback, View Grades.
-- **+ To Do** adds your own item, for anything that lives outside Brightspace. Your items appear in To Do, List View and the Calendar.
+- **Card View** shows this term's courses. The ⋮ on a card sets a nickname and colour.
+- **List View** is a day-by-day planner where you can tick items off.
+- **Recent Activity** shows new announcements and grades.
+- **Dashboard Options** (⋮ at the top) switches between views and has these options:
+  - **Color Overlay** and **Wide Cards**, for the course cards.
+  - **Tasks Panel**: a weekly sidebar with completion rings per course.
+- The sidebar has **To Do** (overdue first), **Recent Feedback** and a link to grades. **+ To Do** adds your own items.
 
-**Courses**
-- Home: recent announcements, modules, and a sidebar with View Course Stream (the course's recent announcements and grades), View Course Calendar, View Course Notifications, To Do and Recent Feedback.
-- Announcements: searchable list and a page per announcement.
-- Assignments: assignments, quizzes and discussions in one list, by date or by grade category, with search, submission status and an External Tools group.
-- Assignment pages: instructions and attached files, the rubric (with your ratings, points and per-criterion comments once marked), your submitted files, your grade, and feedback comments and files. Every file downloads in place.
-- **Start Assignment / New Attempt**: choose one file, add an optional comment, press Submit Assignment. It is sent to Brightspace's student submission route (one file per submission, as Brightspace allows) with the same short-lived token Brightspace's own pages use. Shown only for file-upload assignments that are open; "only one submission" assignments hide it once you have submitted. If Brightspace refuses, the page says why and links to the Brightspace page.
-- Quiz pages: attempts completed and remaining (from Brightspace's quiz summary page where, as at Purdue, the attempts list is refused to students), time limit, availability, grade.
-- Discussion pages: posts as a thread, with your own posts marked.
-- Announcement pages include their attachments.
-- Grades: every item with due date and score, group subtotals, the released total or a labelled estimate, group weights, What-If scores, Canvas's "Calculate based only on graded assignments" switch (untick to count ungraded work as zero), arranging by group, due date or title, and a course switcher.
-- Modules, where a module's own text and images (its description in Brightspace) are its first item, under the module's name; led by a **Course Home** module (the instructor's Brightspace course homepage, shown in a frame, and the syllabus), with each item opening inside the wrapper: files in a viewer, external tools in a frame, links as a card, each with Previous and Next.
-- Syllabus: the course's syllabus tool (Simple Syllabus at Purdue) shown in place, found as a Content link or on the course navigation bar, then the course overview and a summary of dated work.
-- People, Files, Quizzes, Discussions.
-- Course tools: every other link on the course's Brightspace navigation bar (Course Tools, Class Progress, and whatever the school adds), read from the course home page, in the course menu. They open inside the wrapper.
+**In a course**
+- **Home**: recent announcements and the course's modules.
+- **Modules**:
+  - **Course Home** comes first, with the instructor's Brightspace homepage and the syllabus.
+  - Each module's own text and images are its first item.
+  - Imported work gets **[Gradescope]** and **[Ed]** modules.
+  - Files, tools and links open inside the page, with Previous and Next.
+- **Assignments**: assignments, quizzes and discussions together, by date or by type.
+  - Each is marked Submitted, Late or Missing.
+  - **Start Assignment** hands in files without leaving the page.
+- **Assignment pages**: instructions, attached files, the rubric with your ratings, your submissions, and feedback with its files.
+- **Quizzes**: attempts completed and remaining. **Take the Quiz** opens Brightspace's quiz page inside the wrapper.
+- **Discussions**: threads, with your posts and unread posts marked. **Reply** posts from the page.
+- **Grades**:
+  - Each item shows its score, a Missing or Late label, and drop rules with the dropped scores struck through.
+  - **What-If** scores let you try out grades; locked items say why they can't be changed.
+  - Options: **Calculate based only on graded assignments** and **Count items marked "not counted"**.
+  - Gradescope scores fill in where Brightspace has not posted one yet.
+- **Announcements** (with Ed's too), **People**, **Files**, **Syllabus** (Simple Syllabus shown in place), and **Course Tools** (the tools on Brightspace's course bar, such as Class Progress).
 
-**Calendar**: month and agenda views, a checkbox per course, and your own To Do items.
+**Calendar**: month and agenda views, a checkbox per course, your own To Do items, and a detail panel for exams and other events.
 
-**Inbox**: Brightspace's own Email tool shown in a frame, with recent announcements underneath.
+**Inbox**: Brightspace's Email, shown inside the page, with recent announcements underneath.
 
-**Gradescope** (optional, off by default; Account â†’ Gradescope; in Firefox, the first time, press **Allow Gradescope access** where it appears and allow gradescope.com): for courses with a Gradescope link, reads your Gradescope assignments, due dates and scores and shows them in Assignments, Grades, To Do, List View and the Calendar. It uses your own Gradescope sign-in, reads two kinds of page, and changes nothing there. Open Gradescope once from a course if it says you are signed out.
+**Groups**: your groups, with course and members where Brightspace shows them.
 
-**Ed Discussion** (optional, off by default; Account → Ed Discussion, or Account → Connected sites): reads your Ed lessons and their due dates with a personal Ed API token, made on Ed's API Tokens page (edstem.org/us/settings/api-tokens, linked next to the token field; it is not in Ed's settings menu, and Ed requires two-factor authentication on your Ed account before it will create one), kept in this browser and sent only to edstem.org. In Firefox, the first time, press **Allow Ed access** where it appears. Each Ed course is matched to a Brightspace course by subject and number, or by your choice on the Connected Sites page (including "Don't show"). Ed lessons then appear in Assignments, Modules (an [Ed] module, as Gradescope work gets a [Gradescope] one), To Do, the Tasks Panel, List View and the Calendar. **Check Ed** on that page copies a report of Ed's field names and types (no values), for checking the reader against a real account.
+**Every other Brightspace page** opens inside the wrapper, with the course menu beside it. **Without Canvas view** at the top shows it on its own.
 
-**The same assignment in more than one place** (Brightspace, Gradescope, Ed) is shown once: matching names due within a day and a half are folded together, keeping Brightspace's copy, then Gradescope's, then Ed's. The kept item shows small "Ed" or "Gradescope" links, and its page lists them under **Also on**. On Connected Sites, every outside item can be linked by hand ("Same as …") or kept apart ("Keep separate").
+**Also**:
+- **Light, dark or automatic theme**: set under Account.
+- **Keyboard shortcuts**: press `?` for the list.
+- **Toolbar badge**: the extension icon counts new grades and announcements.
+- **Phone layout**: the pages adapt to phone width.
 
-**Preferences** (Account): light, dark or automatic theme, and whether to show current courses or all. Preferences and your To Do items are stored in the extension, in this browser only.
+## Gradescope and Ed Discussion
 
-**Tasks Panel** (Dashboard Options → Tasks Panel, off by default): a week of work in the sidebar in place of To Do, with concentric progress rings (one per course, in its colour, with the overall percentage in the middle), Unfinished and Completed lists, ticking off, + Add task, and previous and next weeks. The idea and layout follow [Tasks for Canvas](https://github.com/jtcheng26/canvas-task-extension) by jtcheng26 (MIT); this is a separate implementation on Brightspace data, with no code taken from it.
+Both are off until you switch them on under **Account → Connected sites**.
 
-**Groups** (left rail): the groups you belong to, with their course, category and members where Brightspace lets a student see them.
+**Gradescope** reads your Gradescope assignments, due dates and scores with your own Gradescope sign-in. In Firefox, press **Allow Gradescope access** the first time it asks.
 
-**Keyboard shortcuts**: press `?` for the list (`g` then `d`/`c`/`l`/`i`/`g`/`p` to jump, `/` to search, `j`/`k` to move through items, `[`/`]` for module items, `r` to refresh).
+**Ed Discussion** reads your Ed lessons, their due dates and Ed announcements.
+- **Token:** it needs a personal Ed API token. Use the **Get a token on Ed** link next to the token field; Ed's token page is not in its settings menu, and Ed asks for two-factor authentication first.
+- **Permission:** in Firefox, press **Allow Ed access** the first time it asks.
+- **Course matching:** each Ed course is matched to a Brightspace course automatically. You can change that, or hide a course, on the Connected Sites page.
 
-**Toolbar badge**: the extension icon counts new grades and announcements since you last opened the Dashboard.
+**The same assignment in more than one place** is shown once. Brightspace's copy is kept first, then Gradescope's, then Ed's, and the others become small "Gradescope" and "Ed" links on it.
+- **How matching works:** names match even when written differently ("HW 4", "Homework Assignment #4"), and the due dates must be within a day and a half.
+- **Changing it:** on Connected Sites, link any item by hand (**Same as …**) or keep it apart (**Keep separate**).
 
-**Look and motion**: set in Lato, Canvas's typeface (bundled in `extension/fonts/` under the SIL Open Font Licence). Canvas-style Dashboard Options menu (views and colour overlay), flash alerts for actions, grey placeholder bars while data loads, and short transitions on trays, dialogs, menus and collapsing groups. All motion is switched off when the system asks for reduced motion.
+## Privacy and what it changes
 
-**Speed**: the last answer from each Brightspace address is kept in extension storage (this browser only, up to a week, about 4 MB), so pages appear at once from your previous visit while fresh data loads; the page redraws in place if anything changed. Refresh always waits for Brightspace. Signing out of Brightspace clears the kept copy.
+- **Where your data goes:** everything runs in your browser with your own sign-ins. Nothing is sent anywhere except Brightspace, and Gradescope and Ed if you switch them on. The extension collects no data.
+- **What it keeps, and where:** preferences, your own To Do items, your Ed token and recent Brightspace answers (kept to load pages faster) are stored in this browser only. Signing out of Brightspace clears the kept answers.
+- **Changes to Brightspace:** it only changes anything when you press **Submit Assignment** or **Post Reply**. Quizzes and text-entry submissions use Brightspace's own pages, shown inside the wrapper.
+- **Showing instructor content:** text from Brightspace (announcements, instructions, posts) is cleaned before it is shown. Only formatting, links and images are kept.
 
-**Every other Brightspace page opens inside the wrapper**: quiz pages, discussion pages, Brightspace's own tools, and every "Open in Brightspace" link show in a frame under Canvas's navigation, with Brightspace's own top bar hidden. Opening such a page directly (a bookmark, an email link) goes to the wrapper with that page inside. **Without Canvas view** at the top shows the page on its own. Sign-in pages and quiz attempts in progress are never wrapped.
+## Limits
 
-**Discussions**: Reply and threaded replies are posted to Brightspace from the discussion page.
+- **Student view only:** there are no instructor pages.
+- **Totals are estimates:** they follow the course's drop rules and settings but are not official until the instructor releases a final grade.
+- **Text-entry submissions:** Brightspace's student submission route only accepts files, so these use Brightspace's own page (inside the wrapper).
+- **Quiz scores before release:** these are not available, because some schools (Purdue among them) do not let students read their own quiz attempts.
+- **Sign-in pages:** these always show on their own, never inside the wrapper.
+- **Publisher sites** (MyLab, WebAssign and others): these may refuse to show inside a frame. Use "Open in a new tab", or add their work with **+ To Do**.
 
-**Calendar**: events that are not assignments (exams, office hours) open a detail panel with time, place and description.
-
-The wrapper stands in for the Brightspace home page, course home pages, and Brightspace's own Grades, Assignments, Announcements, Quizzes, Discussions, Classlist and Content list pages. On every other Brightspace page a small "â† Canvas view" button leads back. The layout adapts down to phone width.
-
-## Scope and limits
-
-- **Student view only.** There are no instructor pages (gradebook editing, SpeedGrader, course settings): they need an instructor role and would have to write to Brightspace.
-- **Other external tools are frames or links.** Only Gradescope is read. Publisher sites (MyLab, WebAssign and so on) open in a frame or a new tab; add their work yourself with **+ To Do**.
-- **Estimated totals** come from graded items, apply each group's drop-lowest and drop-highest rules, and are not official.
-- **No wiki pages.** Brightspace has none; HTML pages in Content open in the file viewer.
-
-## What has been checked, and how
-
-| Checked | How |
-| --- | --- |
-| Every page and interaction renders | Headless Chrome against the made-up Brightspace (`tools/shots.ps1`) |
-| The extension itself loads and runs in Firefox and Edge | Installed as a temporary add-on (Firefox 160 via `web-ext`, Edge via `--load-extension`) against the made-up Brightspace |
-| Brightspace API routes and fields | Your probe report in `fixtures/` for most; D2L's API documentation for quiz attempts, discussion posts, course overview and topic files |
-| Brightspace page addresses for Announcements, Classlist, Discussions, Content, course home and Email | A university's published list of Brightspace link templates ([University of Limerick](https://ul.ie/node/82179)) |
-| Gradescope page structure | The public `gradescope-api` project's parser, and a made-up Gradescope in the dev server |
-
-Not yet checked on a real account: finding the Simple Syllabus and notification-settings links on a course home page (the probe now reports both), the wording of the quiz summary page (the probe now records its attempt labels with digits masked), submitting a file (the request follows D2L's documented format and is exercised against the made-up Brightspace), rubric and feedback-file fields on a marked assignment, the student addresses of Brightspace's Grades, Assignments and Quizzes list pages, whether Brightspace and external tools allow being shown in a frame, and the Gradescope reader against real Gradescope. Each has a fallback: a page that is not recognised stays as plain Brightspace, and every frame has an "open in a new tab" button.
-
-## Load it
-
-- **Firefox (primary, 140 or later; Firefox for Android 142 or later):** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-onâ€¦**, and select `extension/manifest.json`. It is removed when Firefox closes; use **Reload** on that page after code changes. If the wrapper does not appear, open `about:addons`, select the extension, and under **Permissions** allow access to `brightspace.com` (and `gradescope.com` if you switch the Gradescope reader on).
-- **Chrome or Edge:** open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, and select the `extension` folder. Chrome shows a harmless warning about `background.scripts`.
-
-Then sign in to Brightspace and open its home page.
-
-The toolbar button runs the **access probe**: it lists which Brightspace endpoints your session can read and offers a report (statuses and field names only, no personal data) to save into `fixtures/`.
-
-## Develop without signing in
+## For developers
 
 ```
-node tools/dev-server.js          # then open http://localhost:8765/d2l/home
-node tests/data.test.js           # data-layer test against a stubbed Brightspace
-powershell -File tools\shots.ps1  # opens every page in headless Chrome or Edge and checks it rendered
+node tools/dev-server.js           # made-up Brightspace, Gradescope and Ed at http://localhost:8765/d2l/home
+node tests/data.test.js            # data-layer tests against a stubbed Brightspace
+powershell -File tools\shots.ps1   # opens every page in tools/pages.json in headless Chrome or Edge and checks it rendered
+node tools/version.js 1.4.0        # sets the version (writes the manifest as plain UTF-8)
+powershell -File tools\package.ps1 # builds dist/brightspace-canvas-wrapper-<version>.zip for Firefox Add-ons
 ```
 
-- `tools/dev-server.js` runs the extension's scripts against a made-up Brightspace and Gradescope (`tools/fake-brightspace.js`) with invented courses and grades.
-- `tools/shots.ps1 -Out <folder>` also saves a screenshot of each page listed in `tools/pages.json`; add `-Theme dark` for the dark theme.
-- `http://localhost:8765/__phone?w=390&to=/d2l/home%23/` shows a page at phone width.
-- `node tools/dev-extension.js <folder>` writes a copy of the extension that also runs on `localhost`. Load that copy in a browser (for Firefox: `web-ext run --source-dir <folder>`) and open pages with `?bsxreal=1` to exercise the real extension against the made-up Brightspace. `http://localhost:8765/__status` lists what each opened page reported.
-
-## Layout
+- **Screenshots:** `tools/shots.ps1 -Out <folder>` saves a screenshot of each page. Add `-Theme dark` for the dark theme.
+- **Phone width:** `http://localhost:8765/__phone?w=390&to=/d2l/home%23/` shows a page at phone width.
+- **Loading the real extension against the dev server:** `node tools/dev-extension.js <folder>` writes a copy of the extension that also runs on localhost.
+- **Checking a real account:**
+  - The toolbar button runs the **access probe**. It reports which Brightspace endpoints your account can read, as statuses and field names only.
+  - **Check Ed** on Connected Sites does the same for Ed.
 
 | Path | Role |
 | --- | --- |
-| `extension/src/client.js` | Talks to the Brightspace API: versions, paging, throttling, a two-minute cache, answers kept from the last visit |
-| `extension/src/data.js` | Adapters that turn Brightspace responses into Canvas-shaped objects |
-| `extension/src/gradescope.js` | Optional Gradescope reader |
-| `extension/src/ui-core.js` | Frame, navigation, trays, routing, preferences, shared helpers |
-| `extension/src/ui-dashboard.js` | Dashboard views, Inbox, all courses, all grades, the To Do sidebar |
+| `extension/src/client.js` | Brightspace API: versions, paging, throttling, caching, the saved copy from the last visit, submissions and posts |
+| `extension/src/data.js` | Turns Brightspace answers into Canvas-shaped data: courses, work, grades and estimates, modules, links on course pages |
+| `extension/src/gradescope.js`, `ed.js` | Optional Gradescope and Ed readers |
+| `extension/src/ui-core.js` | Frame, menus, routing, preferences, framed Brightspace pages, outside work and overlap folding |
+| `extension/src/ui-dashboard.js` | Dashboard, Tasks Panel, Inbox, Groups, Connected Sites, all courses and grades |
 | `extension/src/ui-course.js` | Every page inside a course |
 | `extension/src/ui-calendar.js` | Calendar |
-| `extension/src/styles.js`, `icons.js` | Look: light and dark themes, icons |
-| `extension/background.js` | Runs the probe; fetches Gradescope pages for the reader |
-| `extension/probe.js` | Access probe, run from the toolbar button |
-| `fixtures/` | Probe reports |
-| `tools/`, `tests/` | Dev server, made-up Brightspace, page check, data test |
-| `docs/` | The plan, plus a reference pack on how Brightspace works (from a separate planner app; not used at runtime) |
+| `extension/src/styles.js`, `icons.js` | Themes, layout, motion, icons |
+| `extension/background.js` | Access probe; Gradescope and Ed requests; toolbar badge |
+| `extension/fonts/` | Lato (SIL Open Font License) |
+| `tools/`, `tests/`, `fixtures/` | Dev server and made-up sites, page check, data tests, probe reports |
+
+## Credits
+
+- **Tasks Panel:** its idea and layout follow [Tasks for Canvas](https://github.com/jtcheng26/canvas-task-extension) by jtcheng26 (MIT). It was written separately for Brightspace, with no code taken from that project.
+- **Lato font:** by Łukasz Dziedzic, under the SIL Open Font License.
+- **Licence:** MIT. See [LICENSE](LICENSE).

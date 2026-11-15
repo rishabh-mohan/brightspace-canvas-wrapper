@@ -330,6 +330,7 @@ function gradescope(path) {
       <tr role="row"><th class="table--primaryLink" scope="row"><a href="/courses/555/assignments/2/submissions/92">Written Homework 2</a></th><td class="submissionStatus"><div class="submissionStatus--text">Submitted</div></td>${dates(-6)}</tr>
       <tr role="row"><th class="table--primaryLink" scope="row">Written Homework 3</th><td class="submissionStatus"><div class="submissionStatus--text">No Submission</div></td>${dates(-2)}</tr>
       <tr role="row"><th class="table--primaryLink" scope="row"><button class="js-submitAssignment" data-assignment-id="4" type="button">Written Homework 4</button></th><td class="submissionStatus"><div class="submissionStatus--text">No Submission</div></td>${dates(4)}</tr>
+      <tr role="row"><th class="table--primaryLink" scope="row"><a href="/courses/555/assignments/5/submissions/95">Project 5</a></th><td class="submissionStatus"><div class="submissionStatus--score">17.0 / 20.0</div></td>${dates(2)}</tr>
       <tr role="row"><td colspan="3" class="dropzonePreview--fileNameHeader">Name</td></tr>
     </tbody></table></body></html>`;
   }
@@ -361,6 +362,13 @@ function ed(path) {
       { id: 5, title: 'Draft notes', due_at: due(5), state: 'draft' },
       { id: 6, title: 'Proj 6', due_at: (DATA.get(101).folders.find((f) => f.Name === 'Project 6') || {}).DueDate || due(10), effective_due_at: null, state: 'active', status: 'unattempted' },
     ], modules: [] };
+  }
+  if (path === '/api/courses/777/threads') {
+    return { threads: [
+      { id: 501, number: 12, type: 'announcement', title: 'Project 5 deadline extended', document: 'Project 5 is now due Friday. Office hours are moved to Thursday.', created_at: new Date(now - 2 * DAY).toISOString(), is_seen: false, is_pinned: true },
+      { id: 502, number: 13, type: 'question', title: 'How do I start Lab 3?', document: 'Question text', created_at: new Date(now - DAY).toISOString(), is_seen: true },
+      { id: 503, number: 9, type: 'announcement', title: 'Welcome to Ed', document: 'Ask questions here instead of by email.', created_at: new Date(now - 30 * DAY).toISOString(), is_seen: true },
+    ] };
   }
   if (path === '/api/courses/778/lessons') return { lessons: [{ id: 9, title: 'Kickoff survey', due_at: due(1), state: 'active' }] };
   return null;

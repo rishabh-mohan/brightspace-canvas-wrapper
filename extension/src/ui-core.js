@@ -359,6 +359,12 @@ BSX.ui = (() => {
     return kept;
   }
 
+  // Announcements from outside sites (Ed, when it is switched on) for the given courses.
+  function outsideAnnouncements(courses) {
+    if (!settings.ed?.on || !settings.ed.token || !BSX.ed) return Promise.resolve([]);
+    return BSX.ed.announcements(courses, { map: settings.ed.map || {}, region: settings.ed.region || 'us' }).catch(() => []);
+  }
+
   // Outside copies folded into this item (Brightspace work or a kept outside item).
   async function alsoOn(course, item) {
     await externalWork([course]).catch(() => []);
@@ -791,7 +797,13 @@ BSX.ui = (() => {
     const framed = Boolean(page.framed);
     const navOpen = () => (framed ? state.frameNav !== false : settings.navOpen);
     const nav = page.leftNav ? page.leftNav : null;
-    if (nav) nav.hidden = !navOpen();
+    // Open and close by sliding the menu's width (see .cnav.closed); a closed menu is inert.
+    const setNav = (open) => {
+      nav.classList.toggle('closed', !open);
+      nav.inert = !open;
+      nav.setAttribute('aria-hidden', String(!open));
+    };
+    if (nav) setNav(navOpen());
     if (page.crumbs) {
       const toggle = h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Show or hide course navigation', 'aria-expanded': String(Boolean(nav) && navOpen()), onclick: () => {
         if (framed) state.frameNav = !navOpen();
@@ -799,7 +811,7 @@ BSX.ui = (() => {
           settings.navOpen = !settings.navOpen;
           saveSettings();
         }
-        if (nav) nav.hidden = !navOpen();
+        if (nav) setNav(navOpen());
         toggle.setAttribute('aria-expanded', String(Boolean(nav) && navOpen()));
       } }, ic('menu', 24));
       const trail = page.crumbs.map((c, i) => [i ? h('span', { class: 'sep' }, ic('right', 14)) : null, c.href && i < page.crumbs.length - 1 ? h('a', { href: c.href }, c.label) : h('span', { class: 'here' }, c.label)]);
@@ -1073,7 +1085,7 @@ BSX.ui = (() => {
   return {
     h, ic, safeHref, cleanHtml, prose, plainOf, clip, num, pct, fmt, when, dayKey, bytes, DAY, COLORS,
     settings, saveSettings, colorOf, nameOf, focusCourses, state,
-    keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork, alsoOn, alsoChips, setLink, sameWork, workKey, edStatus: () => edState, folded,
+    keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork, alsoOn, alsoChips, setLink, sameWork, workKey, outsideAnnouncements, edStatus: () => edState, folded,
     courseHref, itemHref, wrapHref, bs, PLURAL,
     empty, tag, button, linkButton, lazy, sideSection, filterBox, flash, menu,
     views, render, reload, start,

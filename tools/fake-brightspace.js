@@ -358,6 +358,7 @@ function ed(path) {
       { id: 3, title: 'Written Homework 4', due_at: due(4), state: 'active', status: 'attempted' },
       { id: 4, title: 'Lab 2 warm-up', due_at: due(-2), state: 'active', status: 'completed' },
       { id: 5, title: 'Draft notes', due_at: due(5), state: 'draft' },
+      { id: 6, title: 'Proj 6', due_at: (DATA.get(101).folders.find((f) => f.Name === 'Project 6') || {}).DueDate || due(10), effective_due_at: null, state: 'active', status: 'unattempted' },
     ], modules: [] };
   }
   if (path === '/api/courses/778/lessons') return { lessons: [{ id: 9, title: 'Kickoff survey', due_at: due(1), state: 'active' }] };

@@ -688,18 +688,35 @@ BSX.data = (() => {
   // Links on the course's own Brightspace home page (its navigation bar and menus), for
   // tools the API does not list, such as Simple Syllabus or the notification settings.
   // Only same-site /d2l/ addresses are kept.
-  async function homeLinks(ou) {
+  // Each link also carries `group`: the name of the navigation-bar menu it sits in (such as
+  // "Course Tools"), taken from the nearest enclosing element that has a text or label.
+  // Kept in the saved cache, so course pages fill these in at once on the next visit.
+  const homeLinks = (ou) => client.keep(`homelinks:${ou}`, () => readHomeLinks(ou));
+  async function readHomeLinks(ou) {
     const html = await client.page(`/d2l/home/${encodeURIComponent(ou)}`).catch((e) => {
       if (e instanceof client.ApiError && e.status === 401) throw e;
       return '';
     });
     if (!html || typeof DOMParser === 'undefined') return [];
     const doc = new DOMParser().parseFromString(html, 'text/html');
+    const label = (el) => (el.getAttribute('text') || el.getAttribute('aria-label') || el.getAttribute('label') || '').replace(/\s+/g, ' ').trim();
+    const groupOf = (el) => {
+      for (let p = el.parentElement; p && p !== doc.body; p = p.parentElement) {
+        if (/dropdown|menu/i.test(p.tagName) || p.getAttribute('role') === 'menu') {
+          const own = label(p);
+          if (own) return own;
+          // A dropdown's name is usually on its opener, the element just before the menu.
+          const opener = p.closest('[class*="dropdown" i], d2l-dropdown, d2l-navigation-dropdown-button-icon');
+          if (opener && label(opener)) return label(opener);
+        }
+      }
+      return null;
+    };
     const out = [];
     for (const el of doc.querySelectorAll('[href]')) {
       const href = el.getAttribute('href') || '';
       const text = (el.getAttribute('text') || el.textContent || el.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
-      if (text && /^\/d2l\//.test(href)) out.push({ text, href });
+      if (text && /^\/d2l\//.test(href)) out.push({ text, href, group: groupOf(el) });
     }
     return out;
   }
@@ -717,18 +734,20 @@ BSX.data = (() => {
   // and whatever else the school adds), less the pages the wrapper already has and links
   // that lead away from this course (other courses, the personal menu).
   const COVERED = /^\/d2l\/(home\b|lp\/|api\/|logout|le\/content\/|le\/lessons\/|lms\/dropbox\/|lms\/quizzing\/|le\/\d+\/discussions\/|lms\/grades\/my_grades\/|lms\/classlist\/|lms\/news\/|lms\/email\/|Notifications\/)/i;
+  // Tools whose name is a page the wrapper already has, whatever address the school gives it.
+  const COVERED_NAMES = /^(content|course home|home|grades?|my grades|assignments?|dropbox|quizzes|discussions?|classlist|class list|announcements?|news|calendar|email|syllabus)$/i;
   async function courseTools(ou) {
     const seen = new Set();
     const out = [];
     for (const l of await homeLinks(ou)) {
-      if (COVERED.test(l.href) || l.text.length > 60) continue;
+      if (COVERED.test(l.href) || COVERED_NAMES.test(l.text) || l.text.length > 60) continue;
       const other = l.href.match(/[?&]ou=(\d+)/);
       if (other && other[1] !== String(ou)) continue; // a link into another course
       const key = l.href.replace(/#.*$/, '');
       if (seen.has(key) || seen.has(`t:${l.text.toLowerCase()}`)) continue;
       seen.add(key);
       seen.add(`t:${l.text.toLowerCase()}`);
-      out.push({ title: l.text, url: key });
+      out.push({ title: l.text, url: key, group: l.group || null });
     }
     return out;
   }

@@ -1,4 +1,4 @@
-﻿# Canvas-style wrapper for Brightspace
+# Canvas-style wrapper for Brightspace
 
 A browser extension that shows your Brightspace courses in Canvas's layout. It changes things on Brightspace only when you press a button for it: **Submit Assignment** (hands in a file) and **Post Reply** (posts in a discussion). Taking a quiz and text submissions happen on Brightspace's own page, shown inside the wrapper.
 

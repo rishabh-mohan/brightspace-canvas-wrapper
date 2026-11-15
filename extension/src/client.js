@@ -103,10 +103,12 @@ BSX.client = (() => {
     changeTimer = setTimeout(() => listeners.forEach((fn) => fn()), 300);
   }
 
-  function get(path) {
+  // `path` is an API address; `fetcher` (optional) produces the answer some other way, for
+  // facts worked out from a page (see keep).
+  function get(path, fetcher = raw) {
     const hit = cache.get(path);
     if (hit && Date.now() - hit.at < TTL) return hit.promise;
-    const fresh = raw(path);
+    const fresh = fetcher(path);
     fresh.then(
       (d) => remember(path, d),
       (e) => e instanceof ApiError && e.status === 401 && forget()
@@ -265,5 +267,9 @@ BSX.client = (() => {
   };
   const onChange = (fn) => listeners.add(fn);
 
-  return { ApiError, lp, le, lpPath, lePath, lpBookmarked, leObjects, page, send, clear, forget, onChange };
+  // A small fact worked out from a Brightspace page (such as the links on a course's home
+  // page), kept like an API answer: shown at once from the last visit, then refreshed.
+  const keep = (key, fetcher) => get(`keep:${key}`, () => fetcher());
+
+  return { ApiError, lp, le, lpPath, lePath, lpBookmarked, leObjects, page, send, keep, clear, forget, onChange };
 })();

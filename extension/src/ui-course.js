@@ -39,7 +39,15 @@
     const more = h('div');
     data.courseTools(course.id)
       .then((list) => {
-        if (list.length) more.replaceChildren(h('div', { class: 'sep' }, 'Course tools'), ...list.map((t) => h('a', { href: t.url, title: `${t.title} (Brightspace)` }, t.title)));
+        if (!list.length) return;
+        // Grouped the way Brightspace's navigation bar groups them; loose links under "Course tools".
+        const groups = new Map();
+        for (const t of list) {
+          const g = t.group || 'Course tools';
+          if (!groups.has(g)) groups.set(g, []);
+          groups.get(g).push(t);
+        }
+        more.replaceChildren(...[...groups.entries()].flatMap(([g, items]) => [h('div', { class: 'sep' }, g), ...items.map((t) => h('a', { href: t.url, title: `${t.title} (Brightspace)` }, t.title))]));
       })
       .catch(() => {});
     return h('nav', { class: 'cnav', 'aria-label': 'Course navigation' },

@@ -285,11 +285,34 @@ BSX.ui = (() => {
   const folded = new Map(); // course id -> Map(target key -> [outside items])
   let edState = { state: 'off', courses: [] };
   const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  // A name reduced to the kind of work and its number: "HW 4", "Homework 4" and "Homework
+  // Assignment #4" all give "homework 4". Common short forms are spelt out first.
+  const KINDS = [
+    [/\b(hw|hwk|homework|problem set|pset|ps)\b/, 'homework'],
+    [/\b(proj|project)\b/, 'project'],
+    [/\b(lab|labs|laboratory)\b/, 'lab'],
+    [/\b(quiz|quizzes)\b/, 'quiz'],
+    [/\b(exam|midterm|final)\b/, 'exam'],
+    [/\b(asg|assn|assignment|assgn)\b/, 'assignment'],
+    [/\b(essay|paper)\b/, 'essay'],
+    [/\b(reading|readings)\b/, 'reading'],
+  ];
+  function workKey(name) {
+    // "hw04" -> "hw 04", so the kind and the number are separate words.
+    const n = normName(name).replace(/([a-z])(\d)/g, '$1 $2').replace(/\b(no|number|num)\b/g, ' ');
+    const num = (n.match(/\b0*(\d{1,3})\b/) || [])[1];
+    if (num == null) return null;
+    const kinds = KINDS.filter(([re]) => re.test(n)).map(([, k]) => k);
+    // "Homework Assignment 4" names two kinds; the more specific one counts.
+    const kind = kinds.find((k) => k !== 'assignment') || kinds[0];
+    return kind ? `${kind} ${Number(num)}` : null;
+  }
   function sameWork(a, b) {
     const x = normName(a.name);
     const y = normName(b.name);
     if (!x || !y) return false;
-    const named = x === y || (Math.min(x.length, y.length) >= 6 && (x.includes(y) || y.includes(x)));
+    const ka = workKey(a.name);
+    const named = x === y || (Math.min(x.length, y.length) >= 6 && (x.includes(y) || y.includes(x))) || (ka != null && ka === workKey(b.name));
     if (!named) return false;
     if (!a.due_at || !b.due_at) return true;
     return Math.abs(Date.parse(a.due_at) - Date.parse(b.due_at)) <= 36 * 3600e3;
@@ -1049,7 +1072,7 @@ BSX.ui = (() => {
   return {
     h, ic, safeHref, cleanHtml, prose, plainOf, clip, num, pct, fmt, when, dayKey, bytes, DAY, COLORS,
     settings, saveSettings, colorOf, nameOf, focusCourses, state,
-    keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork, alsoOn, alsoChips, setLink, sameWork, edStatus: () => edState, folded,
+    keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork, alsoOn, alsoChips, setLink, sameWork, workKey, edStatus: () => edState, folded,
     courseHref, itemHref, wrapHref, bs, PLURAL,
     empty, tag, button, linkButton, lazy, sideSection, filterBox, flash, menu,
     views, render, reload, start,

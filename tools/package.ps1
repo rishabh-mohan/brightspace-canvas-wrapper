@@ -4,7 +4,11 @@
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 $root = Split-Path $PSScriptRoot -Parent
 $ext = Join-Path $root 'extension'
-$version = (Get-Content (Join-Path $ext 'manifest.json') -Raw | ConvertFrom-Json).version
+$manifestPath = Join-Path $ext 'manifest.json'
+# Browsers and Mozilla's validator want plain UTF-8 JSON: no byte-order mark, no syntax errors.
+$bytes = [IO.File]::ReadAllBytes($manifestPath)
+if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) { throw 'manifest.json starts with a byte-order mark; save it as UTF-8 without BOM.' }
+try { $version = ([Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json).version } catch { throw "manifest.json is not valid JSON: $_" }
 $dist = Join-Path $root 'dist'
 New-Item -ItemType Directory -Force $dist | Out-Null
 $zipPath = Join-Path $dist "brightspace-canvas-wrapper-$version.zip"

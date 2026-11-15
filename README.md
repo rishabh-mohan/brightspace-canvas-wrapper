@@ -7,7 +7,7 @@ It works on any school's Brightspace (`*.brightspace.com`) with a student accoun
 ## Install
 
 - **Firefox, permanently:** install the signed version from Firefox Add-ons (your own link from the Developer Hub).
-- **Firefox, for testing:** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-onâ€¦**, and pick `extension/manifest.json`. It is removed when Firefox closes.
+- **Firefox, for testing:** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on…**, and pick `extension/manifest.json`. It is removed when Firefox closes.
 - **Firefox for Android:** install the signed version from Firefox Add-ons.
 - **Chrome or Edge:** open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, and pick the `extension` folder.
 
@@ -77,7 +77,7 @@ Both are off until you switch them on under **Account â†’ Connected sites**
 
 **The same assignment in more than one place** is shown once. Brightspace's copy is kept first, then Gradescope's, then Ed's, and the others become small "Gradescope" and "Ed" links on it.
 - **How matching works:** names match even when written differently ("HW 4", "Homework Assignment #4"), and the due dates must be within a day and a half.
-- **Changing it:** on Connected Sites, link any item by hand (**Same as â€¦**) or keep it apart (**Keep separate**).
+- **Changing it:** on Connected Sites, link any item by hand (**Same as …**) or keep it apart (**Keep separate**).
 
 ## Privacy and what it changes
 
@@ -133,5 +133,6 @@ powershell -File tools\package.ps1 # builds dist/brightspace-canvas-wrapper-<ver
 ## Credits
 
 - **Tasks Panel:** its idea and layout follow [Tasks for Canvas](https://github.com/jtcheng26/canvas-task-extension) by jtcheng26 (MIT). It was written separately for Brightspace, with no code taken from that project.
-- **Lato font:** by Åukasz Dziedzic, under the SIL Open Font License.
+- **Lato font:** by Łukasz Dziedzic, under the SIL Open Font License.
+- **Confetti:** [canvas-confetti](https://github.com/catdad/canvas-confetti) 1.9.3 by Kiril Vatev (ISC licence), included unmodified as `extension/vendor/confetti.browser.js` from the published package, with its licence beside it.
 - **Licence:** MIT. See [LICENSE](LICENSE).

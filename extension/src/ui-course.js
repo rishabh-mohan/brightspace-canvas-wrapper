@@ -26,8 +26,16 @@
     const all = [{ id: 'home', name: 'Course Home', depth: 0, locked: false, items }, ...list];
     if (!withPinned) return all;
     // Pinned entries, in the order they were pinned, found wherever they sit now. An entry
-    // that no longer exists simply drops out.
+    // that no longer exists simply drops out. Pinned outside work (Ed, Gradescope; its pin is
+    // its text id) is looked up on those sites, waiting a few seconds at most.
     const byId = new Map(all.flatMap((m) => m.items.map((i) => [i.id, i])));
+    if (pinsOf(course.id).some((id) => typeof id === 'string')) {
+      const outside = await Promise.race([
+        ui.externalWork([course]).then((kept) => [...kept, ...[...(ui.folded.get(course.id)?.values() || [])].flat()]).catch(() => []),
+        new Promise((r) => setTimeout(() => r([]), 4000)),
+      ]);
+      for (const x of outside) byId.set(x.source_id, { id: x.source_id, title: x.name, type: x.source, external: x });
+    }
     const found = pinsOf(course.id).map((id) => byId.get(id)).filter(Boolean);
     return found.length ? [{ id: 'pinned', name: 'Pinned', depth: 0, locked: false, items: found }, ...all] : all;
   }
@@ -121,6 +129,7 @@
         h('summary', null, ic('down', 16), h('span', { class: 'gname' }, m.name), m.locked ? ui.tag('locked') : null),
         !m.items.length && hasChildren ? null : m.items.length
           ? m.items.map((i) => {
+              if (i.external) return outsideRow(courseId, i.external);
               const a = match(i);
               const sub = a ? [a.due_at ? `Due ${when(a.due_at)}` : null, a.grade ? `${num(a.grade.score)}/${num(a.grade.points_possible)} pts` : a.points_possible != null ? `${num(a.points_possible)} pts` : null].filter(Boolean).join('  |  ') || i.type : i.type;
               return h('div', { class: 'irow' },
@@ -178,6 +187,19 @@
     return entries.sort((a, b) => kindRank(a.name) - kindRank(b.name) || byName(a.name, b.name));
   }
 
+  // One piece of outside work as a module entry, with the same ⋮ (Pin) as course entries.
+  // Its pin is its text id (such as "ed-777-12"), so it never clashes with a Brightspace id.
+  function outsideRow(courseId, x) {
+    const done = Boolean(x.submitted || (x.grade && x.grade.score != null));
+    const late = !done && x.due_at && Date.parse(x.due_at) < Date.now();
+    const sub = [x.source, x.due_at ? `Due ${when(x.due_at)}` : 'No due date', x.grade ? `${num(x.grade.score)}/${num(x.grade.points_possible)} pts` : null, x.into ? `Shown with “${x.into}”` : null].filter(Boolean).join('  |  ');
+    return h('div', { class: 'irow' },
+      pinMenu(courseId, { id: x.source_id, title: x.name }),
+      h('span', { class: done ? 'iic ok' : 'iic' }, ic('assignment', 22)),
+      h('div', { class: 'imid' }, ui.itemLink(x), h('div', { class: 'muted small' }, sub)),
+      h('span', { class: `small nowrap ${done ? 'ok' : late ? 'bad' : 'muted'}` }, x.status || ''));
+  }
+
   // Work imported from outside sites, as one module per site ("[Ed]", "[Gradescope]") after
   // the course's own modules. Items folded into a Brightspace assignment are listed too,
   // marked with the assignment they are shown as. Loads on its own, so a slow site never
@@ -190,22 +212,13 @@
         if (!bySource.has(x.source)) bySource.set(x.source, []);
         bySource.get(x.source).push(x);
       }
-      const now = Date.now();
+      const row = (x) => outsideRow(course.id, x);
       // The site's own order (Ed: its modules, then lessons by index; Gradescope: its table),
       // falling back to due date for anything without one.
       const byOrder = (a, b) => {
         const x = a.order || [Infinity, Infinity];
         const y = b.order || [Infinity, Infinity];
         return x[0] - y[0] || x[1] - y[1] || Date.parse(a.due_at || 8.64e15) - Date.parse(b.due_at || 8.64e15);
-      };
-      const row = (x) => {
-        const done = Boolean(x.submitted || (x.grade && x.grade.score != null));
-        const late = !done && x.due_at && Date.parse(x.due_at) < now;
-        const sub = [x.due_at ? `Due ${when(x.due_at)}` : 'No due date', x.grade ? `${num(x.grade.score)}/${num(x.grade.points_possible)} pts` : null, x.into ? `Shown with “${x.into}”` : null].filter(Boolean).join('  |  ');
-        return h('div', { class: 'irow' },
-          h('span', { class: done ? 'iic ok' : 'iic' }, ic('assignment', 22)),
-          h('div', { class: 'imid' }, ui.itemLink(x), h('div', { class: 'muted small' }, sub)),
-          h('span', { class: `small nowrap ${done ? 'ok' : late ? 'bad' : 'muted'}` }, x.status || ''));
       };
       const box = (name, kids, count) => h('details', { class: 'group', open: true },
         h('summary', null, ic('down', 16), h('span', { class: 'gname' }, name), h('span', { class: 'count' }, count)), kids);

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T23:32:18.233Z",
+  "generatedAt": "2026-11-15T00:01:41.712Z",
   "authMode": "session",
   "versions": {
     "lp": "1.64",
@@ -382,10 +382,10 @@
       "endpoint": "le/calendar/events/myEvents/?orgUnitIdsCSV&startDateTime&endDateTime",
       "status": 200,
       "contentType": "application/json",
-      "count": 93,
+      "count": 100,
       "shape": {
         "Objects": {
-          "_array": 93,
+          "_array": 100,
           "_of": {
             "CalendarEventId": "number",
             "OrgUnitId": "number",
@@ -426,7 +426,7 @@
             "EventType": "number"
           }
         },
-        "Next": "null"
+        "Next": "string"
       }
     },
     {
@@ -865,7 +865,7 @@
     {
       "group": "course-1",
       "label": "Calendar events",
-      "endpoint": "le/{ou}/calendar/events/myEvents/?startDateTime=2026-10-15T23%3A32%3A19.104Z&endDateTime=2027-01-13T23%3A32%3A19.104Z",
+      "endpoint": "le/{ou}/calendar/events/myEvents/?startDateTime=2026-10-16T00%3A01%3A43.439Z&endDateTime=2027-01-14T00%3A01%3A43.439Z",
       "status": 200,
       "contentType": "application/json",
       "count": 75,
@@ -972,6 +972,14 @@
         },
         "HasAttachment": "boolean"
       }
+    },
+    {
+      "group": "course-1",
+      "label": "Course home page links",
+      "status": 200,
+      "linkCount": 77,
+      "syllabus": "/d#l/common/dialogs/quickLink/quickLink.d#l?ou=#&type=lti&rcode=…&srcou=#&launchFramed=#&framedName=Syllabus",
+      "notifications": "/d#l/Notifications/Settings?ou=#"
     },
     {
       "group": "course-1",
@@ -1108,6 +1116,738 @@
       "endpoint": "le/{ou}/content/toc",
       "status": 200,
       "contentType": "application/json",
+      "count": 13,
+      "shape": {
+        "Modules": {
+          "_array": 13,
+          "_of": {
+            "IsHidden": "boolean",
+            "SortOrder": "number",
+            "StartDateTime": "null",
+            "EndDateTime": "null",
+            "IsLocked": "boolean",
+            "PacingStartDate": "null",
+            "PacingEndDate": "null",
+            "DefaultPath": "string",
+            "ModuleId": "number",
+            "Title": "string",
+            "Modules": {
+              "_array": 0,
+              "_of": null
+            },
+            "Topics": {
+              "_array": 1,
+              "_of": {
+                "IsExempt": "boolean",
+                "IsHidden": "boolean",
+                "SortOrder": "number",
+                "StartDateTime": "null",
+                "EndDateTime": "null",
+                "IsLocked": "boolean",
+                "IsBroken": "boolean",
+                "ActivityId": "string",
+                "CompletionType": "number",
+                "TopicId": "number",
+                "Identifier": "string",
+                "TypeIdentifier": "string",
+                "Title": "string",
+                "Bookmarked": "boolean",
+                "Unread": "boolean",
+                "Url": "string",
+                "ToolId": "null",
+                "ToolItemId": "null",
+                "ActivityType": "number",
+                "GradeItemId": "null",
+                "LastModifiedDate": "string",
+                "Description": {
+                  "Text": "string",
+                  "Html": "string"
+                }
+              }
+            },
+            "LastModifiedDate": "string",
+            "Description": {
+              "Text": "string",
+              "Html": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Content root modules",
+      "endpoint": "le/{ou}/content/root/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 13,
+      "shape": {
+        "_array": 13,
+        "_of": {
+          "Description": {
+            "Text": "string",
+            "Html": "string"
+          },
+          "ParentModuleId": "null",
+          "ModuleDueDate": "null",
+          "Structure": {
+            "_array": 1,
+            "_of": {
+              "Id": "number",
+              "Title": "string",
+              "ShortTitle": "string",
+              "Type": "number",
+              "LastModifiedDate": "string"
+            }
+          },
+          "ModuleStartDate": "null",
+          "ModuleEndDate": "null",
+          "IsHidden": "boolean",
+          "IsLocked": "boolean",
+          "Id": "number",
+          "Title": "string",
+          "ShortTitle": "string",
+          "Type": "number",
+          "LastModifiedDate": "string"
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Assignment folders",
+      "endpoint": "le/{ou}/dropbox/folders/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 2,
+      "shape": {
+        "_array": 2,
+        "_of": {
+          "Id": "number",
+          "CategoryId": "null",
+          "Name": "string",
+          "CustomInstructions": {
+            "Text": "string",
+            "Html": "string"
+          },
+          "Attachments": {
+            "_array": 0,
+            "_of": null
+          },
+          "TotalFiles": "number",
+          "UnreadFiles": "number",
+          "FlaggedFiles": "number",
+          "TotalUsers": "number",
+          "TotalUsersWithSubmissions": "number",
+          "TotalUsersWithFeedback": "number",
+          "Availability": {
+            "StartDate": "null",
+            "EndDate": "string",
+            "StartDateAvailabilityType": "null",
+            "EndDateAvailabilityType": "number"
+          },
+          "IsHidden": "boolean",
+          "Assessment": {
+            "ScoreDenominator": "number",
+            "Rubrics": {
+              "_array": 0,
+              "_of": null
+            }
+          },
+          "DropboxType": "number",
+          "GroupTypeId": "null",
+          "DueDate": "string",
+          "DisplayInCalendar": "boolean",
+          "NotificationEmail": "null",
+          "LinkAttachments": {
+            "_array": 0,
+            "_of": null
+          },
+          "ActivityId": "string",
+          "IsAnonymous": "boolean",
+          "SubmissionType": "number",
+          "CompletionType": "number",
+          "AllowableFileType": "number",
+          "CustomAllowableFileTypes": "null",
+          "GradeItemId": "null",
+          "AllowOnlyUsersWithSpecialAccess": "null",
+          "SubmissionsRule": "number"
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Quizzes",
+      "endpoint": "le/{ou}/quizzes/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 1,
+      "shape": {
+        "Objects": {
+          "_array": 1,
+          "_of": {
+            "QuizId": "number",
+            "Name": "string",
+            "AutoExportToGrades": "boolean",
+            "IsActive": "boolean",
+            "GradeItemId": "number",
+            "IsAutoSetGraded": "boolean",
+            "Instructions": {
+              "Text": {
+                "Text": "string",
+                "Html": "string"
+              },
+              "IsDisplayed": "boolean"
+            },
+            "Description": {
+              "Text": {
+                "Text": "string",
+                "Html": "string"
+              },
+              "IsDisplayed": "boolean"
+            },
+            "Header": {
+              "Text": {
+                "Text": "string",
+                "Html": "string"
+              },
+              "IsDisplayed": "boolean"
+            },
+            "Footer": {
+              "Text": {
+                "Text": "string",
+                "Html": "string"
+              },
+              "IsDisplayed": "boolean"
+            },
+            "StartDate": "null",
+            "EndDate": "null",
+            "DueDate": "string",
+            "DisplayInCalendar": "boolean",
+            "SortOrder": "number",
+            "SubmissionTimeLimit": {
+              "IsEnforced": "boolean",
+              "ShowClock": "boolean",
+              "TimeLimitValue": "number"
+            },
+            "SubmissionGracePeriod": "number",
+            "LateSubmissionInfo": {
+              "LateSubmissionOption": "number",
+              "LateLimitMinutes": "null"
+            },
+            "AttemptsAllowed": {
+              "IsUnlimited": "boolean",
+              "NumberOfAttemptsAllowed": "null"
+            },
+            "Password": "null",
+            "AllowHints": "boolean",
+            "DisableRightClick": "boolean",
+            "DisablePagerAndAlerts": "boolean",
+            "RestrictIPAddressRange": {
+              "_array": 0,
+              "_of": null
+            },
+            "NotificationEmail": "null",
+            "CalcTypeId": "number",
+            "CategoryId": "null",
+            "PreventMovingBackwards": "boolean",
+            "Shuffle": "boolean",
+            "ActivityId": "string",
+            "AllowOnlyUsersWithSpecialAccess": "boolean",
+            "IsRetakeIncorrectOnly": "boolean",
+            "PagingTypeId": "number",
+            "IsSynchronous": "boolean",
+            "DeductionPercentage": "null",
+            "HideQuestionPoints": "boolean",
+            "IsSingleSession": "boolean",
+            "AnnotationToolsEnabled": "boolean"
+          }
+        },
+        "Next": "null"
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Discussion forums",
+      "endpoint": "le/{ou}/discussions/forums/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 2,
+      "shape": {
+        "_array": 2,
+        "_of": {
+          "ForumId": "number",
+          "Name": "string",
+          "Description": {
+            "Text": "string",
+            "Html": "string"
+          },
+          "ShowDescriptionInTopics": "boolean",
+          "AllowAnonymous": "boolean",
+          "IsLocked": "boolean",
+          "IsHidden": "boolean",
+          "RequiresApproval": "boolean",
+          "MustPostToParticipate": "boolean",
+          "DisplayInCalendar": "boolean",
+          "DisplayPostDatesInCalendar": "boolean",
+          "StartDate": "null",
+          "EndDate": "null",
+          "PostStartDate": "null",
+          "PostEndDate": "null",
+          "StartDateAvailabilityType": "null",
+          "EndDateAvailabilityType": "null"
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Grade items",
+      "endpoint": "le/{ou}/grades/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 23,
+      "shape": {
+        "_array": 23,
+        "_of": {
+          "Id": "number",
+          "Name": "string",
+          "ShortName": "string",
+          "GradeType": "string",
+          "CategoryId": "number",
+          "Description": {
+            "Text": "string",
+            "Html": "string"
+          },
+          "Weight": "number",
+          "AssociatedTool": "null",
+          "IsHidden": "boolean"
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Grade categories",
+      "endpoint": "le/{ou}/grades/categories/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 3,
+      "shape": {
+        "_array": 3,
+        "_of": {
+          "Id": "number",
+          "Grades": {
+            "_array": 1,
+            "_of": {
+              "MaxPoints": "number",
+              "CanExceedMaxPoints": "boolean",
+              "IsBonus": "boolean",
+              "ExcludeFromFinalGradeCalculation": "boolean",
+              "GradeSchemeId": "null",
+              "GradeSchemeUrl": "string",
+              "Id": "number",
+              "Name": "string",
+              "ShortName": "string",
+              "GradeType": "string",
+              "CategoryId": "number",
+              "Description": {
+                "Text": "string",
+                "Html": "string"
+              },
+              "Weight": "number",
+              "AssociatedTool": "null",
+              "IsHidden": "boolean"
+            }
+          },
+          "Name": "string",
+          "ShortName": "string",
+          "CanExceedMax": "boolean",
+          "ExcludeFromFinalGrade": "boolean",
+          "Description": {
+            "Content": "string",
+            "Type": "number"
+          },
+          "ShowDescription": "boolean",
+          "DisplayClassAverageToUsers": "boolean",
+          "DisplayGradeDistributionToUsers": "boolean",
+          "OverrideDisplayOptions": "boolean",
+          "DisplayPointsToUsers": "null",
+          "DisplayWeightToUsers": "null",
+          "DisplayGradeSchemeSymbolToUsers": "null",
+          "DisplayGradeSchemeColorToUsers": "null",
+          "StartDate": "null",
+          "EndDate": "null",
+          "Weight": "null",
+          "MaxPoints": "number",
+          "AutoPoints": "boolean",
+          "WeightDistributionType": "null",
+          "NumberOfHighestToDrop": "number",
+          "NumberOfLowestToDrop": "number"
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Grade setup",
+      "endpoint": "le/{ou}/grades/setup/",
+      "status": 200,
+      "contentType": "application/json",
+      "shape": {
+        "GradingSystem": "string",
+        "IsNullGradeZero": "boolean",
+        "DefaultGradeSchemeId": "number"
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "My grade values",
+      "endpoint": "le/{ou}/grades/values/myGradeValues/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 20,
+      "shape": {
+        "_array": 20,
+        "_of": {
+          "PointsNumerator": "number",
+          "PointsDenominator": "number",
+          "WeightedNumerator": "null",
+          "WeightedDenominator": "null",
+          "GradeObjectIdentifier": "string",
+          "GradeObjectName": "string",
+          "GradeObjectType": "number",
+          "GradeObjectTypeName": "string",
+          "DisplayedGrade": "string",
+          "Comments": {
+            "Text": "string",
+            "Html": "string"
+          },
+          "PrivateComments": {
+            "Text": "string",
+            "Html": "string"
+          },
+          "LastModified": "string",
+          "LastModifiedBy": "null",
+          "ReleasedDate": "null"
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "My final grade",
+      "endpoint": "le/{ou}/grades/final/values/myGradeValue",
+      "status": 404,
+      "contentType": "text/html"
+    },
+    {
+      "group": "course-2",
+      "label": "Announcements",
+      "endpoint": "le/{ou}/news/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 13,
+      "shape": {
+        "_array": 13,
+        "_of": {
+          "PinnedDate": "null",
+          "Id": "number",
+          "IsHidden": "boolean",
+          "Attachments": {
+            "_array": 0,
+            "_of": null
+          },
+          "CreatedBy": "number",
+          "CreatedDate": "string",
+          "LastModifiedBy": "null",
+          "LastModifiedDate": "string",
+          "Title": "string",
+          "Body": {
+            "Text": "string",
+            "Html": "string"
+          },
+          "StartDate": "string",
+          "EndDate": "null",
+          "IsGlobal": "boolean",
+          "IsPublished": "boolean",
+          "ShowOnlyInCourseOfferings": "boolean",
+          "IsAuthorInfoShown": "boolean",
+          "IsPinned": "boolean",
+          "IsStartDateShown": "boolean",
+          "SortOrder": "number"
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Calendar events",
+      "endpoint": "le/{ou}/calendar/events/myEvents/?startDateTime=2026-10-16T00%3A01%3A43.439Z&endDateTime=2027-01-14T00%3A01%3A43.439Z",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 12,
+      "shape": {
+        "Objects": {
+          "_array": 12,
+          "_of": {
+            "CalendarEventId": "number",
+            "OrgUnitId": "number",
+            "CreatorUserId": "number",
+            "Title": "string",
+            "Description": "string",
+            "CalendarEventViewUrl": "string",
+            "IsAllDayEvent": "boolean",
+            "GroupId": "null",
+            "StartDateTime": "string",
+            "EndDateTime": "string",
+            "IsRecurring": "boolean",
+            "RecurrenceInfo": "null",
+            "StartDay": "null",
+            "EndDay": "null",
+            "LocationId": "null",
+            "LocationName": "string",
+            "OrgUnitName": "string",
+            "OrgUnitCode": "string",
+            "IsAssociatedWithEntity": "boolean",
+            "AssociatedEntity": {
+              "AssociatedEntityType": "string",
+              "AssociatedEntityId": "number",
+              "Link": "string"
+            },
+            "HasVisibilityRestrictions": "boolean",
+            "VisibilityRestrictions": {
+              "Type": "number",
+              "Range": "null",
+              "HiddenRangeUnitType": "null",
+              "StartDate": "null",
+              "EndDate": "null"
+            },
+            "Presenters": {
+              "_array": 0,
+              "_of": null
+            },
+            "EventType": "number"
+          }
+        },
+        "Next": "null"
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Classlist",
+      "endpoint": "le/{ou}/classlist/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 68,
+      "shape": {
+        "_array": 68,
+        "_of": {
+          "Identifier": "string",
+          "ProfileIdentifier": "string",
+          "DisplayName": "string",
+          "Username": "null",
+          "OrgDefinedId": "null",
+          "Email": "string",
+          "FirstName": "string",
+          "LastName": "string",
+          "RoleId": "number",
+          "LastAccessed": "null",
+          "IsOnline": "boolean",
+          "ClasslistRoleDisplayName": "string",
+          "Pronouns": "null"
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "My updates",
+      "endpoint": "le/{ou}/updates/myUpdates",
+      "status": 200,
+      "contentType": "application/json",
+      "shape": {
+        "OrgUnitId": "string",
+        "UserId": "string",
+        "UnreadDiscussions": "number",
+        "UnapprovedDiscussions": "number",
+        "UnreadAssignmentFeedback": "number",
+        "UnattemptedQuizzes": "number",
+        "UnreadAssignmentSubmissions": "number",
+        "UngradedQuizzes": "number",
+        "PendingEnrollmentRequests": "number"
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Course overview (syllabus)",
+      "endpoint": "le/{ou}/overview",
+      "status": 200,
+      "contentType": "application/json",
+      "shape": {
+        "Description": {
+          "Text": "string",
+          "Html": "string"
+        },
+        "HasAttachment": "boolean"
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Course home page links",
+      "status": 200,
+      "linkCount": 77,
+      "syllabus": "/d#l/common/dialogs/quickLink/quickLink.d#l?ou=#&type=lti&rcode=…&srcou=#&launchFramed=#&framedName=Syllabus",
+      "notifications": "/d#l/Notifications/Settings?ou=#"
+    },
+    {
+      "group": "course-2",
+      "label": "Group categories",
+      "endpoint": "lp/{ou}/groupcategories/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 1,
+      "shape": {
+        "_array": 1,
+        "_of": {
+          "GroupCategoryId": "number",
+          "Name": "string",
+          "Description": {
+            "Text": "string",
+            "Html": "string"
+          },
+          "EnrollmentStyle": "number",
+          "MaxUsersPerGroup": "null",
+          "AutoEnroll": "boolean",
+          "RandomizeEnrollments": "boolean",
+          "Groups": {
+            "_array": 221,
+            "_of": "number"
+          },
+          "RestrictedByOrgUnitId": "null",
+          "DescriptionsVisibleToEnrolees": "boolean",
+          "AllocateAfterExpiry": "boolean",
+          "SelfEnrollmentStartDate": "null",
+          "SelfEnrollmentExpiryDate": "null",
+          "GroupPrefix": "string"
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Groups (first category)",
+      "endpoint": "lp/{ou}/groupcategories/{id}/groups/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 221,
+      "shape": {
+        "_array": 221,
+        "_of": {
+          "GroupId": "number",
+          "Name": "string",
+          "Code": "string",
+          "Description": {
+            "Text": "string",
+            "Html": "string"
+          },
+          "Enrollments": {
+            "_array": 1,
+            "_of": "number"
+          }
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "My submissions (first folder)",
+      "endpoint": "le/{ou}/dropbox/folders/{id}/submissions/mysubmissions/",
+      "status": 403,
+      "contentType": "application/json"
+    },
+    {
+      "group": "course-2",
+      "label": "My quiz attempts (first quiz)",
+      "endpoint": "le/{ou}/quizzes/{id}/attempts/",
+      "status": 403,
+      "contentType": "application/problem+json"
+    },
+    {
+      "group": "course-2",
+      "label": "Quiz summary page (first quiz)",
+      "endpoint": "/d2l/lms/quizzing/user/quiz_summary.d2l?qi={id}&ou={ou}",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "redirectedToLogin": false,
+      "labels": {
+        "allowed": ", #### ##:## PM Attempts Allowed - Unlimited, Completed -",
+        "completed": "pts Allowed - Unlimited, Completed - # Retake Incorrect Que",
+        "remaining": null
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Discussion topics (first forum)",
+      "endpoint": "le/{ou}/discussions/forums/{id}/topics/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 3,
+      "shape": {
+        "_array": 3,
+        "_of": {
+          "DueDate": "null",
+          "StartDateAvailabilityType": "null",
+          "EndDateAvailabilityType": "null",
+          "GroupTypeId": "null",
+          "ActivityId": "string",
+          "MustPostToParticipate": "boolean",
+          "RatingType": "number",
+          "DisplayInCalendar": "boolean",
+          "DisplayUnlockDatesInCalendar": "boolean",
+          "ForumId": "number",
+          "TopicId": "number",
+          "Name": "string",
+          "Description": {
+            "Text": "string",
+            "Html": "string"
+          },
+          "StartDate": "null",
+          "EndDate": "null",
+          "UnlockStartDate": "null",
+          "UnlockEndDate": "null",
+          "IsLocked": "boolean",
+          "AllowAnonymousPosts": "boolean",
+          "RequiresApproval": "boolean",
+          "UnapprovedPostCount": "number",
+          "PinnedPostCount": "number",
+          "ScoringType": "null",
+          "IsAutoScore": "boolean",
+          "ScoreOutOf": "null",
+          "IncludeNonScoredValues": "boolean",
+          "ScoredCount": "number",
+          "RatingsSum": "number",
+          "RatingsCount": "number",
+          "IsHidden": "boolean"
+        }
+      }
+    },
+    {
+      "group": "course-2",
+      "label": "Discussion posts (first topic)",
+      "endpoint": "le/{ou}/discussions/forums/{id}/topics/{id}/posts/",
+      "status": 200,
+      "contentType": "application/json",
+      "count": 0,
+      "shape": {
+        "_array": 0,
+        "_of": null
+      }
+    },
+    {
+      "group": "course-3",
+      "label": "Course image",
+      "endpoint": "lp/courses/{ou}/image",
+      "status": 200,
+      "contentType": "image/jpeg"
+    },
+    {
+      "group": "course-3",
+      "label": "Content table of contents",
+      "endpoint": "le/{ou}/content/toc",
+      "status": 200,
+      "contentType": "application/json",
       "count": 15,
       "shape": {
         "Modules": {
@@ -1167,7 +1907,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "Content root modules",
       "endpoint": "le/{ou}/content/root/",
       "status": 200,
@@ -1205,7 +1945,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "Assignment folders",
       "endpoint": "le/{ou}/dropbox/folders/",
       "status": 200,
@@ -1266,7 +2006,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "Quizzes",
       "endpoint": "le/{ou}/quizzes/",
       "status": 200,
@@ -1281,7 +2021,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "Discussion forums",
       "endpoint": "le/{ou}/discussions/forums/",
       "status": 200,
@@ -1293,7 +2033,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "Grade items",
       "endpoint": "le/{ou}/grades/",
       "status": 200,
@@ -1324,7 +2064,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "Grade categories",
       "endpoint": "le/{ou}/grades/categories/",
       "status": 200,
@@ -1385,7 +2125,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "Grade setup",
       "endpoint": "le/{ou}/grades/setup/",
       "status": 200,
@@ -1397,7 +2137,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "My grade values",
       "endpoint": "le/{ou}/grades/values/myGradeValues/",
       "status": 200,
@@ -1430,7 +2170,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "My final grade",
       "endpoint": "le/{ou}/grades/final/values/myGradeValue",
       "status": 200,
@@ -1459,7 +2199,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "Announcements",
       "endpoint": "le/{ou}/news/",
       "status": 200,
@@ -1497,9 +2237,9 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "Calendar events",
-      "endpoint": "le/{ou}/calendar/events/myEvents/?startDateTime=2026-10-15T23%3A32%3A19.104Z&endDateTime=2027-01-13T23%3A32%3A19.104Z",
+      "endpoint": "le/{ou}/calendar/events/myEvents/?startDateTime=2026-10-16T00%3A01%3A43.439Z&endDateTime=2027-01-14T00%3A01%3A43.439Z",
       "status": 200,
       "contentType": "application/json",
       "count": 18,
@@ -1550,7 +2290,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "Classlist",
       "endpoint": "le/{ou}/classlist/",
       "status": 200,
@@ -1576,7 +2316,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "My updates",
       "endpoint": "le/{ou}/updates/myUpdates",
       "status": 200,
@@ -1594,7 +2334,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "Course overview (syllabus)",
       "endpoint": "le/{ou}/overview",
       "status": 200,
@@ -1608,7 +2348,15 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
+      "label": "Course home page links",
+      "status": 200,
+      "linkCount": 77,
+      "syllabus": "/d#l/common/dialogs/quickLink/quickLink.d#l?ou=#&type=lti&rcode=…&srcou=#&launchFramed=#&framedName=Syllabus",
+      "notifications": "/d#l/Notifications/Settings?ou=#"
+    },
+    {
+      "group": "course-3",
       "label": "Group categories",
       "endpoint": "lp/{ou}/groupcategories/",
       "status": 200,
@@ -1620,7 +2368,7 @@
       }
     },
     {
-      "group": "course-2",
+      "group": "course-3",
       "label": "My submissions (first folder)",
       "endpoint": "le/{ou}/dropbox/folders/{id}/submissions/mysubmissions/",
       "status": 200,
@@ -1685,430 +2433,6 @@
           },
           "CompletionDate": "string"
         }
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Course image",
-      "endpoint": "lp/courses/{ou}/image",
-      "status": 200,
-      "contentType": "image/jpeg"
-    },
-    {
-      "group": "course-3",
-      "label": "Content table of contents",
-      "endpoint": "le/{ou}/content/toc",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 3,
-      "shape": {
-        "Modules": {
-          "_array": 3,
-          "_of": {
-            "IsHidden": "boolean",
-            "SortOrder": "number",
-            "StartDateTime": "null",
-            "EndDateTime": "null",
-            "IsLocked": "boolean",
-            "PacingStartDate": "null",
-            "PacingEndDate": "null",
-            "DefaultPath": "string",
-            "ModuleId": "number",
-            "Title": "string",
-            "Modules": {
-              "_array": 0,
-              "_of": null
-            },
-            "Topics": {
-              "_array": 1,
-              "_of": {
-                "IsExempt": "boolean",
-                "IsHidden": "boolean",
-                "SortOrder": "number",
-                "StartDateTime": "null",
-                "EndDateTime": "null",
-                "IsLocked": "boolean",
-                "IsBroken": "boolean",
-                "ActivityId": "string",
-                "CompletionType": "number",
-                "TopicId": "number",
-                "Identifier": "string",
-                "TypeIdentifier": "string",
-                "Title": "string",
-                "Bookmarked": "boolean",
-                "Unread": "boolean",
-                "Url": "string",
-                "ToolId": "number",
-                "ToolItemId": "number",
-                "ActivityType": "number",
-                "GradeItemId": "null",
-                "LastModifiedDate": "string",
-                "Description": {
-                  "Text": "string",
-                  "Html": "string"
-                }
-              }
-            },
-            "LastModifiedDate": "string",
-            "Description": {
-              "Text": "string",
-              "Html": "string"
-            }
-          }
-        }
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Content root modules",
-      "endpoint": "le/{ou}/content/root/",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 3,
-      "shape": {
-        "_array": 3,
-        "_of": {
-          "Description": {
-            "Text": "string",
-            "Html": "string"
-          },
-          "ParentModuleId": "null",
-          "ModuleDueDate": "null",
-          "Structure": {
-            "_array": 1,
-            "_of": {
-              "Id": "number",
-              "Title": "string",
-              "ShortTitle": "string",
-              "Type": "number",
-              "LastModifiedDate": "string"
-            }
-          },
-          "ModuleStartDate": "null",
-          "ModuleEndDate": "null",
-          "IsHidden": "boolean",
-          "IsLocked": "boolean",
-          "Id": "number",
-          "Title": "string",
-          "ShortTitle": "string",
-          "Type": "number",
-          "LastModifiedDate": "string"
-        }
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Assignment folders",
-      "endpoint": "le/{ou}/dropbox/folders/",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 0,
-      "shape": {
-        "_array": 0,
-        "_of": null
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Quizzes",
-      "endpoint": "le/{ou}/quizzes/",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 0,
-      "shape": {
-        "Objects": {
-          "_array": 0,
-          "_of": null
-        },
-        "Next": "null"
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Discussion forums",
-      "endpoint": "le/{ou}/discussions/forums/",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 0,
-      "shape": {
-        "_array": 0,
-        "_of": null
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Grade items",
-      "endpoint": "le/{ou}/grades/",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 30,
-      "shape": {
-        "_array": 30,
-        "_of": {
-          "Id": "number",
-          "Name": "string",
-          "ShortName": "string",
-          "GradeType": "string",
-          "CategoryId": "number",
-          "Description": {
-            "Text": "string",
-            "Html": "string"
-          },
-          "Weight": "number",
-          "AssociatedTool": "null",
-          "IsHidden": "boolean"
-        }
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Grade categories",
-      "endpoint": "le/{ou}/grades/categories/",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 8,
-      "shape": {
-        "_array": 8,
-        "_of": {
-          "Id": "number",
-          "Grades": {
-            "_array": 11,
-            "_of": {
-              "MaxPoints": "number",
-              "CanExceedMaxPoints": "boolean",
-              "IsBonus": "boolean",
-              "ExcludeFromFinalGradeCalculation": "boolean",
-              "GradeSchemeId": "null",
-              "GradeSchemeUrl": "string",
-              "Id": "number",
-              "Name": "string",
-              "ShortName": "string",
-              "GradeType": "string",
-              "CategoryId": "number",
-              "Description": {
-                "Text": "string",
-                "Html": "string"
-              },
-              "Weight": "number",
-              "AssociatedTool": "null",
-              "IsHidden": "boolean"
-            }
-          },
-          "Name": "string",
-          "ShortName": "string",
-          "CanExceedMax": "boolean",
-          "ExcludeFromFinalGrade": "boolean",
-          "Description": {
-            "Content": "string",
-            "Type": "number"
-          },
-          "ShowDescription": "boolean",
-          "DisplayClassAverageToUsers": "boolean",
-          "DisplayGradeDistributionToUsers": "boolean",
-          "OverrideDisplayOptions": "boolean",
-          "DisplayPointsToUsers": "null",
-          "DisplayWeightToUsers": "null",
-          "DisplayGradeSchemeSymbolToUsers": "null",
-          "DisplayGradeSchemeColorToUsers": "null",
-          "StartDate": "null",
-          "EndDate": "null",
-          "Weight": "number",
-          "MaxPoints": "number",
-          "AutoPoints": "null",
-          "WeightDistributionType": "number",
-          "NumberOfHighestToDrop": "number",
-          "NumberOfLowestToDrop": "number"
-        }
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Grade setup",
-      "endpoint": "le/{ou}/grades/setup/",
-      "status": 200,
-      "contentType": "application/json",
-      "shape": {
-        "GradingSystem": "string",
-        "IsNullGradeZero": "boolean",
-        "DefaultGradeSchemeId": "number"
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "My grade values",
-      "endpoint": "le/{ou}/grades/values/myGradeValues/",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 35,
-      "shape": {
-        "_array": 35,
-        "_of": {
-          "PointsNumerator": "number",
-          "PointsDenominator": "number",
-          "WeightedNumerator": "number",
-          "WeightedDenominator": "number",
-          "GradeObjectIdentifier": "string",
-          "GradeObjectName": "string",
-          "GradeObjectType": "number",
-          "GradeObjectTypeName": "string",
-          "DisplayedGrade": "string",
-          "Comments": {
-            "Text": "string",
-            "Html": "string"
-          },
-          "PrivateComments": {
-            "Text": "string",
-            "Html": "string"
-          },
-          "LastModified": "string",
-          "LastModifiedBy": "null",
-          "ReleasedDate": "null"
-        }
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "My final grade",
-      "endpoint": "le/{ou}/grades/final/values/myGradeValue",
-      "status": 200,
-      "contentType": "application/json",
-      "shape": {
-        "PointsNumerator": "number",
-        "PointsDenominator": "number",
-        "WeightedNumerator": "number",
-        "WeightedDenominator": "number",
-        "GradeObjectIdentifier": "string",
-        "GradeObjectName": "string",
-        "GradeObjectType": "number",
-        "GradeObjectTypeName": "null",
-        "DisplayedGrade": "string",
-        "Comments": {
-          "Text": "string",
-          "Html": "string"
-        },
-        "PrivateComments": {
-          "Text": "string",
-          "Html": "string"
-        },
-        "LastModified": "string",
-        "LastModifiedBy": "null",
-        "ReleasedDate": "null"
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Announcements",
-      "endpoint": "le/{ou}/news/",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 4,
-      "shape": {
-        "_array": 4,
-        "_of": {
-          "PinnedDate": "null",
-          "Id": "number",
-          "IsHidden": "boolean",
-          "Attachments": {
-            "_array": 0,
-            "_of": null
-          },
-          "CreatedBy": "number",
-          "CreatedDate": "string",
-          "LastModifiedBy": "null",
-          "LastModifiedDate": "string",
-          "Title": "string",
-          "Body": {
-            "Text": "string",
-            "Html": "string"
-          },
-          "StartDate": "string",
-          "EndDate": "string",
-          "IsGlobal": "boolean",
-          "IsPublished": "boolean",
-          "ShowOnlyInCourseOfferings": "boolean",
-          "IsAuthorInfoShown": "boolean",
-          "IsPinned": "boolean",
-          "IsStartDateShown": "boolean",
-          "SortOrder": "number"
-        }
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Calendar events",
-      "endpoint": "le/{ou}/calendar/events/myEvents/?startDateTime=2026-10-15T23%3A32%3A19.104Z&endDateTime=2027-01-13T23%3A32%3A19.104Z",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 0,
-      "shape": {
-        "Objects": {
-          "_array": 0,
-          "_of": null
-        },
-        "Next": "null"
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Classlist",
-      "endpoint": "le/{ou}/classlist/",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 492,
-      "shape": {
-        "_array": 492,
-        "_of": {
-          "Identifier": "string",
-          "ProfileIdentifier": "string",
-          "DisplayName": "string",
-          "Username": "null",
-          "OrgDefinedId": "null",
-          "Email": "string",
-          "FirstName": "string",
-          "LastName": "string",
-          "RoleId": "number",
-          "LastAccessed": "null",
-          "IsOnline": "boolean",
-          "ClasslistRoleDisplayName": "string",
-          "Pronouns": "null"
-        }
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "My updates",
-      "endpoint": "le/{ou}/updates/myUpdates",
-      "status": 200,
-      "contentType": "application/json",
-      "shape": {
-        "OrgUnitId": "string",
-        "UserId": "string",
-        "UnreadDiscussions": "number",
-        "UnapprovedDiscussions": "number",
-        "UnreadAssignmentFeedback": "number",
-        "UnattemptedQuizzes": "number",
-        "UnreadAssignmentSubmissions": "number",
-        "UngradedQuizzes": "number",
-        "PendingEnrollmentRequests": "number"
-      }
-    },
-    {
-      "group": "course-3",
-      "label": "Course overview (syllabus)",
-      "endpoint": "le/{ou}/overview",
-      "status": 404,
-      "contentType": "text/html"
-    },
-    {
-      "group": "course-3",
-      "label": "Group categories",
-      "endpoint": "lp/{ou}/groupcategories/",
-      "status": 200,
-      "contentType": "application/json",
-      "count": 0,
-      "shape": {
-        "_array": 0,
-        "_of": null
       }
     }
   ],

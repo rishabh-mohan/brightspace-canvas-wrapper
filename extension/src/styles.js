@@ -195,6 +195,9 @@ select.pick { width: auto; max-width: 320px; }
 .group summary::-webkit-details-marker { display: none; }
 .group:not([open]) summary .ic { transform: rotate(-90deg); }
 .group .gname { flex: 1; }
+/* a sub-module sits inside its parent module, indented, and collapses with it */
+.group .group { margin: 12px 14px 12px 28px; }
+.group .group summary { background: var(--bg); padding: 10px 12px; }
 .group .count { font-weight: 400; font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; }
 .irow { display: flex; gap: 14px; align-items: center; padding: 11px 14px; border-top: 1px solid var(--line); }
 .iic { color: var(--muted); display: inline-flex; flex: none; }

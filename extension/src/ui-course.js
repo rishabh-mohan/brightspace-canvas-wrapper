@@ -55,10 +55,24 @@
       byName.set(k, byName.has(k) ? null : a); // an ambiguous name matches nothing
     }
     const match = (i) => byName.get(`${i.type.toLowerCase()}:${i.title.trim().toLowerCase()}`) || null;
-    return list.map((m) =>
-      h('details', { class: 'group', open: true, style: `margin-left:${Math.min(m.depth, 4) * 22}px` },
+    // Sub-modules are placed inside their parent, so collapsing a module hides everything under it.
+    const roots = [];
+    const stack = [];
+    list.forEach((m, at) => {
+      const hasChildren = list[at + 1] && list[at + 1].depth > m.depth;
+      const el = moduleBox(courseId, m, match, hasChildren);
+      while (stack.length && stack[stack.length - 1].depth >= m.depth) stack.pop();
+      if (stack.length) stack[stack.length - 1].el.append(el);
+      else roots.push(el);
+      stack.push({ depth: m.depth, el });
+    });
+    return roots;
+  }
+
+  function moduleBox(courseId, m, match, hasChildren) {
+    return h('details', { class: 'group', open: true },
         h('summary', null, ic('down', 16), h('span', { class: 'gname' }, m.name), m.locked ? ui.tag('locked') : null),
-        m.items.length
+        !m.items.length && hasChildren ? null : m.items.length
           ? m.items.map((i) => {
               const a = match(i);
               const sub = a ? [a.due_at ? `Due ${when(a.due_at)}` : null, a.grade ? `${num(a.grade.score)}/${num(a.grade.points_possible)} pts` : a.points_possible != null ? `${num(a.points_possible)} pts` : null].filter(Boolean).join('  |  ') || i.type : i.type;
@@ -67,7 +81,7 @@
                 h('div', { class: 'imid' }, h('a', { class: i.unread ? 't' : 't read', href: a ? itemHref(courseId, a) : VIEWABLE.has(i.type) ? courseHref(courseId, 'modules', i.id) : i.html_url }, i.title), h('div', { class: 'muted small' }, sub)),
                 i.locked ? h('span', { class: 'muted' }, ic('lock', 16)) : a && a.grade ? h('span', { class: 'ok', title: 'Graded' }, ic('check', 18)) : i.unread ? h('span', { class: 'newdot', title: 'Not viewed yet' }) : null);
             })
-          : h('div', { class: 'irow muted small' }, 'No items in this module.')));
+          : h('div', { class: 'irow muted small' }, 'No items in this module.'));
   }
 
   // One module item shown inside the wrapper: a file in a viewer, an external tool in a

@@ -56,3 +56,4 @@
   "addtodo": "/d2l/home?bsxdo=click:.head%20.btn|type:.dialog%20input%5Btype%3Dtext%5D%3DGradescope%20HW%206|click:.dialog%20.btn.primary#/",
   "tick": "/d2l/home?bsxdash=list&bsxdo=click:.prow:not(.isdone)%20.pcheck#/"
 }
+

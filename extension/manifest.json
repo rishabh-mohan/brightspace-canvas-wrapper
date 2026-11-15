@@ -26,5 +26,5 @@
   "web_accessible_resources": [{ "resources": ["fonts/*.woff2"], "matches": ["https://*.brightspace.com/*"] }],
   "action": { "default_title": "Run Brightspace access probe" },
   "background": { "scripts": ["background.js"], "service_worker": "background.js" },
-  "browser_specific_settings": { "gecko": { "id": "brightspace-canvas-wrapper@local", "strict_min_version": "121.0", "data_collection_permissions": { "required": ["none"] } } }
+  "browser_specific_settings": { "gecko": { "id": "brightspace-canvas-wrapper@rishabh-mohan", "strict_min_version": "121.0", "data_collection_permissions": { "required": ["none"] } } }
 }

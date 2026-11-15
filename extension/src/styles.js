@@ -297,6 +297,11 @@ a.t:hover { color: var(--link); }
 .edform { display: grid; gap: 10px; max-width: 520px; margin: 14px 0; }
 .edform label { display: grid; gap: 4px; font-weight: 700; font-size: 14px; }
 
+/* confetti for a finished week */
+@keyframes bsx-confetti { 0% { transform: translate(0, -20px) rotate(0); opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(var(--drift), 100vh) rotate(var(--spin)); opacity: 0; } }
+.confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+.confetti i { position: absolute; top: -12px; width: 8px; height: 13px; border-radius: 2px; animation: bsx-confetti 2.4s cubic-bezier(.25,.6,.4,1) forwards; }
+
 /* Tasks panel */
 .tkhead { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 8px; }
 .tkweek { font-weight: 700; font-size: 14px; }

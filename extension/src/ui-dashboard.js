@@ -227,6 +227,20 @@
     return h('div', { class: 'tkchart' }, root, h('div', { class: 'tkcenter' }, h('span', { class: 'tkbig' }, big), h('span', { class: 'muted small' }, small)));
   }
 
+  // A short burst of confetti over the page, for a finished week. Plain elements with a CSS
+  // fall animation, removed after; nothing at all when reduced motion is asked for.
+  function confetti() {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const app = document.getElementById('bsx-root')?.shadowRoot?.querySelector('.app');
+    if (!app) return;
+    const layer = h('div', { class: 'confetti', 'aria-hidden': 'true' });
+    for (let n = 0; n < 90; n++) {
+      layer.append(h('i', { style: `left:${Math.random() * 100}%;background:${COLORS[n % COLORS.length]};animation-delay:${Math.random() * 0.6}s;animation-duration:${1.8 + Math.random() * 1.4}s;--drift:${Math.round(Math.random() * 160 - 80)}px;--spin:${Math.round(Math.random() * 720 - 360)}deg` }));
+    }
+    app.append(layer);
+    setTimeout(() => layer.remove(), 4000);
+  }
+
   function tasksPanel(courses) {
     const [start, end] = weekRange(taskView.week);
     const label = taskView.week === 0 ? 'This week' : taskView.week === -1 ? 'Last week' : taskView.week === 1 ? 'Next week' : `${ui.fmt.short.format(start)} – ${ui.fmt.short.format(new Date(end - 1))}`;
@@ -254,6 +268,13 @@
       }
       const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
       const done = items.filter((i) => i.done).length;
+      // Every task of the week done: confetti, once per week (remembered in preferences).
+      const weekKey = ui.dayKey(start);
+      if (items.length && done === items.length && !(settings.confetti || {})[weekKey]) {
+        settings.confetti = { [weekKey]: 1 }; // only the latest week is kept
+        ui.saveSettings();
+        setTimeout(confetti, 300);
+      }
       // Concentric rings, one per course (outermost first), each filled by the share done.
       const entries = [...byCourse.entries()];
       const rings = ringChart(entries.map(([id, c]) => ({ value: c.total ? c.done / c.total : 0, color: id ? colorOf(id) : 'var(--muted)', label: `${id ? names.get(id) || '' : 'My tasks'}: ${c.done} of ${c.total} done` })),

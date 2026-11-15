@@ -62,7 +62,7 @@ const ctx = {
 };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
-for (const f of ['src/client.js', 'src/data.js', 'src/gradescope.js']) vm.runInContext(fs.readFileSync(path.join(ext, f), 'utf8'), ctx, { filename: f });
+for (const f of ['src/client.js', 'src/data.js', 'src/gradescope.js', 'src/ed.js']) vm.runInContext(fs.readFileSync(path.join(ext, f), 'utf8'), ctx, { filename: f });
 
 const assert = require('assert');
 (async () => {
@@ -242,6 +242,23 @@ const assert = require('assert');
   const bodyText = await sent.opts.body.text();
   assert.match(bodyText, /Content-Type: application\/json\r\n\r\n\{"Text":"my comment","Html":null\}\r\n--/);
   assert.match(bodyText, /filename="file"[\s\S]*Content-Type: text\/plain\r\n\r\nhello\r\n--bsx\w+--/);
+
+  // Ed reader: course matching (automatic, chosen, hidden) and lessons turned into work items.
+  const edr = ctx.BSX.ed;
+  const bsCourses = [{ id: 101, course_code: 'wl.202710.CS.25100.LE1', name: 'CS 25100' }, { id: 102, course_code: 'wl.202710.MA.26100.050', name: 'MA 26100' }];
+  assert.strictEqual(edr.brightspaceFor({ id: 7, code: 'CS 251', name: 'DSA' }, bsCourses).id, 101);
+  assert.strictEqual(edr.brightspaceFor({ id: 7, code: 'CS 251', name: 'DSA' }, bsCourses, { 7: 102 }).id, 102);
+  assert.strictEqual(edr.brightspaceFor({ id: 7, code: 'CS 251', name: 'DSA' }, bsCourses, { 7: 0 }), null);
+  assert.strictEqual(edr.brightspaceFor({ id: 8, code: 'ECE 100', name: 'Club' }, bsCourses), null);
+  const lessons = edr.lessonItems({ id: 7 }, { lessons: [
+    { id: 1, title: 'HW 1', due_at: soon, status: 'completed' },
+    { id: 2, title: 'HW 2', due_at: soon, status: 'unattempted' },
+    { id: 3, title: 'Hidden', due_at: soon, is_hidden: true },
+    { id: 4, title: 'Draft', due_at: soon, state: 'draft' },
+    { id: 5, title: 'No date' }] }, bsCourses[0], 'us');
+  assert.deepStrictEqual(Array.from(lessons, (l) => `${l.name}:${l.submitted}`), ['HW 1:true', 'HW 2:false']);
+  assert.strictEqual(lessons[0].html_url, 'https://edstem.org/us/courses/7/lessons/1');
+  assert.strictEqual(lessons[0].course_id, 101);
 
   // Posting in a discussion: one JSON POST in Brightspace's CreatePostData shape.
   posts.length = 0;

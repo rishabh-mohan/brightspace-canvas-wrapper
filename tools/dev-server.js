@@ -6,7 +6,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { handle, gradescope, quizSummary, submit } = require('./fake-brightspace');
+const { handle, gradescope, quizSummary, submit, ed } = require('./fake-brightspace');
 const statuses = []; // what pages reported back about themselves (see the page script below)
 
 const ext = path.join(__dirname, '..', 'extension');
@@ -28,8 +28,8 @@ function page(real) {
   const q = new URLSearchParams(location.search);
   if (q.get('bsxframe')) window.BSX_DEV_FRAME = true; // phone-width preview, see /__phone
   localStorage.setItem('XSRF.Token', 'dev-xsrf'); // Brightspace keeps its anti-forgery token here
-  const preset = { theme: q.get('bsxtheme'), dash: q.get('bsxdash'), gradescope: q.get('bsxgs') ? true : null, wideCards: q.get('bsxwide') ? true : null, tasks: q.get('bsxtasks') ? true : null };
-  const any = preset.theme || preset.dash || preset.gradescope || preset.wideCards || preset.tasks;
+  const preset = { theme: q.get('bsxtheme'), dash: q.get('bsxdash'), gradescope: q.get('bsxgs') ? true : null, wideCards: q.get('bsxwide') ? true : null, tasks: q.get('bsxtasks') ? true : null, ed: q.get('bsxed') ? { on: true, token: 'dev-token', region: 'us', map: {} } : null };
+  const any = preset.theme || preset.dash || preset.gradescope || preset.wideCards || preset.tasks || preset.ed;
   const read = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   // When the real extension is loaded (tools/dev-extension.js) it has its own storage and
   // background script; these stand-ins are only for the plain page.
@@ -41,6 +41,11 @@ function page(real) {
     // Stand-in for the background script's Gradescope fetch.
     runtime: { sendMessage: async (msg) => {
       if (msg.type === 'bsx-badge') { document.documentElement.setAttribute('data-bsx-badge', String(msg.count)); return null; }
+      if (msg.type === 'bsx-ed') {
+        if (q.get('bsxedperm') === '0') return { error: 'permission' };
+        const r = await fetch('/__ed' + msg.path);
+        return r.ok ? { json: await r.json() } : { error: 'Ed returned ' + r.status };
+      }
       if (msg.type !== 'bsx-gradescope') return null;
       if (q.get('bsxgsperm') === '0') return { error: 'permission' }; // as Firefox before access is allowed
       const res = await fetch('/__gradescope' + msg.path);
@@ -115,6 +120,10 @@ http
       const src = `${before}${before.includes('?') ? '&' : '?'}bsxframe=1${hash != null ? `#${hash}` : ''}`;
       const w = Number(url.searchParams.get('w')) || 390;
       return send(200, 'text/html; charset=utf-8', `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#888"><iframe src="${src.replace(/"/g, '&quot;')}" style="width:${w}px;height:100vh;border:0;display:block;background:#fff"></iframe></body>`);
+    }
+    if (url.pathname.startsWith('/__ed/')) {
+      const body = ed(url.pathname.slice('/__ed'.length));
+      return body ? send(200, 'application/json', JSON.stringify(body)) : send(404, 'text/plain', 'Not found');
     }
     if (url.pathname.startsWith('/__gradescope/')) {
       const html = url.searchParams.get('signedout') ? null : gradescope(url.pathname.slice('/__gradescope'.length));

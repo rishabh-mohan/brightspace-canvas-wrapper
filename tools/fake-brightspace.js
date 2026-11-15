@@ -334,4 +334,33 @@ function gradescope(path) {
   return null;
 }
 
-module.exports = { handle, gradescope, quizSummary, submit };
+// A made-up Ed Discussion API: GET /api/user and /api/courses/{id}/lessons. CS 251 matches
+// Brightspace course 101; its "Project 5" duplicates Brightspace's and its "Written
+// Homework 4" duplicates Gradescope's, so both kinds of overlap are exercised.
+function ed(path) {
+  const due = (days) => {
+    const d = new Date(now + days * DAY);
+    d.setHours(23, 59, 0, 0);
+    return d.toISOString();
+  };
+  if (path === '/api/user') {
+    return { user: { id: 9, name: 'Student One' }, courses: [
+      { course: { id: 777, code: 'CS 251', name: 'Data Structures and Algorithms', year: '2026', session: 'Fall', status: 'active', features: { lessons: true } }, role: { role: 'student' } },
+      { course: { id: 778, code: 'ECE 100', name: 'Robotics Club', year: '2026', session: 'Fall', status: 'active', features: { lessons: true } }, role: { role: 'student' } },
+    ] };
+  }
+  if (path === '/api/courses/777/lessons') {
+    const p5 = DATA.get(101).folders.find((f) => f.Name === 'Project 5');
+    return { lessons: [
+      { id: 1, title: 'Project 5', due_at: p5 ? p5.DueDate : due(2), state: 'active', status: 'unattempted' },
+      { id: 2, title: 'Lab 3 warm-up', due_at: due(3), state: 'active', status: 'unattempted' },
+      { id: 3, title: 'Written Homework 4', due_at: due(4), state: 'active', status: 'attempted' },
+      { id: 4, title: 'Lab 2 warm-up', due_at: due(-2), state: 'active', status: 'completed' },
+      { id: 5, title: 'Draft notes', due_at: due(5), state: 'draft' },
+    ], modules: [] };
+  }
+  if (path === '/api/courses/778/lessons') return { lessons: [{ id: 9, title: 'Kickoff survey', due_at: due(1), state: 'active' }] };
+  return null;
+}
+
+module.exports = { handle, gradescope, quizSummary, submit, ed };

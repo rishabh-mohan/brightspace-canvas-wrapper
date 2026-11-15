@@ -174,7 +174,8 @@
   }
 
   // ---- assignments, quizzes, discussions (lists) -------------------------------
-  function workRow(courseId, a) {
+  function workRow(course, a) {
+    const courseId = course.id;
     const now = Date.now();
     const status = h('span', { class: 'small nowrap' });
     const show = (done, text) => {
@@ -193,7 +194,7 @@
     const sub = [a.forum, a.due_at ? h('span', null, h('b', null, 'Due'), ` ${when(a.due_at)}`) : 'No due date', score].filter(Boolean);
     const el = h('div', { class: 'irow' },
       h('span', { class: 'iic ok' }, ic(KIND[a.kind].icon, 22)),
-      h('div', { class: 'imid' }, h('a', { class: 't', href: itemHref(courseId, a) }, a.name), h('div', { class: 'muted small' }, sub.map((s, i) => [i ? '  |  ' : null, s]))),
+      h('div', { class: 'imid' }, h('a', { class: 't', href: itemHref(courseId, a) }, a.name), h('div', { class: 'muted small' }, sub.map((s, i) => [i ? '  |  ' : null, s]), ui.alsoChips(course, a))),
       status);
     return [el, a.name];
   }
@@ -211,7 +212,7 @@
     const byDue = (a, b) => Date.parse(a.due_at) - Date.parse(b.due_at);
     const rows = [];
     const make = (a) => {
-      const row = workRow(course.id, a);
+      const row = workRow(course, a);
       rows.push(row);
       return row;
     };
@@ -279,10 +280,32 @@
     : g.state === 'error' ? `Gradescope could not be read. ${g.why || ''}`
     : null;
 
+  const edNote = (state) =>
+    state === 'no_permission' ? ['Firefox has not allowed this extension on edstem.org yet. ', h('button', { class: 'btn', type: 'button', onclick: () => (globalThis.browser || globalThis.chrome)?.runtime?.sendMessage({ type: 'bsx-grant', site: 'ed' }) }, 'Allow Ed access'), ' then press Refresh.']
+    : state === 'bad_token' ? ['Ed did not accept your API token. ', h('a', { href: '#/connections' }, 'Replace it'), '.']
+    : null;
+
+  // Outside work for a course, one group per site, without the items folded into others.
   function gradescopeGroup(course) {
-    return ui.lazy(gradescopeFor(course), (g) => {
-      if (!g) return null;
+    const sources = Promise.all([gradescopeFor(course), ui.externalWork([course]).catch(() => [])]);
+    return ui.lazy(sources, ([g, kept]) => {
       const now = Date.now();
+      const groups = [];
+      const ed = settings.ed?.on && settings.ed.token ? ui.edStatus() : null;
+      if (ed && (ed.state !== 'ok' || kept.some((i) => i.source === 'Ed'))) {
+        const note = edNote(ed.state);
+        const rows = kept.filter((i) => i.source === 'Ed').map((i) => h('div', { class: 'irow' },
+          h('span', { class: 'iic ok' }, ic('assignment', 22)),
+          h('div', { class: 'imid' }, ui.itemLink(i), h('div', { class: 'muted small' }, i.due_at ? [h('b', null, 'Due'), ` ${when(i.due_at)}`] : 'No due date')),
+          h('span', { class: `small nowrap ${i.submitted ? 'ok' : i.due_at && Date.parse(i.due_at) < now ? 'bad' : 'muted'}` }, i.status)));
+        groups.push(h('details', { class: 'group', open: true },
+          h('summary', null, ic('down', 16), h('span', { class: 'gname' }, 'Ed Discussion'), h('span', { class: 'count' }, rows.length)),
+          note ? h('div', { class: 'irow muted small' }, h('span', null, note)) : null,
+          rows));
+      }
+      if (!g) return groups;
+      const shown = new Set(kept.filter((i) => i.source === 'Gradescope').map((i) => i.source_id));
+      g = { ...g, items: g.items.filter((i) => shown.has(i.source_id)) };
       const note = gradescopeNote(g);
       const rows = g.items.map((i) => {
         const late = i.due_at && Date.parse(i.due_at) < now && !i.submitted;
@@ -292,11 +315,11 @@
           h('div', { class: 'imid' }, ui.itemLink(i), h('div', { class: 'muted small' }, [i.due_at ? h('span', null, h('b', null, 'Due'), ` ${when(i.due_at)}`) : 'No due date', score].filter(Boolean).map((s, n) => [n ? '  |  ' : null, s]))),
           h('span', { class: `small nowrap ${i.submitted ? 'ok' : late ? 'bad' : 'muted'}` }, i.status));
       });
-      return h('details', { class: 'group', open: true },
+      return [h('details', { class: 'group', open: true },
         h('summary', null, ic('down', 16), h('span', { class: 'gname' }, 'Gradescope'), h('span', { class: 'count' }, g.items.length)),
         note ? h('div', { class: 'irow muted small' }, h('span', null, note)) : null,
         rows,
-        !note && !rows.length ? h('div', { class: 'irow muted small' }, 'No assignments in Gradescope yet.') : null);
+        !note && !rows.length ? h('div', { class: 'irow muted small' }, 'No other assignments in Gradescope.') : null), ...groups];
     }, '');
   }
 
@@ -453,6 +476,7 @@
         orphanResults.length ? [h('h2', { class: 'sect' }, 'Rubric results'), orphanResults.map((x) => h('p', null, x.score != null ? `Score: ${num(x.score)}` : '', x.feedback ? h('div', { class: 'cfb' }, x.feedback) : null))] : null),
       side: [
         ui.sideSection('Submission', [statusLine, files.length ? h('ul', { class: 'filelist' }, files.map(fileItem)) : null]),
+        ui.lazy(ui.alsoOn(course, a), (list) => (list.length ? ui.sideSection('Also on', [list.map((x) => h('div', { class: 'todo' }, h('span', { class: 'todoic' }, ic('external', 18)), h('div', { class: 'tmid' }, h('a', { class: 't', href: x.html_url, target: '_blank', rel: 'noopener noreferrer' }, `${x.source}: ${x.name}`), h('div', { class: 'm' }, [x.status, x.auto ? 'matched automatically' : 'linked by you'].filter(Boolean).join(' · '))))), h('a', { class: 'sidelink small', href: '#/connections' }, 'Change matches')]) : null), ''),
         gradePanel(a.grade || (fb && fb.score != null ? { score: fb.score, points_possible: a.points_possible, displayed: '', comment: '' } : null), a.points_possible),
         fb && (fb.comment_html || fb.comment || fb.files.length || fb.links.length)
           ? ui.sideSection('Feedback', [prose(fb.comment_html, fb.comment), fb.files.length || fb.links.length ? h('ul', { class: 'filelist' }, fb.files.map(fileItem), fb.links.map(linkItem)) : null])

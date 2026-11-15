@@ -277,6 +277,13 @@ a.t:hover { color: var(--link); }
 .linkbtn { margin-top: 8px; border: 0; background: none; padding: 2px 0; color: var(--link); font-size: 14px; display: inline-flex; align-items: center; gap: 4px; }
 .linkbtn:hover { text-decoration: underline; }
 
+/* outside copies of an item, and the Connected Sites page */
+.also { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: middle; }
+.alsochip { font-size: 12px; padding: 0 7px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); }
+.alsochip:hover { color: var(--link); border-color: var(--link); text-decoration: none; }
+.edform { display: grid; gap: 10px; max-width: 520px; margin: 14px 0; }
+.edform label { display: grid; gap: 4px; font-weight: 700; font-size: 14px; }
+
 /* Tasks panel */
 .tkhead { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 8px; }
 .tkweek { font-weight: 700; font-size: 14px; }

@@ -198,7 +198,9 @@ BSX.ui = (() => {
   const THEMES = ['auto', 'light', 'dark'];
   const store = (globalThis.browser || globalThis.chrome)?.storage?.local;
   // todos: the student's own planner items. done / dismissed: keys of items ticked off or hidden.
-  const settings = { theme: 'auto', courses: {}, dash: 'cards', navOpen: true, calHidden: [], asgBy: 'date', todos: [], done: {}, dismissed: {} };
+  // ed: the Ed Discussion reader (on, token, region, map of Ed course -> Brightspace course).
+  // links: outside items the student folded into another item, or kept 'separate'.
+  const settings = { theme: 'auto', courses: {}, dash: 'cards', navOpen: true, calHidden: [], asgBy: 'date', todos: [], done: {}, dismissed: {}, ed: { on: false, token: '', region: 'us', map: {} }, links: {} };
   async function loadSettings() {
     try {
       const saved = (await store.get('bsx'))?.bsx;
@@ -219,6 +221,8 @@ BSX.ui = (() => {
       if (typeof saved.overlay === 'boolean') settings.overlay = saved.overlay;
       if (typeof saved.wideCards === 'boolean') settings.wideCards = saved.wideCards;
       if (typeof saved.tasks === 'boolean') settings.tasks = saved.tasks;
+      if (saved.ed && typeof saved.ed === 'object') settings.ed = { on: Boolean(saved.ed.on), token: typeof saved.ed.token === 'string' ? saved.ed.token : '', region: ['us', 'au', 'eu', 'ca'].includes(saved.ed.region) ? saved.ed.region : 'us', map: saved.ed.map && typeof saved.ed.map === 'object' ? { ...saved.ed.map } : {} };
+      if (saved.links && typeof saved.links === 'object') settings.links = { ...saved.links };
     } catch {}
   }
   function saveSettings() {
@@ -259,12 +263,83 @@ BSX.ui = (() => {
     return h('a', { class: 't', href: i.kind ? itemHref(i.course_id, i) : courseHref(i.course_id, 'assignments') }, i.name || i.title);
   }
 
-  // Work in Gradescope for the given courses, when the student has switched that on.
-  // Only courses with a Gradescope link in their Content are asked about.
+  // Work from outside Brightspace for the given courses: Gradescope (courses with a
+  // Gradescope link in Content) and Ed Discussion, each only when switched on.
+  //
+  // The same assignment often appears in two or three places. An outside item is folded
+  // into another when the student said so (settings.links: its key -> the other item's id,
+  // or 'separate' to keep it apart), or else when the names match and the due dates are
+  // within a day and a half. Brightspace's copy wins, then Gradescope's, then Ed's. Folded
+  // items are not listed again; alsoOn() returns them for the item they were folded into.
+  const folded = new Map(); // course id -> Map(target key -> [outside items])
+  let edState = { state: 'off', courses: [] };
+  const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  function sameWork(a, b) {
+    const x = normName(a.name);
+    const y = normName(b.name);
+    if (!x || !y) return false;
+    const named = x === y || (Math.min(x.length, y.length) >= 6 && (x.includes(y) || y.includes(x)));
+    if (!named) return false;
+    if (!a.due_at || !b.due_at) return true;
+    return Math.abs(Date.parse(a.due_at) - Date.parse(b.due_at)) <= 36 * 3600e3;
+  }
+  const targetKey = (item) => (item.kind === 'external' ? keyOf(item) : item.id);
+
   async function externalWork(courses) {
-    if (!settings.gradescope || !BSX.gradescope) return [];
-    const has = await Promise.all(courses.map((c) => data.externalTools(c.id).then((tools) => tools.some((t) => /gradescope/i.test(t.title))).catch(() => false)));
-    return BSX.gradescope.forCourses(courses.filter((c, n) => has[n]));
+    const parts = [];
+    if (settings.gradescope && BSX.gradescope) {
+      const has = await Promise.all(courses.map((c) => data.externalTools(c.id).then((tools) => tools.some((t) => /gradescope/i.test(t.title))).catch(() => false)));
+      parts.push(BSX.gradescope.forCourses(courses.filter((c, n) => has[n])));
+    }
+    if (settings.ed?.on && settings.ed.token && BSX.ed) {
+      parts.push(BSX.ed.forCourses(courses, { map: settings.ed.map || {}, region: settings.ed.region || 'us' }).then((r) => {
+        edState = r;
+        return r.items;
+      }));
+    }
+    if (!parts.length) return [];
+    const outside = (await Promise.all(parts.map((p) => p.catch(() => [])))).flat();
+    const rank = { Gradescope: 0, Ed: 1 };
+    outside.sort((a, b) => (rank[a.source] ?? 2) - (rank[b.source] ?? 2));
+    const ids = [...new Set(outside.map((x) => x.course_id))];
+    const work = new Map(await Promise.all(ids.map((id) => data.assignments(id).then((l) => [id, l]).catch(() => [id, []]))));
+    for (const c of courses) folded.set(c.id, new Map());
+    const kept = [];
+    for (const x of outside) {
+      const link = settings.links[keyOf(x)];
+      const mine = work.get(x.course_id) || [];
+      const others = kept.filter((k) => k.course_id === x.course_id && k.source !== x.source);
+      let target = null;
+      if (link && link !== 'separate') target = mine.find((a) => a.id === link) || others.find((k) => keyOf(k) === link) || null;
+      else if (!link) target = mine.find((a) => sameWork(a, x)) || others.find((k) => sameWork(k, x)) || null;
+      if (!target) {
+        kept.push(x);
+        continue;
+      }
+      const bag = folded.get(x.course_id) || new Map();
+      folded.set(x.course_id, bag);
+      const k = targetKey(target);
+      bag.set(k, [...(bag.get(k) || []), { ...x, auto: !link, into: target.name }]);
+    }
+    return kept;
+  }
+
+  // Outside copies folded into this item (Brightspace work or a kept outside item).
+  async function alsoOn(course, item) {
+    await externalWork([course]).catch(() => []);
+    return folded.get(course.id)?.get(targetKey(item)) || [];
+  }
+  // Small "Also on Ed / Gradescope" links for an item with folded copies.
+  function alsoChips(course, item) {
+    const box = h('span', { class: 'also' });
+    alsoOn(course, item).then((list) => box.replaceChildren(...list.map((x) => h('a', { class: 'alsochip', href: webHref(x.html_url) || '#/', target: '_blank', rel: 'noopener noreferrer', title: `${x.name} on ${x.source}${x.status ? ` · ${x.status}` : ''}` }, x.source, ' ', ic('external', 11))))).catch(() => {});
+    return box;
+  }
+  function setLink(item, target) {
+    if (target == null) delete settings.links[keyOf(item)];
+    else settings.links[keyOf(item)] = target;
+    saveSettings();
+    render();
   }
 
   function todoDialog(existing, courses) {
@@ -450,6 +525,7 @@ BSX.ui = (() => {
     if (hash === '#/grades') return { view: 'allgrades', nav: 'dashboard' };
     if (hash === '#/inbox') return { view: 'inbox', nav: 'inbox' };
     if (hash === '#/groups') return { view: 'groups', nav: 'groups' };
+    if (hash === '#/connections') return { view: 'connections', nav: null };
     if (hash.startsWith('#/open?u=')) {
       let u = '';
       try {
@@ -588,6 +664,9 @@ BSX.ui = (() => {
       h('div', { class: 'traylabel' }, 'Gradescope'),
       h('div', { class: 'seg' }, [false, true].map((on) => h('button', { type: 'button', class: Boolean(settings.gradescope) === on ? 'on' : null, onclick: () => { settings.gradescope = on; saveSettings(); reload(); openTray('account'); } }, on ? 'Read it' : 'Off'))),
       h('p', { class: 'muted small', style: 'margin:8px 4px 0' }, 'When on, courses with a Gradescope link also show your Gradescope assignments, due dates and scores. It reads two Gradescope pages with your own Gradescope sign-in and changes nothing there.'),
+      h('div', { class: 'traylabel' }, 'Ed Discussion'),
+      h('div', { class: 'seg' }, [false, true].map((on) => h('button', { type: 'button', class: Boolean(settings.ed.on) === on ? 'on' : null, onclick: () => { settings.ed.on = on; saveSettings(); if (on && !settings.ed.token) { openTray(null); location.hash = '#/connections'; return; } reload(); openTray('account'); } }, on ? 'Read it' : 'Off'))),
+      h('a', { class: 'trayitem', href: '#/connections' }, 'Connected sites: Ed token, course matching, overlaps'),
       h('div', { class: 'traylabel' }, 'Pages'),
       h('a', { class: 'trayitem', href: '#/grades' }, 'Grades for all courses'),
       h('a', { class: 'trayitem', href: '#/courses' }, 'All Courses'),
@@ -904,7 +983,7 @@ BSX.ui = (() => {
   return {
     h, ic, safeHref, cleanHtml, prose, plainOf, clip, num, pct, fmt, when, dayKey, bytes, DAY, COLORS,
     settings, saveSettings, colorOf, nameOf, focusCourses, state,
-    keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork,
+    keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork, alsoOn, alsoChips, setLink, sameWork, edStatus: () => edState, folded,
     courseHref, itemHref, wrapHref, bs, PLURAL,
     empty, tag, button, linkButton, lazy, sideSection, filterBox, flash, menu,
     views, render, reload, start,

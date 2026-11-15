@@ -334,6 +334,111 @@
     };
   };
 
+  // ---- Connected sites: Gradescope and Ed Discussion -------------------------
+  // Switches, the Ed token, which Brightspace course each Ed course belongs to, and every
+  // place the same assignment shows up twice (folded into one, or kept apart).
+  ui.views.connections = async () => {
+    const courses = await data.courses();
+    const visible = state.showAll ? courses : ui.focusCourses(courses);
+    const ed = settings.ed;
+    const save = () => { ui.saveSettings(); if (BSX.ed) BSX.ed.clear(); if (BSX.gradescope) BSX.gradescope.clear(); ui.render(); };
+    const onoff = (on, set) => h('div', { class: 'seg' }, [false, true].map((v) => h('button', { type: 'button', class: Boolean(on) === v ? 'on' : null, onclick: () => { set(v); save(); } }, v ? 'On' : 'Off')));
+    const grant = (site) => h('button', { class: 'btn', type: 'button', onclick: () => (globalThis.browser || globalThis.chrome)?.runtime?.sendMessage({ type: 'bsx-grant', site }) }, `Allow ${site === 'ed' ? 'edstem.org' : 'gradescope.com'} access`);
+
+    // Ed: token and region.
+    const token = h('input', { class: 'txt', type: 'password', autocomplete: 'off', placeholder: ed.token ? 'Saved (paste a new one to replace it)' : 'Paste your Ed API token', 'aria-label': 'Ed API token' });
+    const region = h('select', { class: 'txt pick', 'aria-label': 'Ed region' }, [['us', 'United States (edstem.org/us)'], ['au', 'Australia (edstem.org/au)'], ['eu', 'Europe (edstem.org/eu)'], ['ca', 'Canada (edstem.org/ca)']].map(([v, t]) => h('option', { value: v, selected: ed.region === v }, t)));
+    const saveToken = () => { if (token.value.trim()) ed.token = token.value.trim(); ed.region = region.value; ed.on = true; save(); ui.flash('Ed settings saved.'); };
+    const forget = () => { ed.token = ''; ed.on = false; save(); ui.flash('Ed token removed.'); };
+
+    // Ed courses and their Brightspace match, once Ed answers.
+    const edPart = ed.on && ed.token && BSX.ed
+      ? ui.lazy(BSX.ed.forCourses(visible, { map: ed.map, region: ed.region }), (r) => {
+          if (r.state === 'no_permission') return h('p', null, 'Firefox has not allowed this extension on edstem.org yet. ', grant('ed'), ' then press Refresh.');
+          if (r.state === 'bad_token') return h('p', { class: 'bad' }, 'Ed did not accept this token. Make a new one in Ed (Settings → API Tokens) and paste it above.');
+          if (r.state === 'no_token') return h('p', { class: 'muted' }, 'Paste an Ed API token above.');
+          if (!r.courses.length) return h('p', { class: 'muted' }, 'No current Ed courses with lessons were found on your Ed account.');
+          return h('table', { class: 'grid' },
+            h('thead', null, h('tr', null, h('th', null, 'Ed course'), h('th', null, 'Shown under'), h('th', { class: 'num' }, 'Items'))),
+            h('tbody', null, r.courses.map((e) => {
+              const auto = BSX.ed.brightspaceFor(e, visible, {});
+              const has = Object.prototype.hasOwnProperty.call(ed.map, e.id);
+              const pick = h('select', { class: 'txt pick', 'aria-label': `Brightspace course for ${e.code || e.name}` },
+                h('option', { value: 'auto', selected: !has }, auto ? `Automatic: ${nameOf(auto)}` : 'Automatic: no match'),
+                visible.map((c) => h('option', { value: String(c.id), selected: has && Number(ed.map[e.id]) === c.id }, nameOf(c))),
+                h('option', { value: '0', selected: has && Number(ed.map[e.id]) === 0 }, 'Don’t show'));
+              pick.addEventListener('change', () => { if (pick.value === 'auto') delete ed.map[e.id]; else ed.map[e.id] = Number(pick.value); save(); });
+              const count = r.items.filter((i) => i.source_id.startsWith(`ed-${e.id}-`)).length;
+              return h('tr', null, h('td', null, h('div', { class: 't' }, e.code || e.name), h('div', { class: 'muted small' }, [e.name !== e.code ? e.name : '', e.term].filter(Boolean).join(' · '))), h('td', null, pick), h('td', { class: 'num' }, String(count)));
+            })));
+        })
+      : null;
+
+    // Overlaps, course by course: folded copies with "Keep separate", and every outside item
+    // with a "Same as" choice.
+    const overlaps = (settings.gradescope || (ed.on && ed.token))
+      ? ui.lazy(Promise.all(visible.map(async (c) => {
+          const kept = await ui.externalWork([c]).catch(() => []);
+          const work = await data.assignments(c.id).catch(() => []);
+          return { c, kept, work, bag: ui.folded.get(c.id) || new Map() };
+        })), (rows) => {
+          const blocks = rows.filter((r) => r.kept.length || r.bag.size).map(({ c, kept, work, bag }) => {
+            const foldedRows = [...bag.entries()].flatMap(([, list]) => list.map((x) => h('div', { class: 'irow' },
+              h('span', { class: 'iic ok' }, ic('check', 18)),
+              h('div', { class: 'imid' }, h('div', { class: 't' }, `${x.source}: ${x.name}`), h('div', { class: 'muted small' }, `Shown as one with “${x.into}”${x.auto ? ' (matched automatically)' : ''}`)),
+              h('button', { class: 'btn', type: 'button', onclick: () => ui.setLink(x, 'separate') }, 'Keep separate'))));
+            const keptRows = kept.map((x) => {
+              const choose = h('select', { class: 'txt pick', 'aria-label': `Same as, for ${x.name}` },
+                h('option', { value: '' }, settings.links[ui.keyOf(x)] === 'separate' ? 'Kept separate' : 'Not linked'),
+                work.map((a) => h('option', { value: a.id }, `Brightspace: ${a.name}`)),
+                kept.filter((k) => k !== x && k.source !== x.source).map((k) => h('option', { value: ui.keyOf(k) }, `${k.source}: ${k.name}`)));
+              choose.addEventListener('change', () => ui.setLink(x, choose.value || null));
+              return h('div', { class: 'irow' },
+                h('span', { class: 'iic' }, ic('external', 18)),
+                h('div', { class: 'imid' }, h('div', { class: 't' }, `${x.source}: ${x.name}`), h('div', { class: 'muted small' }, x.due_at ? `Due ${when(x.due_at)}` : 'No due date')),
+                h('label', { class: 'small' }, 'Same as ', choose));
+            });
+            return h('details', { class: 'group', open: true }, h('summary', null, ic('down', 16), h('span', { class: 'gname' }, nameOf(c)), h('span', { class: 'count' }, foldedRows.length + keptRows.length)), foldedRows, keptRows);
+          });
+          return blocks.length ? blocks : h('p', { class: 'muted' }, 'No outside work found for your current courses.');
+        })
+      : h('p', { class: 'muted' }, 'Turn on Gradescope or Ed above to see outside work here.');
+
+    return {
+      title: 'Connected Sites',
+      body: [
+        h('h2', { class: 'sect' }, 'Gradescope'),
+        h('div', { class: 'row', style: 'align-items:center' }, onoff(settings.gradescope, (v) => (settings.gradescope = v)), h('span', { class: 'muted small' }, 'Reads your Gradescope assignments with your own Gradescope sign-in.')),
+        h('h2', { class: 'sect' }, 'Ed Discussion'),
+        h('div', { class: 'row', style: 'align-items:center' }, onoff(ed.on, (v) => (ed.on = v)), h('span', { class: 'muted small' }, 'Reads your Ed lessons and their due dates.')),
+        h('div', { class: 'edform' },
+          h('label', null, 'API token', token),
+          h('label', null, 'Region', region),
+          h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'button', onclick: saveToken }, 'Save'), ed.token ? h('button', { class: 'btn', type: 'button', onclick: forget }, 'Remove token') : null,
+            ed.token ? h('button', { class: 'btn', type: 'button', title: 'Copies field names and types of Ed’s answers, with no values', onclick: async (ev) => {
+              const btn = ev.currentTarget;
+              btn.disabled = true;
+              const text = JSON.stringify(await BSX.ed.report(), null, 2);
+              btn.disabled = false;
+              const box = h('textarea', { class: 'txt', rows: '8', readonly: true, 'aria-label': 'Ed check report' }, text);
+              btn.closest('.edform').append(box);
+              try {
+                await navigator.clipboard.writeText(text);
+                ui.flash('Ed check copied. Paste it into the chat.');
+              } catch {
+                box.select();
+                ui.flash('Select the report below and copy it.');
+              }
+            } }, 'Check Ed') : null),
+          h('p', { class: 'muted small' }, 'Make a token in Ed under Settings → API Tokens. It is kept in this browser only and sent only to edstem.org.')),
+        edPart,
+        h('h2', { class: 'sect' }, 'Same assignment in more than one place'),
+        h('p', { class: 'muted small' }, 'Matching names due within a day and a half are shown as one, keeping Brightspace’s copy first, then Gradescope’s, then Ed’s. Change any match here.'),
+        overlaps,
+      ],
+    };
+  };
+
   // Canvas's Groups page: each group you belong to, its course and category, and members
   // where Brightspace lets a student see them.
   ui.views.groups = async () => {

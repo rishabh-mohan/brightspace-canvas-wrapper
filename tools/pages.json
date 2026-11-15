@@ -15,7 +15,11 @@
   "quizsummary": "/d2l/home#/courses/102/quizzes/10251",
   "dashmenu": "/d2l/home?bsxclick=.head%20.menuwrap%20.iconbtn#/",
   "flash": "/d2l/home?bsxdo=click:.head%20.btn|type:.dialog%20input=Read%20chapter%206|click:.dialog%20.btn.primary#/",
-  "tasks": "/d2l/home?bsxtasks=1#/",
+  "connections": "/d2l/home?bsxgs=1&bsxed=1#/connections",
+  "edlist": "/d2l/home?bsxgs=1&bsxed=1#/courses/101/assignments",
+  "edfolded": "/d2l/home?bsxgs=1&bsxed=1#/courses/101/assignments/10105",
+  "edperm": "/d2l/home?bsxed=1&bsxedperm=0#/connections",
+  "tasks":"/d2l/home?bsxtasks=1#/",
   "taskmenu": "/d2l/home?bsxtasks=1&bsxclick=.head%20.menuwrap%20.iconbtn#/",
   "embedded":"/d2l/le/calendar/101",
   "intercept": "/d2l/home?bsxclick=.cnav%20a%5Bhref%5E%3D%22%2Fd2l%2Fhome%22%5D#/courses/101",
@@ -62,4 +66,5 @@
   "addtodo": "/d2l/home?bsxdo=click:.head%20.btn|type:.dialog%20input%5Btype%3Dtext%5D%3DGradescope%20HW%206|click:.dialog%20.btn.primary#/",
   "tick": "/d2l/home?bsxdash=list&bsxdo=click:.prow:not(.isdone)%20.pcheck#/"
 }
+
 

@@ -21,8 +21,31 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // where one click asks for gradescope.com (a permission request needs a click on an
   // extension page, not on Brightspace).
   if (msg && msg.type === 'bsx-grant' && sender.id === api.runtime.id) {
-    api.tabs.create({ url: api.runtime.getURL('grant.html') });
+    api.tabs.create({ url: api.runtime.getURL(`grant.html${msg.site === 'ed' ? '?site=ed' : ''}`) });
     return undefined;
+  }
+  // Ed Discussion (edstem.org) for the optional Ed reader. Ed signs requests with a personal
+  // API token the student pastes into the wrapper; it is read from extension storage here,
+  // so it never passes through the page. Only two GET routes are allowed.
+  if (msg && msg.type === 'bsx-ed' && sender.id === api.runtime.id) {
+    const path = String(msg.path || '');
+    if (!/^\/api\/(user|courses\/\d+\/lessons)$/.test(path)) {
+      sendResponse({ error: 'Not allowed.' });
+      return undefined;
+    }
+    (async () => {
+      const ok = api.permissions && api.permissions.contains ? await api.permissions.contains({ origins: ['https://*.edstem.org/*'] }) : true;
+      if (!ok) return sendResponse({ error: 'permission' });
+      const saved = (await api.storage.local.get('bsx')).bsx || {};
+      const token = saved.ed && saved.ed.token;
+      const region = ['us', 'au', 'eu', 'ca'].includes(saved.ed && saved.ed.region) ? saved.ed.region : 'us';
+      if (!token) return sendResponse({ error: 'no_token' });
+      const res = await fetch(`https://${region}.edstem.org${path}`, { headers: { Authorization: `Bearer ${token}` }, credentials: 'omit' });
+      if (res.status === 401 || res.status === 403) return sendResponse({ error: 'bad_token' });
+      if (!res.ok) return sendResponse({ error: `Ed returned ${res.status}` });
+      sendResponse({ json: await res.json() });
+    })().catch((e) => sendResponse({ error: String(e) }));
+    return true;
   }
   if (!msg || msg.type !== 'bsx-gradescope') return undefined;
   const path = String(msg.path || '');

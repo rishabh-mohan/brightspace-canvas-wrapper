@@ -17,13 +17,37 @@
   // The course's content plus a first "Course Home" module: the instructor's Brightspace
   // homepage (shown in a frame, so its widgets and welcome text stay as they made them)
   // and the syllabus when there is one.
-  async function courseModules(course) {
+  // A "Pinned" module comes first of all when the student has pinned entries (see pinMenu).
+  async function courseModules(course, { withPinned = true } = {}) {
     const list = await data.modules(course.id);
     const items = [{ id: 0, title: 'Course homepage', type: 'Course home', unread: false, locked: false, url: bs.home(course.id), html_url: bs.home(course.id) }];
     // Always listed: the syllabus page shows the school's syllabus tool or the course overview.
     items.push({ id: -1, title: 'Syllabus', type: 'Syllabus', unread: false, locked: false, url: '', html_url: courseHref(course.id, 'syllabus') });
-    return [{ id: 'home', name: 'Course Home', depth: 0, locked: false, items }, ...list];
+    const all = [{ id: 'home', name: 'Course Home', depth: 0, locked: false, items }, ...list];
+    if (!withPinned) return all;
+    // Pinned entries, in the order they were pinned, found wherever they sit now. An entry
+    // that no longer exists simply drops out.
+    const byId = new Map(all.flatMap((m) => m.items.map((i) => [i.id, i])));
+    const found = pinsOf(course.id).map((id) => byId.get(id)).filter(Boolean);
+    return found.length ? [{ id: 'pinned', name: 'Pinned', depth: 0, locked: false, items: found }, ...all] : all;
   }
+
+  // ---- pins --------------------------------------------------------------------
+  const pinsOf = (courseId) => (settings.pins && Array.isArray(settings.pins[courseId]) ? settings.pins[courseId] : []);
+  function setPinned(courseId, itemId, on) {
+    settings.pins = settings.pins || {};
+    const now = pinsOf(courseId).filter((id) => id !== itemId);
+    settings.pins[courseId] = on ? [...now, itemId] : now;
+    if (!settings.pins[courseId].length) delete settings.pins[courseId];
+    ui.saveSettings();
+    ui.flash(on ? 'Pinned to the top of this course.' : 'Unpinned.');
+    ui.render();
+  }
+  // The ⋮ menu on the left of a module entry.
+  const pinMenu = (courseId, i) => {
+    const pinned = pinsOf(courseId).includes(i.id);
+    return ui.menu(`More for ${i.title}`, [{ label: pinned ? 'Unpin' : 'Pin', onclick: () => setPinned(courseId, i.id, !pinned) }]);
+  };
   const whatIf = { on: false, courseId: null, overrides: new Map() };
 
   // ---- course navigation -----------------------------------------------------
@@ -100,6 +124,7 @@
               const a = match(i);
               const sub = a ? [a.due_at ? `Due ${when(a.due_at)}` : null, a.grade ? `${num(a.grade.score)}/${num(a.grade.points_possible)} pts` : a.points_possible != null ? `${num(a.points_possible)} pts` : null].filter(Boolean).join('  |  ') || i.type : i.type;
               return h('div', { class: 'irow' },
+                pinMenu(courseId, i),
                 h('span', { class: a ? 'iic ok' : 'iic' }, ic(TYPE_ICON[i.type] || 'item', 22)),
                 h('div', { class: 'imid' }, h('a', { class: i.unread ? 't' : 't read', href: a ? itemHref(courseId, a) : VIEWABLE.has(i.type) ? courseHref(courseId, 'modules', i.id) : i.html_url }, i.title), h('div', { class: 'muted small' }, sub)),
                 i.locked ? h('span', { class: 'muted' }, ic('lock', 16)) : a && a.grade ? h('span', { class: 'ok', title: 'Graded' }, ic('check', 18)) : i.unread ? h('span', { class: 'newdot', title: 'Not viewed yet' }) : null);
@@ -138,7 +163,7 @@
   // One module item shown inside the wrapper: a file in a viewer, an external tool in a
   // frame, or a link. Each keeps a button to the original, in case the frame stays blank.
   async function moduleItem(course, r) {
-    const list = await courseModules(course);
+    const list = await courseModules(course, { withPinned: false }); // Previous/Next follow the course's own order
     const flat = list.flatMap((m) => m.items.map((i) => ({ ...i, module: m.name })));
     const at = flat.findIndex((i) => i.id === r.itemId);
     if (at < 0) return notFound('item', course.id, 'modules');

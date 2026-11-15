@@ -31,7 +31,8 @@ If nothing appears in Firefox, open `about:addons`, choose the extension, and un
 **In a course**
 - **Home**: recent announcements and the course's modules.
 - **Modules**:
-  - **Course Home** comes first, with the instructor's Brightspace homepage and the syllabus.
+  - **Pin** any entry from the ⋮ on its left. Pinned entries show in a **Pinned** module at the top of Home and Modules.
+  - **Course Home** comes next, with the instructor's Brightspace homepage and the syllabus.
   - Each module's own text and images are its first item.
   - Imported work gets **[Gradescope]** and **[Ed]** modules.
   - Files, tools and links open inside the page, with Previous and Next.
@@ -83,6 +84,10 @@ Both are off until you switch them on under **Account → Connected sites**.
 - **What it keeps, and where:** preferences, your own To Do items, your Ed token and recent Brightspace answers (kept to load pages faster) are stored in this browser only. Signing out of Brightspace clears the kept answers.
 - **Changes to Brightspace:** it only changes anything when you press **Submit Assignment** or **Post Reply**. Quizzes and text-entry submissions use Brightspace's own pages, shown inside the wrapper.
 - **Showing instructor content:** text from Brightspace (announcements, instructions, posts) is cleaned before it is shown. Only formatting, links and images are kept.
+
+## Planned
+
+- **Ed scores**: Ed records a score for each submission, but where it keeps them hasn't been confirmed. **Check Ed** on Connected Sites already inspects one completed lesson and its challenge submissions (field names and types only); its report would show which fields to read. Until then Ed work shows completion only, and Gradescope is the only outside site that fills in grades.
 
 ## Limits
 

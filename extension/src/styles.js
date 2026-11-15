@@ -195,7 +195,10 @@ select.pick { width: auto; max-width: 320px; }
 .cnav a { display: block; padding: 5px 10px 5px 12px; border-left: 2px solid transparent; font-size: 15.5px; }
 .cnav a.on { color: var(--fg); border-left-color: var(--fg); }
 .cnav .sep { margin: 16px 0 4px; padding: 0 12px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
-.group { margin-bottom: 18px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+/* Not clipped, so an entry's ⋮ menu can open over what follows; the header rounds itself. */
+.group { margin-bottom: 18px; border: 1px solid var(--line); border-radius: 4px; }
+.group > summary { border-radius: 3px 3px 0 0; }
+.group:not([open]) > summary { border-radius: 3px; }
 .group summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 700; padding: 13px 14px; background: var(--soft); list-style: none; }
 .group summary::-webkit-details-marker { display: none; }
 .group:not([open]) summary .ic { transform: rotate(-90deg); }
@@ -206,6 +209,11 @@ select.pick { width: auto; max-width: 320px; }
 .group .count { font-weight: 400; font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; }
 .irow { display: flex; gap: 14px; align-items: center; padding: 11px 14px; border-top: 1px solid var(--line); }
 .iic { color: var(--muted); display: inline-flex; flex: none; }
+/* The ⋮ on the left of a module entry: small, quiet until hovered or focused. */
+.irow > .menuwrap { margin: 0 -6px 0 -8px; }
+.irow > .menuwrap > .iconbtn { width: 28px; height: 28px; color: var(--muted); opacity: .55; }
+.irow:hover > .menuwrap > .iconbtn, .irow > .menuwrap > .iconbtn:focus-visible, .irow > .menuwrap > .iconbtn[aria-expanded="true"] { opacity: 1; }
+.irow > .menuwrap .menu { right: auto; left: 0; min-width: 140px; }
 .iic.ok { color: var(--ok); }
 .iic.inline { vertical-align: middle; }
 .imid { flex: 1; min-width: 0; }

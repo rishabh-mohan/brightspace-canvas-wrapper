@@ -232,6 +232,7 @@ BSX.ui = (() => {
       if (typeof saved.overlay === 'boolean') settings.overlay = saved.overlay;
       if (typeof saved.wideCards === 'boolean') settings.wideCards = saved.wideCards;
       if (typeof saved.countExcluded === 'boolean') settings.countExcluded = saved.countExcluded;
+      if (saved.pins && typeof saved.pins === 'object') settings.pins = Object.fromEntries(Object.entries(saved.pins).filter(([, v]) => Array.isArray(v)));
       if (typeof saved.tasks === 'boolean') settings.tasks = saved.tasks;
       if (saved.ed && typeof saved.ed === 'object') settings.ed = { on: Boolean(saved.ed.on), token: typeof saved.ed.token === 'string' ? saved.ed.token : '', region: ['us', 'au', 'eu', 'ca'].includes(saved.ed.region) ? saved.ed.region : 'us', map: saved.ed.map && typeof saved.ed.map === 'object' ? { ...saved.ed.map } : {} };
       if (saved.links && typeof saved.links === 'object') settings.links = { ...saved.links };

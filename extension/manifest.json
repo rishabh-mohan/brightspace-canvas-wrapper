@@ -27,5 +27,5 @@
   "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "96": "icons/icon-96.png", "128": "icons/icon-128.png" },
   "action": { "default_title": "Run Brightspace access probe", "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" } },
   "background": { "scripts": ["background.js"], "service_worker": "background.js" },
-  "browser_specific_settings": { "gecko": { "id": "brightspace-canvas-wrapper@rishabh-mohan", "strict_min_version": "121.0", "data_collection_permissions": { "required": ["none"] } } }
+  "browser_specific_settings": { "gecko": { "id": "brightspace-canvas-wrapper@rishabh-mohan", "strict_min_version": "140.0", "data_collection_permissions": { "required": ["none"] } }, "gecko_android": { "strict_min_version": "142.0" } }
 }

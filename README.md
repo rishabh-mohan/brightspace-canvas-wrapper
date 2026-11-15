@@ -1,4 +1,4 @@
-# Canvas-style wrapper for Brightspace
+﻿# Canvas-style wrapper for Brightspace
 
 A browser extension that shows your Brightspace courses in Canvas's layout. It changes things on Brightspace only when you press a button for it: **Submit Assignment** (hands in a file) and **Post Reply** (posts in a discussion). Taking a quiz and text submissions happen on Brightspace's own page, shown inside the wrapper.
 
@@ -9,7 +9,7 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 **Global navigation** (left rail): Account, Dashboard, Courses, Calendar, Inbox, Help, and a Brightspace switch that shows the original page.
 
 **Dashboard**
-- Card View: this term's course cards with a colour, picture, shortcuts and unread badges. The ⋮ button sets a nickname and colour.
+- Card View: this term's course cards with a colour, picture, shortcuts and unread badges. The â‹® button sets a nickname and colour.
 - List View: a planner of dated work, grouped by day and opened on today. Items can be ticked off.
 - Recent Activity: recent announcements and newly posted grades.
 - Sidebar: To Do (overdue first, each item dismissible), Recent Feedback, View Grades.
@@ -33,7 +33,7 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 
 **Inbox**: Brightspace's own Email tool shown in a frame, with recent announcements underneath.
 
-**Gradescope** (optional, off by default; Account → Gradescope; in Firefox, the first time, press **Allow Gradescope access** where it appears and allow gradescope.com): for courses with a Gradescope link, reads your Gradescope assignments, due dates and scores and shows them in Assignments, Grades, To Do, List View and the Calendar. It uses your own Gradescope sign-in, reads two kinds of page, and changes nothing there. Open Gradescope once from a course if it says you are signed out.
+**Gradescope** (optional, off by default; Account â†’ Gradescope; in Firefox, the first time, press **Allow Gradescope access** where it appears and allow gradescope.com): for courses with a Gradescope link, reads your Gradescope assignments, due dates and scores and shows them in Assignments, Grades, To Do, List View and the Calendar. It uses your own Gradescope sign-in, reads two kinds of page, and changes nothing there. Open Gradescope once from a course if it says you are signed out.
 
 **Preferences** (Account): light, dark or automatic theme, and whether to show current courses or all. Preferences and your To Do items are stored in the extension, in this browser only.
 
@@ -53,7 +53,7 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 
 **Calendar**: events that are not assignments (exams, office hours) open a detail panel with time, place and description.
 
-The wrapper stands in for the Brightspace home page, course home pages, and Brightspace's own Grades, Assignments, Announcements, Quizzes, Discussions, Classlist and Content list pages. On every other Brightspace page a small "← Canvas view" button leads back. The layout adapts down to phone width.
+The wrapper stands in for the Brightspace home page, course home pages, and Brightspace's own Grades, Assignments, Announcements, Quizzes, Discussions, Classlist and Content list pages. On every other Brightspace page a small "â† Canvas view" button leads back. The layout adapts down to phone width.
 
 ## Scope and limits
 
@@ -76,7 +76,7 @@ Not yet checked on a real account: finding the Simple Syllabus and notification-
 
 ## Load it
 
-- **Firefox (primary, 121 or later):** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on…**, and select `extension/manifest.json`. It is removed when Firefox closes; use **Reload** on that page after code changes. If the wrapper does not appear, open `about:addons`, select the extension, and under **Permissions** allow access to `brightspace.com` (and `gradescope.com` if you switch the Gradescope reader on).
+- **Firefox (primary, 140 or later; Firefox for Android 142 or later):** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-onâ€¦**, and select `extension/manifest.json`. It is removed when Firefox closes; use **Reload** on that page after code changes. If the wrapper does not appear, open `about:addons`, select the extension, and under **Permissions** allow access to `brightspace.com` (and `gradescope.com` if you switch the Gradescope reader on).
 - **Chrome or Edge:** open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, and select the `extension` folder. Chrome shows a harmless warning about `background.scripts`.
 
 Then sign in to Brightspace and open its home page.

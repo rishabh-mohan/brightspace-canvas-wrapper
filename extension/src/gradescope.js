@@ -122,7 +122,7 @@ BSX.gradescope = (() => {
     if (!gs) return { state: 'no_match', items: [] };
     const res = await page(`/courses/${gs.id}`);
     if (signedOut(res)) return { state: 'signed_out', items: [] };
-    const items = parseAssignments(res.html, gs.id).map((a) => {
+    const items = parseAssignments(res.html, gs.id).map((a, n) => {
       const submitted = a.score != null || (!/^no submission$/i.test(a.status) && a.status !== '');
       return {
         kind: 'external',
@@ -136,6 +136,7 @@ BSX.gradescope = (() => {
         grade: a.score != null ? { score: a.score, points_possible: a.max, displayed: '', comment: '', graded_at: null } : null,
         submitted,
         status: a.status || 'No Submission',
+        order: [0, n], // the order of Gradescope's own table
         html_url: a.url,
       };
     });

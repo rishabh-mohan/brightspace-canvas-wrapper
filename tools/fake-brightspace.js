@@ -355,13 +355,14 @@ function ed(path) {
   if (path === '/api/courses/777/lessons') {
     const p5 = DATA.get(101).folders.find((f) => f.Name === 'Project 5');
     return { lessons: [
-      { id: 1, title: 'Project 5', due_at: p5 ? p5.DueDate : due(2), state: 'active', status: 'unattempted' },
-      { id: 2, title: 'Lab 3 warm-up', due_at: due(3), state: 'active', status: 'unattempted' },
-      { id: 3, title: 'Written Homework 4', due_at: due(4), state: 'active', status: 'attempted' },
-      { id: 4, title: 'Lab 2 warm-up', due_at: due(-2), state: 'active', status: 'completed' },
+      { id: 1, title: 'Project 5', due_at: p5 ? p5.DueDate : due(2), state: 'active', status: 'unattempted', module_id: 31, index: 1 },
+      { id: 2, title: 'Lab 3 warm-up', due_at: due(3), state: 'active', status: 'unattempted', module_id: 30, index: 2 },
+      { id: 3, title: 'Written Homework 4', due_at: due(4), state: 'active', status: 'attempted', module_id: 31, index: 0 },
+      { id: 4, title: 'Lab 2 warm-up', due_at: due(-2), state: 'active', status: 'completed', module_id: 30, index: 1 },
+      { id: 7, title: 'Week 2 reading', due_at: null, state: 'active', status: 'unattempted', module_id: 30, index: 0 },
       { id: 5, title: 'Draft notes', due_at: due(5), state: 'draft' },
       { id: 6, title: 'Proj 6', due_at: (DATA.get(101).folders.find((f) => f.Name === 'Project 6') || {}).DueDate || due(10), effective_due_at: null, state: 'active', status: 'unattempted' },
-    ], modules: [] };
+    ], modules: [{ id: 30, name: 'Week 2' }, { id: 31, name: 'Week 3' }] };
   }
   if (path === '/api/courses/777/threads') {
     return { threads: [

@@ -67,6 +67,8 @@ BSX.ed = (() => {
   function lessonItems(edCourse, json, bsCourse, region) {
     const list = Array.isArray(json) ? json : json.lessons || [];
     const moduleNames = new Map((json.modules || []).map((m) => [m.id, m.name]));
+    // Ed's own order: modules as Ed lists them, lessons by their index within a module.
+    const moduleRank = new Map((json.modules || []).map((m, n) => [m.id, n]));
     return list
       // Undated lessons (readings, slides) are kept too: they show in the [Ed] module, while
       // To Do, the calendar and the planner only take dated work.
@@ -80,6 +82,7 @@ BSX.ed = (() => {
           course_id: bsCourse.id,
           name: l.title || 'Ed lesson',
           group: moduleNames.get(l.module_id) || null,
+          order: [moduleRank.has(l.module_id) ? moduleRank.get(l.module_id) : Number.MAX_SAFE_INTEGER, l.index ?? l.number ?? 0],
           due_at: dueOf(l),
           points_possible: null,
           grade: null,

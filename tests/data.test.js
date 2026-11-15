@@ -311,6 +311,7 @@ const assert = require('assert');
   assert.strictEqual(lessons[2].due_at, null);
   assert.strictEqual(lessons[1].due_at, soon, 'the student’s effective due date wins');
   assert.strictEqual(lessons[0].group, 'Week 1');
+  assert.deepStrictEqual(Array.from(lessons[0].order), [0, 0], 'Ed order: its module first, then the lesson index');
   assert.strictEqual(lessons[0].html_url, 'https://edstem.org/us/courses/7/lessons/1');
   assert.strictEqual(lessons[0].course_id, 101);
 

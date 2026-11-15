@@ -145,18 +145,37 @@
         bySource.get(x.source).push(x);
       }
       const now = Date.now();
-      return [...bySource.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([source, items]) =>
-        h('details', { class: 'group', open: true },
-          h('summary', null, ic('down', 16), h('span', { class: 'gname' }, `[${source}]`), h('span', { class: 'count' }, items.length)),
-          items.sort((a, b) => Date.parse(a.due_at || 8.64e15) - Date.parse(b.due_at || 8.64e15)).map((x) => {
-            const done = Boolean(x.submitted || (x.grade && x.grade.score != null));
-            const late = !done && x.due_at && Date.parse(x.due_at) < now;
-            const sub = [x.group, x.due_at ? `Due ${when(x.due_at)}` : 'No due date', x.grade ? `${num(x.grade.score)}/${num(x.grade.points_possible)} pts` : null, x.into ? `Shown with “${x.into}”` : null].filter(Boolean).join('  |  ');
-            return h('div', { class: 'irow' },
-              h('span', { class: done ? 'iic ok' : 'iic' }, ic('assignment', 22)),
-              h('div', { class: 'imid' }, ui.itemLink(x), h('div', { class: 'muted small' }, sub)),
-              h('span', { class: `small nowrap ${done ? 'ok' : late ? 'bad' : 'muted'}` }, x.status || ''));
-          })));
+      // The site's own order (Ed: its modules, then lessons by index; Gradescope: its table),
+      // falling back to due date for anything without one.
+      const byOrder = (a, b) => {
+        const x = a.order || [Infinity, Infinity];
+        const y = b.order || [Infinity, Infinity];
+        return x[0] - y[0] || x[1] - y[1] || Date.parse(a.due_at || 8.64e15) - Date.parse(b.due_at || 8.64e15);
+      };
+      const row = (x) => {
+        const done = Boolean(x.submitted || (x.grade && x.grade.score != null));
+        const late = !done && x.due_at && Date.parse(x.due_at) < now;
+        const sub = [x.due_at ? `Due ${when(x.due_at)}` : 'No due date', x.grade ? `${num(x.grade.score)}/${num(x.grade.points_possible)} pts` : null, x.into ? `Shown with “${x.into}”` : null].filter(Boolean).join('  |  ');
+        return h('div', { class: 'irow' },
+          h('span', { class: done ? 'iic ok' : 'iic' }, ic('assignment', 22)),
+          h('div', { class: 'imid' }, ui.itemLink(x), h('div', { class: 'muted small' }, sub)),
+          h('span', { class: `small nowrap ${done ? 'ok' : late ? 'bad' : 'muted'}` }, x.status || ''));
+      };
+      const box = (name, kids, count) => h('details', { class: 'group', open: true },
+        h('summary', null, ic('down', 16), h('span', { class: 'gname' }, name), h('span', { class: 'count' }, count)), kids);
+      return [...bySource.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([source, items]) => {
+        items.sort(byOrder);
+        // Sites with their own modules (Ed) get them as sub-modules, in the site's order.
+        if (!items.some((x) => x.group)) return box(`[${source}]`, items.map(row), items.length);
+        const groups = [];
+        for (const x of items) {
+          const name = x.group || 'Other';
+          const last = groups[groups.length - 1];
+          if (last && last.name === name) last.items.push(x);
+          else groups.push({ name, items: [x] });
+        }
+        return box(`[${source}]`, groups.map((g) => box(g.name, g.items.map(row), g.items.length)), items.length);
+      });
     }, '');
   }
 

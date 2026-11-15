@@ -73,9 +73,14 @@ BSX.data = (() => {
   // ---- grade values --------------------------------------------------------
   const gradeValues = (ou) => soft(client.le(`${ou}/grades/values/myGradeValues/`), []);
 
+  // A score Brightspace only gives as display text ("0 / 10", "7.5/10") when the number is missing.
+  const shownScore = (v) => {
+    const m = String(v.DisplayedGrade || '').match(/^\s*(-?\d+(?:\.\d+)?)\s*\/\s*\d/);
+    return m ? Number(m[1]) : null;
+  };
   const toValue = (v) =>
     v && {
-      score: v.PointsNumerator,
+      score: v.PointsNumerator ?? shownScore(v),
       points_possible: v.PointsDenominator,
       weighted_score: v.WeightedNumerator,
       weighted_possible: v.WeightedDenominator,
@@ -529,7 +534,8 @@ BSX.data = (() => {
         value: toValue(byId.get(String(item.Id))) || null,
       });
     }
-    const result = { system: setup?.GradingSystem || null, final: toValue(final) || null, estimate: null, groups: [...groups.values()] };
+    // null_is_zero: the course counts an empty grade as 0 (Brightspace's "treat ungraded as 0").
+    const result = { system: setup?.GradingSystem || null, null_is_zero: Boolean(setup?.IsNullGradeZero), final: toValue(final) || null, estimate: null, groups: [...groups.values()] };
     result.estimate = estimate(result);
     return result;
   }
@@ -541,8 +547,9 @@ BSX.data = (() => {
   const POINTS_TYPES = new Set(['Numeric', 'SelectBox']);
 
   // Why an item cannot take part in an estimate or a What-If score, or null when it can.
+  // g.count_excluded: the student chose to count items Brightspace marks "not counted".
   function whyNot(g, i) {
-    if (i.excluded) return 'Not counted in the final grade';
+    if (i.excluded && !g.count_excluded) return 'Brightspace marks this “not counted”. Tick “Count items marked not counted” to include it.';
     if (i.type && !POINTS_TYPES.has(i.type)) return i.type === 'PassFail' ? 'Pass/fail item' : i.type === 'Text' ? 'Comment-only item' : `${i.type} item (worked out by Brightspace)`;
     const pp = i.value?.points_possible ?? i.points_possible;
     if (!(pp > 0)) return 'Brightspace does not say what this is out of';
@@ -552,7 +559,7 @@ BSX.data = (() => {
   }
 
   function share(g, i) {
-    if (i.excluded || (i.type && !POINTS_TYPES.has(i.type))) return null;
+    if ((i.excluded && !g.count_excluded) || (i.type && !POINTS_TYPES.has(i.type))) return null;
     const pp = i.value?.points_possible ?? i.points_possible;
     if (!(pp > 0)) return null;
     if (g.system === 'Points') return { pp, wp: pp };

@@ -153,6 +153,23 @@ const assert = require('assert');
   assert.strictEqual(data.whyNot(wg, att), 'Pass/fail item');
   assert.deepEqual({ ...data.estimate(wg, new Map([[1, 5], [2, 4]])) }, { score: 30, points_possible: 40 });
 
+  // A score given only as display text is read from it; "treat ungraded as 0" is reported;
+  // "not counted" items join the total when the student says so.
+  routes['/d2l/api/le/1.100/16/grades/'] = [
+    { Id: 1, Name: 'A', GradeType: 'Numeric', MaxPoints: 10, CategoryId: 0, IsHidden: false },
+    { Id: 2, Name: 'B', GradeType: 'Numeric', MaxPoints: 10, CategoryId: 0, IsHidden: false, ExcludeFromFinalGradeCalculation: true }];
+  routes['/d2l/api/le/1.100/16/grades/setup/'] = { GradingSystem: 'Points', IsNullGradeZero: true };
+  routes['/d2l/api/le/1.100/16/grades/values/myGradeValues/'] = [
+    { GradeObjectIdentifier: '1', PointsNumerator: null, PointsDenominator: 10, DisplayedGrade: '0 / 10' },
+    { GradeObjectIdentifier: '2', PointsNumerator: 8, PointsDenominator: 10, DisplayedGrade: '8 / 10' }];
+  const zg = await data.grades(16);
+  assert.strictEqual(zg.null_is_zero, true);
+  assert.strictEqual(zg.groups[0].items[0].value.score, 0, 'score read from "0 / 10"');
+  assert.strictEqual(data.estimable(zg, zg.groups[0].items[1]), false, 'not counted by default');
+  zg.count_excluded = true;
+  assert.strictEqual(data.estimable(zg, zg.groups[0].items[1]), true);
+  assert.deepEqual({ ...data.estimate(zg) }, { score: 8, points_possible: 20 });
+
   // Unticked "based only on graded assignments": ungraded items count as zero.
   const some = { system: 'Points', groups: [{ items: [
     { id: 1, type: 'Numeric', points_possible: 10, value: { score: 8, points_possible: 10 } },

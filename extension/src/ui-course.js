@@ -652,7 +652,7 @@
   // ---- grades ------------------------------------------------------------------
   async function grades(course) {
     const id = course.id;
-    if (whatIf.courseId !== id) Object.assign(whatIf, { on: false, courseId: id, overrides: new Map() });
+    if (whatIf.courseId !== id) Object.assign(whatIf, { on: false, courseId: id, overrides: new Map(), allItems: undefined });
     const [g, work, courses] = await Promise.all([data.grades(id), data.assignments(id).catch(() => []), data.courses()]);
     // Switch between courses without leaving Grades, as Canvas's course menu does.
     const listed = ui.state.showAll ? courses : ui.focusCourses(courses);
@@ -663,16 +663,22 @@
     const points = g.system === 'Points';
     const weighted = g.system === 'Weighted';
     const canEstimate = points || weighted;
-
-    const totalBox = h('div', { class: 'totalbox' });
-    const allItems = whatIf.allItems && canEstimate;
+    // Items Brightspace marks "not counted" join the totals when the student says so.
+    const anyExcluded = g.groups.some((x) => x.items.some((i) => i.excluded));
+    g.count_excluded = Boolean(settings.countExcluded);
+    if (g.count_excluded) g.estimate = data.estimate(g);
+    // In a course that counts an empty grade as 0, the total does too, unless the student
+    // ticks "based only on graded assignments".
+    const allItems = (whatIf.allItems ?? g.null_is_zero) && canEstimate;
+    const blank = g.null_is_zero ? '0' : '–';
+    const scoreText = (v) => (v && v.score != null ? num(v.score) : blank);
     function drawTotal() {
       const hyp = (whatIf.on && whatIf.overrides.size) || allItems ? data.estimate(g, whatIf.on ? whatIf.overrides : new Map(), { allItems }) : null;
       const pair = (t) => (points ? h('div', { class: 'muted small' }, `${num(t.score)} / ${num(t.points_possible)} points`) : null);
       let kids;
       if (hyp) {
         const actual = g.final ? g.final.displayed || pct(g.final.score, g.final.points_possible) : g.estimate ? pct(g.estimate.score, g.estimate.points_possible) : 'not released';
-        kids = [h('div', { class: 'tlabel' }, whatIf.on && whatIf.overrides.size ? 'What-If Total' : 'Total, counting ungraded work as 0'), h('div', { class: 'bigscore hyp' }, pct(hyp.score, hyp.points_possible)), pair(hyp), h('div', { class: 'muted small' }, `Actual: ${actual}`)];
+        kids = [h('div', { class: 'tlabel' }, whatIf.on && whatIf.overrides.size ? 'What-If Total' : g.null_is_zero ? 'Total (this course counts ungraded work as 0)' : 'Total, counting ungraded work as 0'), h('div', { class: 'bigscore hyp' }, pct(hyp.score, hyp.points_possible)), pair(hyp), h('div', { class: 'muted small' }, `Actual: ${actual}`)];
       } else if (g.final) {
         kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'bigscore' }, g.final.displayed || pct(g.final.score, g.final.points_possible) || '–'), g.final.points_possible ? h('div', { class: 'muted small' }, `${num(g.final.score)} / ${num(g.final.points_possible)}`) : null, h('div', { class: 'muted small' }, 'Released by the instructor')];
       } else if (g.estimate) {
@@ -695,7 +701,7 @@
         const v = i.value;
         const a = byItem.get(String(i.id));
         const possible = v ? v.points_possible : i.points_possible;
-        const pctCell = h('td', { class: 'num' }, v ? pct(v.score, v.points_possible) : '');
+        const pctCell = h('td', { class: 'num' }, v && v.score != null ? pct(v.score, v.points_possible) : g.null_is_zero && possible > 0 ? '0%' : '');
         let scoreCell;
         if (whatIf.on && data.estimable(g, i)) {
           const input = h('input', { class: 'wi', type: 'number', min: '0', step: 'any', value: v && v.score != null ? String(v.score) : '', 'aria-label': `What-If score for ${i.name}` });
@@ -713,9 +719,10 @@
         } else if (whatIf.on) {
           // Locked in What-If: say why, so it is not a mystery.
           const why = data.whyNot(g, i) || 'Cannot be changed here';
-          scoreCell = h('td', { class: 'num' }, h('span', { class: 'wilock', title: why, 'aria-label': `${why}. Score: ${v ? num(v.score) : 'none'}` }, ic('lock', 13), ' ', v ? num(v.score) : '–'));
+          scoreCell = h('td', { class: 'num' }, h('span', { class: 'wilock', title: why, 'aria-label': `${why}. Score: ${scoreText(v)}` }, ic('lock', 13), ' ', scoreText(v)));
         } else {
-          scoreCell = h('td', { class: 'num' }, v ? h('span', { title: v.displayed || null }, num(v.score)) : '–');
+          const ungraded = !v || v.score == null;
+          scoreCell = h('td', { class: 'num' }, h('span', { title: ungraded ? (g.null_is_zero ? 'Not graded yet; this course counts it as 0' : 'Not graded yet') : v.displayed || null }, scoreText(v)));
         }
         flat.push({ i, a, el: null });
         rows.push(flat[flat.length - 1].el = h('tr', null,
@@ -756,7 +763,10 @@
         totalBox,
         canEstimate ? ui.button(whatIf.on ? 'Revert to Actual Scores' : 'Show What-If Scores', () => { whatIf.on = !whatIf.on; whatIf.overrides = new Map(); ui.render(); }, 'wide') : null,
         canEstimate
-          ? h('label', { class: 'calrow', style: 'margin-bottom:22px' }, h('input', { type: 'checkbox', checked: !allItems, onchange: (ev) => { whatIf.allItems = !ev.target.checked; ui.render(); } }), 'Calculate based only on graded assignments')
+          ? h('label', { class: 'calrow', style: anyExcluded ? null : 'margin-bottom:22px' }, h('input', { type: 'checkbox', checked: !allItems, onchange: (ev) => { whatIf.allItems = !ev.target.checked; ui.render(); } }), 'Calculate based only on graded assignments')
+          : null,
+        canEstimate && anyExcluded
+          ? h('label', { class: 'calrow', style: 'margin-bottom:22px', title: 'Brightspace leaves these out of its own total; some courses count them anyway' }, h('input', { type: 'checkbox', checked: g.count_excluded, onchange: (ev) => { settings.countExcluded = ev.target.checked; ui.saveSettings(); ui.render(); } }), 'Count items marked “not counted”')
           : null,
         weights,
         ui.lazy(data.externalTools(id), (tools) => tools.length ? ui.sideSection('Graded elsewhere', [h('p', { class: 'muted small' }, 'Some work in this course is graded in an external tool and may not appear here.'), tools.map((t) => h('a', { class: 'sidelink', href: courseHref(id, 'modules', t.id) }, t.title, ' ', ic('external', 13)))]) : null, ''),

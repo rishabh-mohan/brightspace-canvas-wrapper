@@ -670,6 +670,7 @@
     // In a course that counts an empty grade as 0, the total does too, unless the student
     // ticks "based only on graded assignments".
     const allItems = (whatIf.allItems ?? g.null_is_zero) && canEstimate;
+    const totalBox = h('div', { class: 'totalbox' });
     const blank = g.null_is_zero ? '0' : '–';
     const scoreText = (v) => (v && v.score != null ? num(v.score) : blank);
     function drawTotal() {
@@ -687,15 +688,27 @@
         kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'muted' }, 'Not released by the instructor.')];
       }
       totalBox.replaceChildren(...kids.filter(Boolean));
+      markDropped();
     }
-    drawTotal();
+    // Scores a category's drop rule leaves out are struck through and tagged, as Canvas does.
+    // Worked out again on every What-If change, since a new score can change what is dropped.
+    const rowById = new Map();
+    function markDropped() {
+      const out = data.dropped(g, whatIf.on ? whatIf.overrides : new Map(), { allItems });
+      for (const [itemId, tr] of rowById) {
+        const on = out.has(itemId);
+        tr.classList.toggle('dropped', on);
+        tr.querySelector('.droptag').hidden = !on;
+      }
+    }
 
     const rows = [];
     const flat = [];
     for (const group of g.groups) {
       if (group.name) {
         const v = group.value;
-        rows.push(h('tr', { class: 'grouprow' }, h('td', { colspan: '2' }, group.name), h('td', { class: 'num' }, v ? num(v.score) : ''), h('td', { class: 'num' }, v ? num(v.points_possible) : ''), h('td', { class: 'num' }, v ? pct(v.score, v.points_possible) : '')));
+        const rule = data.dropRule(group);
+        rows.push(h('tr', { class: 'grouprow' }, h('td', { colspan: '2' }, group.name, rule ? h('span', { class: 'muted small', style: 'font-weight:400' }, ` · ${rule}`) : null), h('td', { class: 'num' }, v ? num(v.score) : ''), h('td', { class: 'num' }, v ? num(v.points_possible) : ''), h('td', { class: 'num' }, v ? pct(v.score, v.points_possible) : '')));
       }
       for (const i of group.items) {
         const v = i.value;
@@ -726,13 +739,15 @@
         }
         flat.push({ i, a, el: null });
         rows.push(flat[flat.length - 1].el = h('tr', null,
-          h('td', null, a ? h('a', { class: 't', href: itemHref(id, a) }, i.name) : h('span', { class: 't dark' }, i.name), i.bonus ? ui.tag('bonus') : null, i.excluded ? ui.tag('not counted') : null, v && v.comment ? h('div', { class: 'note' }, v.comment) : null),
+          h('td', null, a ? h('a', { class: 't', href: itemHref(id, a) }, i.name) : h('span', { class: 't dark' }, i.name), i.bonus ? ui.tag('bonus') : null, i.excluded ? ui.tag('not counted') : null, h('span', { class: 'droptag', hidden: true, title: 'Left out by this group’s drop rule' }, ui.tag('dropped')), v && v.comment ? h('div', { class: 'note' }, v.comment) : null),
           h('td', { class: 'muted small nowrap' }, a && a.due_at ? when(a.due_at) : ''),
           scoreCell,
           h('td', { class: 'num' }, num(possible)),
           pctCell));
+        rowById.set(i.id, flat[flat.length - 1].el);
       }
     }
+    drawTotal();
     // Arrange by group (with subtotals), or as one flat list by due date or title.
     const dueOf = (x) => (x.a && x.a.due_at ? Date.parse(x.a.due_at) : Infinity);
     const ordered = settings.gradeSort === 'due' ? flat.sort((x, y) => dueOf(x) - dueOf(y)).map((x) => x.el)

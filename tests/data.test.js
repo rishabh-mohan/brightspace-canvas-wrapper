@@ -136,6 +136,10 @@ const assert = require('assert');
     { id: 2, type: 'Numeric', points_possible: 10, value: { score: 9, points_possible: 10 } },
     { id: 3, type: 'Numeric', points_possible: 10, value: { score: 7, points_possible: 10 } }] }] };
   assert.deepEqual({ ...data.estimate(dropped) }, { score: 16, points_possible: 20 });
+  assert.deepStrictEqual(Array.from(data.dropped(dropped)), [1], 'the 2/10 is the one dropped');
+  // A What-If score can change which one is dropped.
+  assert.deepStrictEqual(Array.from(data.dropped(dropped, new Map([[3, 1]]))), [3]);
+  assert.strictEqual(data.dropRule({ drop_lowest: 2, drop_highest: 1 }), 'lowest 2 dropped, highest 1 dropped');
   // What-If: MaxPoints missing from the item list is taken from the category's list; drop-down
   // grades count; an unweighted item in a weighted category gets an equal share; reasons given.
   routes['/d2l/api/le/1.100/15/grades/'] = [

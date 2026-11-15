@@ -87,7 +87,8 @@ function build(c) {
     items.push(item(c.id * 1000 + 302, 'Final Exam', 100, cat.exam, 30));
     items.push({ ...item(c.id * 1000 + 303, 'Participation', 10, 0, 0), IsBonus: true });
   }
-  const category = (id, name, weight) => ({ Id: id, Name: name, ShortName: '', Weight: weight, MaxPoints: 0, Grades: items.filter((x) => x.CategoryId === id), CanExceedMax: false, ExcludeFromFinalGrade: false, NumberOfLowestToDrop: 0 });
+  // Quizzes drop their lowest score, to exercise drop rules.
+  const category = (id, name, weight) => ({ Id: id, Name: name, ShortName: '', Weight: weight, MaxPoints: 0, Grades: items.filter((x) => x.CategoryId === id), CanExceedMax: false, ExcludeFromFinalGrade: false, NumberOfLowestToDrop: name === 'Quizzes' ? 1 : 0, NumberOfHighestToDrop: 0 });
   const categories = c.extra ? [category(cat.hw, c.hw + 's', 100)] : [category(cat.hw, c.hw + 's', 30), category(cat.quiz, 'Quizzes', 20), category(cat.exam, 'Exams', 50)];
   for (const k of categories) {
     const graded = values.filter((v) => k.Grades.some((g) => String(g.Id) === v.GradeObjectIdentifier));

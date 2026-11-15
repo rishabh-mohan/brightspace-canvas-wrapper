@@ -580,9 +580,18 @@ BSX.data = (() => {
   // by percentage, as Brightspace does. Points: plain sum. Weighted: each item's share.
   // `allItems`: Canvas's unticked "Calculate based only on graded assignments", where every
   // ungraded item counts as zero.
-  function estimate(g, overrides = new Map(), { allItems = false } = {}) {
+  function estimate(g, overrides = new Map(), opts = {}) {
+    const t = tally(g, overrides, opts);
+    return t.possible > 0 ? { score: t.score, points_possible: t.possible } : null;
+  }
+
+  // Ids of the items a category's drop rules leave out, for the same inputs as estimate().
+  const dropped = (g, overrides = new Map(), opts = {}) => tally(g, overrides, opts).dropped;
+
+  function tally(g, overrides, { allItems = false } = {}) {
     let score = 0;
     let possible = 0;
+    const out = new Set();
     for (const group of g.groups) {
       let counted = [];
       for (const i of group.items) {
@@ -592,12 +601,13 @@ BSX.data = (() => {
         let s = override != null ? override : i.value ? i.value.score : null;
         if (s == null && allItems && !i.bonus) s = 0;
         if (s == null) continue;
-        counted.push({ ...sh, s, bonus: i.bonus });
+        counted.push({ ...sh, s, bonus: i.bonus, id: i.id });
       }
       const drops = (group.drop_lowest || 0) + (group.drop_highest || 0);
       const regular = counted.filter((c) => !c.bonus).sort((a, b) => a.s / a.pp - b.s / b.pp);
       if (drops > 0 && regular.length > drops) {
         const kept = regular.slice(group.drop_lowest || 0, regular.length - (group.drop_highest || 0));
+        for (const c of regular) if (!kept.includes(c)) out.add(c.id);
         counted = [...kept, ...counted.filter((c) => c.bonus)];
       }
       for (const c of counted) {
@@ -605,8 +615,11 @@ BSX.data = (() => {
         if (!c.bonus) possible += c.wp;
       }
     }
-    return possible > 0 ? { score, points_possible: possible } : null;
+    return { score, possible, dropped: out };
   }
+
+  // A category's drop rule in words, e.g. "lowest 2 dropped".
+  const dropRule = (group) => [group.drop_lowest ? `lowest ${group.drop_lowest} dropped` : null, group.drop_highest ? `highest ${group.drop_highest} dropped` : null].filter(Boolean).join(', ');
 
   // One line per course for the all-courses Grades page.
   async function courseTotals(courseList) {
@@ -870,7 +883,7 @@ BSX.data = (() => {
     courses, orgId, me, updates,
     assignments, assignmentGroups, assignment, submission, canSubmit, submit, quiz, quizAttempts, parseQuizSummary, discussions, discussion, post,
     todo, planner, tasks, overdue, recentFeedback,
-    grades, estimate, estimable, whyNot, courseTotals,
+    grades, estimate, dropped, dropRule, estimable, whyNot, courseTotals,
     announcements, recentAnnouncements,
     modules, externalTools, files, syllabus, syllabusLink, notificationsLink, homeLinks, courseTools, people, groups,
     calendar,

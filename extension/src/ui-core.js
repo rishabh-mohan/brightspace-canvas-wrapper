@@ -38,12 +38,14 @@ BSX.ui = (() => {
   // page the student asked to see without the wrapper are left as they are.
   const RAW = /^\/d2l\/(login|logout|lp\/auth\/|api\/|lms\/quizzing\/user\/attempt\/)/i;
   const here = location.pathname + location.search;
-  let rawWanted = false;
+  // Switched off with the Brightspace button: this tab stays on plain Brightspace, page after
+  // page, until the student picks "Canvas view" again.
+  let offMode = false;
   try {
-    rawWanted = sessionStorage.getItem('bsx.raw') === here;
-    if (rawWanted) sessionStorage.removeItem('bsx.raw');
+    offMode = sessionStorage.getItem('bsx.off') === '1';
   } catch {}
-  if (!entry && location.pathname.startsWith('/d2l/') && !RAW.test(location.pathname) && !rawWanted && location.hash !== '#brightspace') {
+  if (offMode && entry && location.hash !== '#brightspace') history.replaceState(null, '', `${here}#brightspace`);
+  if (!entry && location.pathname.startsWith('/d2l/') && !RAW.test(location.pathname) && !offMode && location.hash !== '#brightspace') {
     // Go to the wrapper's own address with this page in its frame. (A browser will not load a
     // frame at the same address as the page around it, so the wrapper cannot stay here.)
     location.replace(`/d2l/home#/open?u=${encodeURIComponent(here)}`);
@@ -66,6 +68,11 @@ BSX.ui = (() => {
     const link = document.createElement('a');
     link.href = back;
     link.textContent = '← Canvas view';
+    link.addEventListener('click', () => {
+      try {
+        sessionStorage.removeItem('bsx.off');
+      } catch {}
+    });
     link.style.cssText = 'color:#fff;text-decoration:none;padding:8px 6px 8px 14px';
     const hide = document.createElement('button');
     hide.type = 'button';
@@ -547,11 +554,12 @@ BSX.ui = (() => {
     render();
   };
   // Show a Brightspace page as it is, without the wrapper: a page loaded once without it.
+  // Plain Brightspace from here on in this tab (see offMode), starting at page u.
   function openRaw(u) {
     try {
-      sessionStorage.setItem('bsx.raw', u);
+      sessionStorage.setItem('bsx.off', '1');
     } catch {}
-    location.assign(u);
+    location.assign(`${u}#brightspace`);
   }
   // The Brightspace page that matches the wrapper page being shown, for the Brightspace switch.
   function brightspacePage(r) {
@@ -577,14 +585,14 @@ BSX.ui = (() => {
     const r = route();
     if (r.view === 'open') return openRaw(r.u);
     let target = brightspacePage(r);
-    // Brightspace's calendar and email hang off the school's own org unit.
-    if (r.view === 'calendar' || r.view === 'inbox') {
+    // Brightspace's home, calendar and email hang off the school's own org unit. (The bare
+    // /d2l/home asks which campus to use.)
+    if (r.view !== 'course') {
       const org = await data.orgId().catch(() => null);
-      if (org) target = r.view === 'calendar' ? bs.calendar(org) : bs.email(org);
+      if (org) target = r.view === 'calendar' ? bs.calendar(org) : r.view === 'inbox' ? bs.email(org) : `/d2l/home/${org}`;
     }
-    // Go to the matching Brightspace page, marked to stay unwrapped. When that is the page
-    // already loaded underneath, only the hash changes and it shows at once.
-    location.assign(`${target}${OFF}`);
+    // Go to the matching Brightspace page and stay on plain Brightspace in this tab.
+    openRaw(target);
   };
 
   // Brightspace links clicked inside the wrapper open in the wrapper's frame view instead of
@@ -610,10 +618,12 @@ BSX.ui = (() => {
   // own top bar is hidden inside the frame (the wrapper's rail replaces it). When the frame
   // moves to a page the wrapper stands in for, the wrapper page is shown instead.
   views.open = async (r) => {
+    // Which course this page belongs to: its ou= parameter, or any number in its address that
+    // is one of the student's courses (tool addresses put the course id in different places).
     const params = new URLSearchParams(r.u.split('?')[1] || '');
-    const ou = Number(params.get('ou')) || Number((r.u.match(/^\/d2l\/(?:le\/(?:content\/)?|home\/)(\d+)/) || [])[1]) || null;
-    const courses = ou ? await data.courses().catch(() => []) : [];
-    const course = courses.find((c) => c.id === ou) || null;
+    const numbers = [Number(params.get('ou')), ...(r.u.split('?')[0].match(/\d+/g) || []).map(Number)].filter(Boolean);
+    const courses = numbers.length ? await data.courses().catch(() => []) : [];
+    const course = numbers.map((n) => courses.find((c) => c.id === n)).find(Boolean) || null;
     const title = h('span', { class: 'here' }, 'Brightspace');
     const f = h('iframe', { class: 'viewer full', src: r.u, title: 'Brightspace page' });
     f.addEventListener('load', () => {
@@ -638,6 +648,10 @@ BSX.ui = (() => {
     const crumbs = course ? [{ label: nameOf(course), href: courseHref(course.id) }, { label: title }] : [{ label: title }];
     return {
       crumbs,
+      framed: true,
+      // The course menu stays beside a course's Brightspace page, so leaving it never depends
+      // on the browser's Back button (some Brightspace pages redirect, which traps Back).
+      leftNav: course && BSX.ui.courseNav ? BSX.ui.courseNav(course, null) : null,
       actions: h('button', { class: 'btn', type: 'button', title: 'Show this page without the Canvas view', onclick: () => openRaw(lastOpen()) }, 'Without Canvas view'),
       body: f,
     };
@@ -744,8 +758,22 @@ BSX.ui = (() => {
   function pageNodes(page, inPlace) {
     const refresh = h('button', { class: 'iconbtn', type: 'button', title: `Updated ${fmt.time.format(new Date())}. Refresh`, 'aria-label': 'Refresh', onclick: reload }, ic('refresh'));
     let head;
+    // The course menu shows or hides in place (no redraw, so a framed Brightspace page is not
+    // reloaded). Framed pages keep their own setting, open by default.
+    const framed = Boolean(page.framed);
+    const navOpen = () => (framed ? state.frameNav !== false : settings.navOpen);
+    const nav = page.leftNav ? page.leftNav : null;
+    if (nav) nav.hidden = !navOpen();
     if (page.crumbs) {
-      const toggle = h('button', { class: 'iconbtn', type: 'button', 'aria-label': settings.navOpen ? 'Hide course navigation' : 'Show course navigation', onclick: () => { settings.navOpen = !settings.navOpen; saveSettings(); render(); } }, ic('menu', 24));
+      const toggle = h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Show or hide course navigation', 'aria-expanded': String(Boolean(nav) && navOpen()), onclick: () => {
+        if (framed) state.frameNav = !navOpen();
+        else {
+          settings.navOpen = !settings.navOpen;
+          saveSettings();
+        }
+        if (nav) nav.hidden = !navOpen();
+        toggle.setAttribute('aria-expanded', String(Boolean(nav) && navOpen()));
+      } }, ic('menu', 24));
       const trail = page.crumbs.map((c, i) => [i ? h('span', { class: 'sep' }, ic('right', 14)) : null, c.href && i < page.crumbs.length - 1 ? h('a', { href: c.href }, c.label) : h('span', { class: 'here' }, c.label)]);
       head = h('div', { class: 'crumbs' }, toggle, h('div', { class: 'trail' }, trail), page.actions, refresh);
     } else {
@@ -753,7 +781,7 @@ BSX.ui = (() => {
     }
     return [
       head,
-      h('div', { class: inPlace ? 'layout still' : 'layout' }, page.leftNav && settings.navOpen ? page.leftNav : null, h('div', { class: 'content' }, page.body), page.side ? h('aside', { class: 'right' }, page.side) : null),
+      h('div', { class: inPlace ? 'layout still' : 'layout' }, nav, h('div', { class: 'content' }, page.body), page.side ? h('aside', { class: 'right' }, page.side) : null),
     ];
   }
 
@@ -785,7 +813,13 @@ BSX.ui = (() => {
       frame = null;
       ourTitle = null;
       if (originalTitle) document.title = originalTitle;
-      mount.replaceChildren(h('button', { class: 'pill', type: 'button', onclick: () => { history.replaceState(null, '', location.pathname + location.search); render(); } }, 'Canvas view'));
+      mount.replaceChildren(h('button', { class: 'pill', type: 'button', onclick: () => {
+        try {
+          sessionStorage.removeItem('bsx.off');
+        } catch {}
+        history.replaceState(null, '', location.pathname + location.search);
+        render();
+      } }, 'Canvas view'));
       return;
     }
     if (!frame) buildFrame();

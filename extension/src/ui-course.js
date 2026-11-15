@@ -50,6 +50,8 @@
       tools);
   }
 
+  ui.courseNav = courseNav; // also beside Brightspace pages shown in the frame view
+
   const metaBar = (pairs) => h('dl', { class: 'meta' }, pairs.filter((p) => p && p[1] != null && p[1] !== '').map(([k, v]) => h('div', null, h('dt', null, k), h('dd', null, v))));
   const outButton = (label, href) => h('a', { class: 'btn primary', href }, label, ' ', ic('external', 14));
   const notFound = (what, id, section) => ({ body: [ui.empty(`That ${what} is no longer available.`), h('a', { href: courseHref(id, section) }, `Back to ${LABEL[section]}`)] });

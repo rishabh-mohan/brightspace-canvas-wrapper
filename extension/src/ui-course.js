@@ -837,7 +837,8 @@
     const inputs = () => new Map([...base, ...(whatIf.on ? whatIf.overrides : [])]);
     // In a course that counts an empty grade as 0, the total does too, unless the student
     // ticks "based only on graded assignments".
-    const allItems = (whatIf.allItems ?? g.null_is_zero) && canEstimate;
+    // What-If always counts a blank grade as 0, so drop rules treat it like any other score.
+    const allItems = (whatIf.on || (whatIf.allItems ?? g.null_is_zero)) && canEstimate;
     const totalBox = h('div', { class: 'totalbox' });
     // The same total above the table, shown instead of the sidebar's on narrow screens.
     const totalTop = h('div', { class: 'totalbox top' });
@@ -849,7 +850,7 @@
       let kids;
       if (hyp) {
         const actual = g.final ? g.final.displayed || pct(g.final.score, g.final.points_possible) : g.estimate ? pct(g.estimate.score, g.estimate.points_possible) : 'not released';
-        kids = [h('div', { class: 'tlabel' }, whatIf.on && whatIf.overrides.size ? 'What-If Total' : g.null_is_zero ? 'Total (this course counts ungraded work as 0)' : 'Total, counting ungraded work as 0'), h('div', { class: 'bigscore hyp' }, pct(hyp.score, hyp.points_possible)), pair(hyp), h('div', { class: 'muted small' }, `Actual: ${actual}`)];
+        kids = [h('div', { class: 'tlabel' }, whatIf.on ? 'What-If Total' : g.null_is_zero ? 'Total (this course counts ungraded work as 0)' : 'Total, counting ungraded work as 0'), h('div', { class: 'bigscore hyp' }, pct(hyp.score, hyp.points_possible)), pair(hyp), h('div', { class: 'muted small' }, `Actual: ${actual}`)];
       } else if (g.final) {
         kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'bigscore' }, g.final.displayed || pct(g.final.score, g.final.points_possible) || '–'), g.final.points_possible ? h('div', { class: 'muted small' }, `${num(g.final.score)} / ${num(g.final.points_possible)}`) : null, h('div', { class: 'muted small' }, 'Released by the instructor')];
       } else if (g.estimate) {
@@ -891,10 +892,10 @@
         const v = i.value;
         const a = byItem.get(String(i.id));
         const possible = v ? v.points_possible : i.points_possible;
-        const pctCell = h('td', { class: 'num' }, v && v.score != null ? pct(v.score, v.points_possible) : outside.has(i.id) && possible > 0 ? pct(outside.get(i.id).score, possible) : g.null_is_zero && possible > 0 ? '0%' : '');
+        const pctCell = h('td', { class: 'num' }, v && v.score != null ? pct(v.score, v.points_possible) : outside.has(i.id) && possible > 0 ? pct(outside.get(i.id).score, possible) : (g.null_is_zero || (whatIf.on && data.estimable(g, i))) && possible > 0 ? '0%' : '');
         let scoreCell;
         if (whatIf.on && data.estimable(g, i)) {
-          const input = h('input', { class: 'wi', type: 'number', min: '0', step: 'any', value: v && v.score != null ? String(v.score) : outside.has(i.id) ? String(+outside.get(i.id).score.toFixed(2)) : '', 'aria-label': `What-If score for ${i.name}` });
+          const input = h('input', { class: 'wi', type: 'number', min: '0', step: 'any', value: v && v.score != null ? String(v.score) : outside.has(i.id) ? String(+outside.get(i.id).score.toFixed(2)) : '0', 'aria-label': `What-If score for ${i.name}` });
           input.addEventListener('input', () => {
             const typed = input.value === '' ? null : Number(input.value);
             const valid = typed != null && Number.isFinite(typed);
@@ -956,7 +957,7 @@
         totalBox,
         canEstimate ? ui.button(whatIf.on ? 'Revert to Actual Scores' : 'Show What-If Scores', () => { whatIf.on = !whatIf.on; whatIf.overrides = new Map(); ui.render(); }, 'wide') : null,
         canEstimate
-          ? h('label', { class: 'calrow', style: anyExcluded ? null : 'margin-bottom:22px' }, h('input', { type: 'checkbox', checked: !allItems, onchange: (ev) => { whatIf.allItems = !ev.target.checked; ui.render(); } }), 'Calculate based only on graded assignments')
+          ? h('label', { class: 'calrow', style: anyExcluded ? null : 'margin-bottom:22px' }, h('input', { type: 'checkbox', checked: !allItems, disabled: whatIf.on, title: whatIf.on ? 'What-If counts blank grades as 0' : null, onchange: (ev) => { whatIf.allItems = !ev.target.checked; ui.render(); } }), 'Calculate based only on graded assignments')
           : null,
         canEstimate && anyExcluded
           ? h('label', { class: 'calrow', style: 'margin-bottom:22px', title: 'Brightspace leaves these out of its own total; some courses count them anyway' }, h('input', { type: 'checkbox', checked: g.count_excluded, onchange: (ev) => { settings.countExcluded = ev.target.checked; ui.saveSettings(); ui.render(); } }), 'Count items marked “not counted”')

@@ -707,12 +707,20 @@ BSX.data = (() => {
       // Brightspace's own marks win while the category's scores are the real ones; once a
       // What-If score (or counting ungraded work as 0) changes them, the rule is worked out here.
       const brightspaceSays = group.items.filter((i) => i.marked_dropped).map((i) => i.id);
-      const untouched = !allItems && !group.items.some((i) => overrides.has(i.id));
-      if (drops > 0 && brightspaceSays.length && untouched) {
-        for (const id of brightspaceSays) {
+      if (brightspaceSays.length) {
+        // Brightspace's own drops stand (it may drop for reasons beyond a lowest-N rule), except
+        // items the student changed in What-If. Each of those comes back into play, and the
+        // lowest score still in play is dropped in its place, so the number dropped stays the
+        // same. A rule asking for more drops than Brightspace marked drops the extra lowest.
+        const keep = brightspaceSays.filter((id) => !overrides.has(id));
+        for (const id of keep) {
           out.add(id);
           marked.add(id);
         }
+        const freed = brightspaceSays.length - keep.length;
+        const extra = Math.max(0, (group.drop_lowest || 0) - brightspaceSays.length);
+        const inPlay = regular.filter((c) => !out.has(c.id)); // already lowest first
+        for (const c of inPlay.slice(0, Math.min(freed + extra, Math.max(0, inPlay.length - 1)))) out.add(c.id);
         counted = counted.filter((c) => !out.has(c.id));
       } else if (drops > 0 && regular.length > drops) {
         const kept = regular.slice(group.drop_lowest || 0, regular.length - (group.drop_highest || 0));
@@ -730,7 +738,10 @@ BSX.data = (() => {
         return known > 0 ? known : share(g, { ...i, value: i.value ? { ...i.value, weighted_possible: null } : null })?.wp || 0;
       };
       const droppedShare = group.items.filter((i) => out.has(i.id)).reduce((s, i) => s + shareOf(i), 0);
-      const scale = g.system === 'Weighted' && keptShare > 0 && droppedShare > 0 ? (keptShare + droppedShare) / keptShare : 1;
+      // Only drops worked out from the rule move weight to the kept scores; Brightspace's own
+      // drops are already left out of its figures, so its category share does not include them.
+      const ruleDropShare = group.items.filter((i) => out.has(i.id) && !marked.has(i.id)).reduce((s, i) => s + shareOf(i), 0);
+      const scale = g.system === 'Weighted' && keptShare > 0 && ruleDropShare > 0 && droppedShare > 0 ? (keptShare + ruleDropShare) / keptShare : 1;
       for (const c of counted) {
         score += (c.ws != null ? c.ws : (c.s / c.pp) * c.wp) * scale;
         if (!c.bonus) possible += c.wp * scale;

@@ -159,7 +159,22 @@ const assert = require('assert');
       { id: 3, type: 'Numeric', weight: 33.33, group_weight: 30, value: { score: 8, points_possible: 10, weighted_possible: 10 } }] }] };
   const md = data.dropInfo(marked);
   assert.deepStrictEqual([Array.from(md.dropped), Array.from(md.marked)], [[2], [2]], 'Brightspace’s drop is used');
-  assert.deepStrictEqual(Array.from(data.dropInfo(marked, new Map([[3, 1]])).marked), [], 'a What-If change works it out here instead');
+  assert.deepStrictEqual(Array.from(data.dropInfo(marked, new Map([[3, 1]])).marked), [2], 'Brightspace’s drop stands when another score is changed');
+  // Changing the dropped item itself brings it back, and the lowest score in play is dropped instead.
+  const swapped = data.dropInfo(marked, new Map([[2, 10]]));
+  assert.deepStrictEqual([Array.from(swapped.dropped), Array.from(swapped.marked)], [[1], []]);
+
+  // Brightspace drops with no lowest-N rule (attendance zeros marked "Dropped!"): editing another
+  // score must not bring the zeros back as 0s.
+  const zeros = { system: 'Weighted', groups: [
+    { weight: 10, items: [
+      { id: 1, type: 'Numeric', peer_wp: 5, marked_dropped: true, value: { score: 0, points_possible: 1, weighted_possible: 0 } },
+      { id: 2, type: 'Numeric', peer_wp: 5, marked_dropped: true, value: { score: 0, points_possible: 1, weighted_possible: 0 } },
+      { id: 3, type: 'Numeric', peer_wp: 5, value: { score: 1, points_possible: 1, weighted_possible: 5 } },
+      { id: 4, type: 'Numeric', peer_wp: 5, value: { score: 1, points_possible: 1, weighted_possible: 5 } }] }] };
+  const zBefore = data.estimate(zeros);
+  const zAfter = data.estimate(zeros, new Map([[3, 1]]));
+  assert.ok(Math.abs(zBefore.score / zBefore.points_possible - 1) < 1e-9 && Math.abs(zAfter.score / zAfter.points_possible - 1) < 1e-9, `zeros stay dropped: ${zBefore.score}/${zBefore.points_possible} then ${zAfter.score}/${zAfter.points_possible}`);
   // Brightspace's own weight achieved wins over score/points: participation at 23/27 that
   // Brightspace counts as the full 5 (a rule it applies but does not show students).
   const part = { system: 'Weighted', groups: [

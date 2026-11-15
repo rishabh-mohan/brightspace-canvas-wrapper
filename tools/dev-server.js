@@ -82,7 +82,7 @@ function page(real) {
     document.documentElement.setAttribute('data-bsx-status', !r ? 'missing' : err ? 'error: ' + err.textContent : content && (content.textContent.trim().length > 20 || content.querySelector('iframe.viewer')) ? 'ok' : r.querySelector('.pill') ? 'off' : 'empty');
     document.documentElement.setAttribute('data-bsx-text', (r?.querySelector('.app')?.textContent || '').replace(/\\s+/g, ' ').slice(0, 20000));
     // Also tell the server, so browsers that cannot dump the page (Firefox) can be checked.
-    navigator.sendBeacon('/__status', JSON.stringify({ page: location.pathname + location.search + location.hash, status: document.documentElement.getAttribute('data-bsx-status'), styled: r ? getComputedStyle(r.querySelector('.rail') || document.body).display : '', browser: navigator.userAgent }));
+    navigator.sendBeacon('/__status', JSON.stringify({ page: location.pathname + location.search + location.hash, status: document.documentElement.getAttribute('data-bsx-status'), dialog: r?.querySelector('.modal [role="dialog"]')?.getAttribute('aria-label') || null, results: r ? r.querySelectorAll('.gres').length : 0, styled: r ? getComputedStyle(r.querySelector('.rail') || document.body).display : '', browser: navigator.userAgent }));
   }, 2500 + steps.length * 400 + 1500);
 })();
 </script>

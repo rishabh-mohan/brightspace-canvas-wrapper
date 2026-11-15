@@ -228,19 +228,24 @@
   }
 
   // Confetti for a finished week, drawn by canvas-confetti (vendor/, ISC licence by Kiril
-  // Vatev) on a canvas inside the wrapper: two bursts from the lower corners, arcing up and
-  // tumbling down, in the course colours. No worker (the page's policy may refuse one), and
-  // nothing at all when reduced motion is asked for.
-  function confetti() {
-    const app = document.getElementById('bsx-root')?.shadowRoot?.querySelector('.app');
+  // Vatev) on a canvas inside the wrapper: a cannon on each side firing a couple of pieces
+  // every frame for 15 seconds, in the given (course) colours. No worker (the page's policy
+  // may refuse one), and nothing at all when reduced motion is asked for.
+  function confetti(colors = COLORS.slice(0, 4)) {
+    const app = ui.appEl();
     if (!app || typeof globalThis.confetti?.create !== 'function') return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const canvas = h('canvas', { class: 'confetti', 'aria-hidden': 'true' });
     app.append(canvas);
-    const fire = globalThis.confetti.create(canvas, { resize: true, useWorker: false, disableForReducedMotion: true });
-    const colors = COLORS.slice(0, 7);
-    const burst = (x, angle) => fire({ particleCount: 90, angle, spread: 60, startVelocity: 60, origin: { x, y: 0.9 }, colors, ticks: 260, scalar: 1.1 });
-    Promise.all([burst(0.05, 60), burst(0.95, 120), new Promise((r) => setTimeout(r, 250)).then(() => fire({ particleCount: 60, spread: 100, startVelocity: 40, origin: { x: 0.5, y: 0.6 }, colors, ticks: 240 }))])
-      .finally(() => canvas.remove());
+    const fire = globalThis.confetti.create(canvas, { resize: true, useWorker: false });
+    const end = Date.now() + 15 * 1000;
+    const frame = () => {
+      fire({ particleCount: 2, angle: 60, spread: 55, origin: { x: 0 }, colors });
+      fire({ particleCount: 2, angle: 120, spread: 55, origin: { x: 1 }, colors });
+      if (Date.now() < end && canvas.isConnected) requestAnimationFrame(frame);
+      else setTimeout(() => canvas.remove(), 4000); // let the last pieces land
+    };
+    frame();
   }
 
   ui.confetti = confetti; // also fired by the dev server's "fx:confetti" step, for checking
@@ -277,7 +282,9 @@
       if (items.length && done === items.length && !(settings.confetti || {})[weekKey]) {
         settings.confetti = { [weekKey]: 1 }; // only the latest week is kept
         ui.saveSettings();
-        setTimeout(confetti, 300);
+        // In the colours of the courses that had work this week.
+        const tint = [...byCourse.keys()].map((id) => (id ? colorOf(id) : null)).filter(Boolean);
+        setTimeout(() => confetti(tint.length ? tint : undefined), 300);
       }
       // Concentric rings, one per course (outermost first), each filled by the share done.
       const entries = [...byCourse.entries()];
@@ -389,7 +396,7 @@
 
   // The search dialog: type to filter (every word must match), arrows and Enter to open.
   ui.searchDialog = () => {
-    const app = document.getElementById('bsx-root')?.shadowRoot?.querySelector('.app');
+    const app = ui.appEl();
     if (!app || app.querySelector('.modal')) return;
     const input = h('input', { class: 'txt', type: 'search', placeholder: 'Search modules, assignments, announcements…', 'aria-label': 'Search all courses' });
     const list = h('div', { class: 'gsearch', role: 'listbox', 'aria-label': 'Results' }, h('div', { class: 'muted small pad' }, 'Loading your courses…'));

@@ -48,8 +48,7 @@
 
     // Canvas's event popover: when, where, which calendar, and the details.
     function eventDialog(e, where) {
-      const root = document.getElementById('bsx-root')?.shadowRoot;
-      const app = root && root.querySelector('.app');
+      const app = ui.appEl();
       if (!app) return;
       const start = new Date(e.start_at);
       const end = e.end_at ? new Date(e.end_at) : null;

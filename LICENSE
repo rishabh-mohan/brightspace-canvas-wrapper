@@ -22,3 +22,6 @@ SOFTWARE.
 
 The bundled Lato font files in extension/fonts/ are under the SIL Open Font
 License 1.1; see extension/fonts/LICENSE-OFL.txt.
+
+extension/vendor/confetti.browser.js is canvas-confetti 1.9.3 by Kiril Vatev,
+under the ISC License; see extension/vendor/LICENSE-canvas-confetti.txt.

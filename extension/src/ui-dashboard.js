@@ -227,19 +227,23 @@
     return h('div', { class: 'tkchart' }, root, h('div', { class: 'tkcenter' }, h('span', { class: 'tkbig' }, big), h('span', { class: 'muted small' }, small)));
   }
 
-  // A short burst of confetti over the page, for a finished week. Plain elements with a CSS
-  // fall animation, removed after; nothing at all when reduced motion is asked for.
+  // Confetti for a finished week, drawn by canvas-confetti (vendor/, ISC licence by Kiril
+  // Vatev) on a canvas inside the wrapper: two bursts from the lower corners, arcing up and
+  // tumbling down, in the course colours. No worker (the page's policy may refuse one), and
+  // nothing at all when reduced motion is asked for.
   function confetti() {
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const app = document.getElementById('bsx-root')?.shadowRoot?.querySelector('.app');
-    if (!app) return;
-    const layer = h('div', { class: 'confetti', 'aria-hidden': 'true' });
-    for (let n = 0; n < 90; n++) {
-      layer.append(h('i', { style: `left:${Math.random() * 100}%;background:${COLORS[n % COLORS.length]};animation-delay:${Math.random() * 0.6}s;animation-duration:${1.8 + Math.random() * 1.4}s;--drift:${Math.round(Math.random() * 160 - 80)}px;--spin:${Math.round(Math.random() * 720 - 360)}deg` }));
-    }
-    app.append(layer);
-    setTimeout(() => layer.remove(), 4000);
+    if (!app || typeof globalThis.confetti?.create !== 'function') return;
+    const canvas = h('canvas', { class: 'confetti', 'aria-hidden': 'true' });
+    app.append(canvas);
+    const fire = globalThis.confetti.create(canvas, { resize: true, useWorker: false, disableForReducedMotion: true });
+    const colors = COLORS.slice(0, 7);
+    const burst = (x, angle) => fire({ particleCount: 90, angle, spread: 60, startVelocity: 60, origin: { x, y: 0.9 }, colors, ticks: 260, scalar: 1.1 });
+    Promise.all([burst(0.05, 60), burst(0.95, 120), new Promise((r) => setTimeout(r, 250)).then(() => fire({ particleCount: 60, spread: 100, startVelocity: 40, origin: { x: 0.5, y: 0.6 }, colors, ticks: 240 }))])
+      .finally(() => canvas.remove());
   }
+
+  ui.confetti = confetti; // also fired by the dev server's "fx:confetti" step, for checking
 
   function tasksPanel(courses) {
     const [start, end] = weekRange(taskView.week);

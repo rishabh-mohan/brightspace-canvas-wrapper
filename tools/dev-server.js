@@ -62,6 +62,7 @@ function page(real) {
     const verb = step.slice(0, step.indexOf(':'));
     const rest = step.slice(step.indexOf(':') + 1);
     if (verb === 'click') root()?.querySelector(rest)?.click();
+    if (verb === 'fx' && rest === 'confetti') window.BSX?.ui?.confetti?.(); // fx:confetti
     if (verb === 'key') window.dispatchEvent(new KeyboardEvent('keydown', { key: rest, bubbles: true })); // key:<key>
     if (verb === 'file') { // file:<sel>=<name> picks a small made-up file
       const el = root()?.querySelector(rest.slice(0, rest.lastIndexOf('=')));

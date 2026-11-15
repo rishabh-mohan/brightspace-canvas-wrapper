@@ -307,9 +307,7 @@ a.t:hover { color: var(--link); }
 .gkind { flex: none; width: 92px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 
 /* confetti for a finished week */
-@keyframes bsx-confetti { 0% { transform: translate(0, -20px) rotate(0); opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(var(--drift), 100vh) rotate(var(--spin)); opacity: 0; } }
-.confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
-.confetti i { position: absolute; top: -12px; width: 8px; height: 13px; border-radius: 2px; animation: bsx-confetti 2.4s cubic-bezier(.25,.6,.4,1) forwards; }
+.confetti { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
 
 /* Tasks panel */
 .tkhead { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 8px; }

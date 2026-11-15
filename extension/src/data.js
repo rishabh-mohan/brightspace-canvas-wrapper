@@ -650,9 +650,15 @@ BSX.data = (() => {
         for (const c of regular) if (!kept.includes(c)) out.add(c.id);
         counted = [...kept, ...counted.filter((c) => c.bonus)];
       }
+      // Weighted gradebooks: the share of a dropped score goes to the scores the category keeps
+      // (as Brightspace does), so the category still counts for as much as before the drop
+      // instead of shrinking. Points gradebooks just leave the dropped points out.
+      const keptShare = counted.filter((c) => !c.bonus).reduce((s, c) => s + c.wp, 0);
+      const droppedShare = regular.filter((c) => out.has(c.id)).reduce((s, c) => s + c.wp, 0);
+      const scale = g.system === 'Weighted' && keptShare > 0 && droppedShare > 0 ? (keptShare + droppedShare) / keptShare : 1;
       for (const c of counted) {
-        score += (c.s / c.pp) * c.wp;
-        if (!c.bonus) possible += c.wp;
+        score += (c.s / c.pp) * c.wp * scale;
+        if (!c.bonus) possible += c.wp * scale;
       }
     }
     return { score, possible, dropped: out };

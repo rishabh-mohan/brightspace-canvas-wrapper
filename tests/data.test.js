@@ -137,6 +137,19 @@ const assert = require('assert');
     { id: 3, type: 'Numeric', points_possible: 10, value: { score: 7, points_possible: 10 } }] }] };
   assert.deepEqual({ ...data.estimate(dropped) }, { score: 16, points_possible: 20 });
   assert.deepStrictEqual(Array.from(data.dropped(dropped)), [1], 'the 2/10 is the one dropped');
+  // Weighted: the dropped score's share goes to the kept ones, so Homework still counts for
+  // its full 30 (not 20) next to the 50-point exam: (8+9 → 85% of 30) + 50 = 75.5 of 80.
+  const wdrop = { system: 'Weighted', groups: [
+    { weight: 30, drop_lowest: 1, items: [
+      { id: 1, type: 'Numeric', value: { score: 2, points_possible: 10, weighted_possible: 10 } },
+      { id: 2, type: 'Numeric', value: { score: 9, points_possible: 10, weighted_possible: 10 } },
+      { id: 3, type: 'Numeric', value: { score: 8, points_possible: 10, weighted_possible: 10 } }] },
+    { weight: 50, items: [{ id: 4, type: 'Numeric', value: { score: 50, points_possible: 50, weighted_possible: 50 } }] }] };
+  const wd = data.estimate(wdrop);
+  assert.ok(Math.abs(wd.score - 75.5) < 1e-9 && Math.abs(wd.points_possible - 80) < 1e-9, `weighted drop: got ${wd.score}/${wd.points_possible}`);
+  // ...and What-If uses the same rule: raising the dropped one past another moves the drop.
+  const wi = data.estimate(wdrop, new Map([[1, 10]]));
+  assert.ok(Math.abs(wi.score - (((10 + 9) / 20) * 30 + 50)) < 1e-9, `what-if with drop: got ${wi.score}`);
   // A What-If score can change which one is dropped.
   assert.deepStrictEqual(Array.from(data.dropped(dropped, new Map([[3, 1]]))), [3]);
   assert.strictEqual(data.dropRule({ drop_lowest: 2, drop_highest: 1 }), 'lowest 2 dropped, highest 1 dropped');

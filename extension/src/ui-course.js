@@ -154,6 +154,15 @@
     return m && m[1].trim() ? m[1].trim().replace(/[\s:–-]+$/, '') : null;
   };
   const byName = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  // A group's name in the plural: "Homework" -> "Homeworks", "Quiz" -> "Quizzes",
+  // "Activity" -> "Activities"; a name already ending in s is left alone.
+  const plural = (word) => {
+    const w = String(word);
+    if (/s$/i.test(w)) return w;
+    if (/(x|z|ch|sh)$/i.test(w)) return `${w}${/z$/i.test(w) && !/zz$/i.test(w) ? 'z' : ''}es`;
+    if (/[^aeiou]y$/i.test(w)) return `${w.slice(0, -1)}ies`;
+    return `${w}s`;
+  };
   function arrangeModules(groups) {
     const families = new Map();
     for (const [name, list] of groups) {
@@ -164,7 +173,7 @@
     }
     const entries = [...families.values()].map((f) =>
       f.members.length > 1
-        ? { name: f.base, children: f.members.sort(([a], [b]) => byName(a, b)) }
+        ? { name: plural(f.base), children: f.members.sort(([a], [b]) => byName(a, b)) }
         : { name: f.members[0][0], list: f.members[0][1] });
     return entries.sort((a, b) => kindRank(a.name) - kindRank(b.name) || byName(a.name, b.name));
   }

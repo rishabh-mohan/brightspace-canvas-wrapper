@@ -494,7 +494,43 @@
     };
   }
 
-  function thread(posts) {
+  // Canvas's reply box: a message (and a subject for a new thread), posted to Brightspace
+  // only when the student presses Post Reply.
+  function replyBox(course, d, parent) {
+    const subject = h('input', { class: 'txt', type: 'text', 'aria-label': 'Subject', placeholder: 'Subject', value: parent ? `Re: ${parent.subject || d.name}` : '' });
+    const message = h('textarea', { class: 'txt', rows: '5', 'aria-label': parent ? `Reply to ${parent.author}` : 'Reply', placeholder: 'Write a reply…' });
+    const msg = h('div', { class: 'msg', role: 'status' });
+    const go = h('button', { class: 'btn primary', type: 'button' }, 'Post Reply');
+    const box = h('div', { class: 'replybox' },
+      parent ? null : h('label', null, 'Subject', subject),
+      h('label', null, parent ? `Reply to ${parent.author}` : 'Message', message),
+      h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', onclick: () => box.remove() }, 'Cancel'), go),
+      msg);
+    go.addEventListener('click', async () => {
+      const text = message.value.trim();
+      if (!text) {
+        msg.className = 'msg bad';
+        msg.textContent = 'Write something first.';
+        return;
+      }
+      go.disabled = true;
+      msg.className = 'msg';
+      msg.textContent = 'Posting…';
+      try {
+        await data.post(course.id, d.forum_id, d.source_id, { parentId: parent ? parent.id : null, subject: parent ? subject.value : subject.value.trim() || d.name, message: text });
+        ui.flash(parent ? `Replied to ${parent.author}.` : 'Your post is up.');
+        ui.reload();
+      } catch (e) {
+        go.disabled = false;
+        msg.className = 'msg bad';
+        msg.textContent = e && e.status === 403 ? 'Brightspace did not allow posting here (the topic may be locked).' : `Brightspace did not accept the post${e && e.status ? ` (${e.status})` : ''}. ${e && e.detail ? e.detail : ''}`;
+      }
+    });
+    setTimeout(() => message.focus(), 0);
+    return box;
+  }
+
+  function thread(posts, onReply) {
     const ids = new Set(posts.map((p) => p.id));
     const kids = new Map();
     const roots = [];
@@ -508,7 +544,8 @@
       h('div', { class: p.unread ? 'post unread' : 'post', style: `margin-left:${Math.min(depth, 5) * 28}px` },
         h('div', { class: 'phead' }, h('span', { class: 'avatar sm' }, (p.author || '?').slice(0, 1).toUpperCase()), h('div', null, h('div', { class: 't' }, p.author, p.mine ? ui.tag('you') : null, p.unread ? h('span', { class: 'newdot inline', title: 'Unread' }) : null), h('div', { class: 'muted small' }, when(p.posted_at)))),
         depth === 0 && p.subject ? h('div', { class: 'psub' }, p.subject) : null,
-        prose(p.message_html, p.message)),
+        prose(p.message_html, p.message),
+        onReply ? h('button', { class: 'linkbtn', type: 'button', onclick: (ev) => { const post = ev.currentTarget.closest('.post'); if (!post.querySelector('.replybox')) post.append(onReply(p)); } }, ic('discussion', 14), ' Reply') : null),
       (kids.get(p.id) || []).map((k) => draw(k, depth + 1)),
     ];
     return roots.map((p) => draw(p, 0));
@@ -517,14 +554,19 @@
   async function discussionDetail(course, r) {
     const d = await data.discussion(course.id, r.itemId);
     if (!d) return notFound('discussion', course.id, 'discussions');
+    const canPost = !d.locked;
+    const slot = h('div');
+    // Collapsed like Canvas's "Reply" field until clicked.
+    const opener = canPost ? h('button', { class: 'replyopen', type: 'button', onclick: () => { opener.hidden = true; const b = replyBox(course, d, null); b.querySelector('.btn:not(.primary)').addEventListener('click', () => (opener.hidden = false)); slot.append(b); } }, ic('discussion', 16), ' Reply') : null;
     return {
       crumb: d.name,
       body: h('article', { class: 'detail' },
-        h('div', { class: 'dhead' }, h('h1', null, d.name), outButton('Reply in Brightspace', d.html_url)),
+        h('div', { class: 'dhead' }, h('h1', null, d.name), d.locked ? ui.tag('locked') : null),
         metaBar([['Forum', d.forum], ['Due', d.due_at ? when(d.due_at) : null], ['Points', d.points_possible != null ? num(d.points_possible) : null]]),
         prose(d.description_html, d.description),
+        opener, slot,
         h('h2', { class: 'sect' }, d.posts.length ? `${d.posts.length} ${d.posts.length === 1 ? 'post' : 'posts'}` : 'Posts', d.posts.some((p) => p.unread) ? h('span', { class: 'muted small' }, ` · ${d.posts.filter((p) => p.unread).length} unread`) : null),
-        d.posts.length ? thread(d.posts) : ui.empty(d.must_post_first ? 'You must post before you can see other replies. Open the topic in Brightspace to post.' : 'No posts to show yet.')),
+        d.posts.length ? thread(d.posts, canPost ? (p) => replyBox(course, d, p) : null) : ui.empty(d.must_post_first ? 'Post first to see your classmates’ replies.' : 'No posts yet. Be the first to reply.')),
     };
   }
 

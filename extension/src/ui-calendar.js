@@ -41,9 +41,32 @@
       const attrs = { class: 'event', style: `--c:${e.course_id == null ? 'var(--muted)' : colorOf(e.course_id)}`, title: `${e.title} · ${time ? `${time} · ` : ''}${where}` };
       if (e.personal) return h('button', { ...attrs, type: 'button', onclick: () => ui.todoDialog(e.personal, listed) }, label);
       if (e.external) return h('a', { ...attrs, href: e.external.html_url, target: '_blank', rel: 'noopener noreferrer', title: `${attrs.title} · ${e.external.source}` }, label);
+      if (!e.associated) return h('button', { ...attrs, type: 'button', onclick: () => eventDialog(e, where) }, label);
       const href = e.html_url && ui.wrapHref(e.html_url);
       return href ? h('a', { ...attrs, href }, label) : h('div', attrs, label);
     };
+
+    // Canvas's event popover: when, where, which calendar, and the details.
+    function eventDialog(e, where) {
+      const root = document.getElementById('bsx-root')?.shadowRoot;
+      const app = root && root.querySelector('.app');
+      if (!app) return;
+      const start = new Date(e.start_at);
+      const end = e.end_at ? new Date(e.end_at) : null;
+      const time = e.all_day ? ui.fmt.day.format(start) : `${ui.fmt.day.format(start)}, ${ui.fmt.time.format(start)}${end && end > start ? ` – ${ui.fmt.time.format(end)}` : ''}`;
+      const close = () => overlay.remove();
+      const overlay = h('div', { class: 'modal', onclick: (ev) => ev.target === overlay && close(), onkeydown: (ev) => ev.key === 'Escape' && (ev.stopPropagation(), close()) },
+        h('div', { class: 'dialog', role: 'dialog', 'aria-label': e.title, style: `border-top:6px solid ${e.course_id == null ? 'var(--muted)' : colorOf(e.course_id)}` },
+          h('div', { class: 'trayhead' }, h('h2', null, e.title), h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Close', onclick: close }, ic('close'))),
+          h('dl', { class: 'evmeta' },
+            h('dt', null, ic('calendar', 16)), h('dd', null, time),
+            e.location ? [h('dt', null, ic('home', 16)), h('dd', null, e.location)] : null,
+            h('dt', null, h('span', { class: 'dot', style: `background:${e.course_id == null ? 'var(--muted)' : colorOf(e.course_id)}` })), h('dd', null, where)),
+          e.description ? ui.prose(e.description, e.description) : null,
+          e.html_url ? h('div', { class: 'row' }, h('a', { class: 'btn', href: e.html_url, onclick: close }, 'More details')) : null));
+      app.append(overlay);
+      overlay.querySelector('.iconbtn').focus();
+    }
 
     const link = (d) => `#/calendar/${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     const pick = (key, text) => h('button', { type: 'button', class: mode === key ? 'on' : null, onclick: () => { mode = key; ui.render(); } }, text);
@@ -82,7 +105,7 @@
     return {
       title: ui.fmt.month.format(first),
       actions,
-      body: [body, h('p', { class: 'muted small' }, 'From the Brightspace calendar. An item can appear twice when it has both a due date and an availability date.')],
+      body: [body, h('p', { class: 'muted small' }, 'From the Brightspace calendar.')],
       side: ui.sideSection('Calendars', [toggle({ id: 0, name: 'My To Do' }), listed.map(toggle)]),
     };
   };

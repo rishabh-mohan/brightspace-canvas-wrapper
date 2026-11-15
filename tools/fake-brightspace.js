@@ -132,6 +132,12 @@ function build(c) {
     ...quizzes.map((q) => ({ id: q.QuizId, title: q.Name, at: q.DueDate, link: `/d2l/lms/quizzing/quizzing.d2l?ou=${c.id}&qi=${q.QuizId}` })),
   ].map((e) => ({ CalendarEventId: e.id, OrgUnitId: c.id, Title: e.title, Description: '', CalendarEventViewUrl: `/d2l/le/calendar/${c.id}/event/${e.id}/detailsview`, IsAllDayEvent: false, StartDateTime: e.at, EndDateTime: e.at, OrgUnitName: c.name, OrgUnitCode: c.code, IsAssociatedWithEntity: true, AssociatedEntity: { AssociatedEntityType: 'x', AssociatedEntityId: e.id, Link: e.link } }));
 
+  // Events not tied to any item: an exam and weekly office hours.
+  if (!c.extra) {
+    const plain = (id, title, startDay, h1, h2, where, desc) => ({ CalendarEventId: id, OrgUnitId: c.id, Title: title, Description: desc, CalendarEventViewUrl: `/d2l/le/calendar/${c.id}/event/${id}/detailsview`, IsAllDayEvent: false, StartDateTime: at(startDay, h1, 0), EndDateTime: at(startDay, h2, 0), LocationName: where, OrgUnitName: c.name, OrgUnitCode: c.code, IsAssociatedWithEntity: false, AssociatedEntity: null });
+    events.push(plain(c.id * 1000 + 901, 'Midterm 2', 4, 20, 22, 'WALC 1055', '<p>Covers weeks 6–10. Bring a photo ID and a pencil.</p>'));
+    for (const w of [-7, 0, 7]) events.push(plain(c.id * 1000 + 910 + w + 7, 'Office hours', w + 1, 14, 16, 'LWSN B146', 'Drop in with questions.'));
+  }
   return { folders, quizzes, items, values, categories, final, forums, topics, posts, news, toc, classlist, events };
 }
 // A points rubric with three criteria and four levels, shaped as Brightspace's Rubric.Rubric.
@@ -164,8 +170,25 @@ function quizSummary(query) {
   return `<!doctype html><html><body><h1>${q.Name} - Summary</h1><div class="d2l-box"><table><tr><th>Due Date</th><td>${q.DueDate}</td></tr><tr><th>Attempts</th><td>Allowed - ${allowed}, Completed - ${done}</td></tr><tr><th>Time Limit</th><td>30 minutes</td></tr></table></div><button>Start Quiz!</button></body></html>`;
 }
 
+// POST .../discussions/forums/{f}/topics/{t}/posts/ with CreatePostData as JSON.
+function addPost(pathname, body) {
+  const m = pathname.match(/^\/d2l\/api\/le\/[\d.]+\/(\d+)\/discussions\/forums\/\d+\/topics\/\d+\/posts\/$/);
+  const d = m && DATA.get(Number(m[1]));
+  if (!d) return null;
+  let p;
+  try {
+    p = JSON.parse(body.toString('utf8'));
+  } catch {
+    return { status: 400, type: 'text/plain', body: 'Bad JSON' };
+  }
+  if (!p.Message || !p.Message.Content) return { status: 400, type: 'text/plain', body: 'A post needs a message.' };
+  d.posts.push({ PostId: 100 + d.posts.length, ParentPostId: p.ParentPostId, ThreadId: p.ParentPostId || 100 + d.posts.length, Subject: p.Subject, Message: rich(String(p.Message.Content).replace(/</g, '&lt;')), PostingUserId: 42, PostingUserDisplayName: 'Student One', DatePosted: new Date().toISOString(), IsAnonymous: false, IsDeleted: false, IsRead: true });
+  return { status: 200, type: 'application/json', body: '{}' };
+}
+
 // POST .../dropbox/folders/{id}/submissions/mysubmissions/ with a multipart/mixed body.
 function submit(pathname, body, contentType) {
+  if (/\/posts\/$/.test(pathname)) return addPost(pathname, body) || { status: 404, type: 'text/plain', body: 'Not found' };
   const m = pathname.match(/^\/d2l\/api\/le\/[\d.]+\/(\d+)\/dropbox\/folders\/(\d+)\/submissions\/mysubmissions\/$/);
   if (!m || !/^multipart\/mixed;\s*boundary=/i.test(contentType || '')) return { status: 400, type: 'text/plain', body: 'Bad request' };
   const text = body.toString('latin1');

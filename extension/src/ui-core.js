@@ -13,10 +13,9 @@ BSX.ui = (() => {
   // extension scripts run in their own world and never see it.)
   if (window.top !== window && !globalThis.BSX_DEV_FRAME) return null;
 
-  // Which Brightspace page are we on, and which wrapper page stands in for it?
-  const entry = (() => {
-    const p = location.pathname;
-    const ou = Number(new URLSearchParams(location.search).get('ou')) || null;
+  // Which Brightspace page is this, and which wrapper page stands in for it?
+  function detectEntry(p, search) {
+    const ou = Number(new URLSearchParams(search).get('ou')) || null;
     let m = p.match(/^\/d2l\/home(?:\/(\d+))?\/?$/);
     if (m) return { kind: 'home', id: m[1] ? Number(m[1]) : null };
     if (/^\/d2l\/lms\/grades\/my_grades\/main\.d2l$/i.test(p)) return { kind: 'grades', id: ou };
@@ -29,10 +28,29 @@ BSX.ui = (() => {
     m = p.match(/^\/d2l\/le\/(\d+)\/discussions\/List\/?$/i);
     if (m) return { kind: 'discussions', id: Number(m[1]) };
     return null;
-  })();
+  }
+  const entry = detectEntry(location.pathname, location.search);
   const LAST = 'bsx.last'; // the wrapper page most recently shown, for the way back
 
-  // On Brightspace pages the wrapper does not cover, offer a small way back to it.
+  // Every other Brightspace page opens inside the wrapper, in a frame under Canvas's
+  // navigation (see the "open" view). The page arriving here is stopped before it loads,
+  // so it is fetched once, by the frame. Sign-in pages, quiz attempts in progress, and a
+  // page the student asked to see without the wrapper are left as they are.
+  const RAW = /^\/d2l\/(login|logout|lp\/auth\/|api\/|lms\/quizzing\/user\/attempt\/)/i;
+  const here = location.pathname + location.search;
+  let rawWanted = false;
+  try {
+    rawWanted = sessionStorage.getItem('bsx.raw') === here;
+    if (rawWanted) sessionStorage.removeItem('bsx.raw');
+  } catch {}
+  if (!entry && location.pathname.startsWith('/d2l/') && !RAW.test(location.pathname) && !rawWanted && location.hash !== '#brightspace') {
+    // Go to the wrapper's own address with this page in its frame. (A browser will not load a
+    // frame at the same address as the page around it, so the wrapper cannot stay here.)
+    location.replace(`/d2l/home#/open?u=${encodeURIComponent(here)}`);
+    return null;
+  }
+
+  // On Brightspace pages the wrapper leaves alone, offer a small way back to it.
   if (!entry) {
     if (!location.pathname.startsWith('/d2l/')) return null;
     let back = '/d2l/home#/';
@@ -316,7 +334,7 @@ BSX.ui = (() => {
       const u = new URL(url, location.origin);
       const ou = u.searchParams.get('ou');
       if (/folder_submit_files\.d2l$/i.test(u.pathname) && ou && u.searchParams.get('db')) return courseHref(ou, 'assignments', u.searchParams.get('db'));
-      if (/quizzing\.d2l$/i.test(u.pathname) && ou && u.searchParams.get('qi')) return courseHref(ou, 'quizzes', u.searchParams.get('qi'));
+      if (/(quizzing|quiz_summary)\.d2l$/i.test(u.pathname) && ou && u.searchParams.get('qi')) return courseHref(ou, 'quizzes', u.searchParams.get('qi'));
     } catch {}
     return safeHref(url);
   }
@@ -431,6 +449,14 @@ BSX.ui = (() => {
     if (hash === '#/grades') return { view: 'allgrades', nav: 'dashboard' };
     if (hash === '#/inbox') return { view: 'inbox', nav: 'inbox' };
     if (hash === '#/groups') return { view: 'groups', nav: 'groups' };
+    if (hash.startsWith('#/open?u=')) {
+      let u = '';
+      try {
+        u = decodeURIComponent(hash.slice('#/open?u='.length));
+      } catch {}
+      if (/^\/d2l\//.test(u) && !/^\/d2l\/api\//i.test(u)) return { view: 'open', nav: null, u };
+      return { view: 'dashboard', nav: 'dashboard' };
+    }
     let m = hash.match(/^#\/calendar(?:\/(\d{4})-(\d{2}))?$/);
     if (m) return { view: 'calendar', nav: 'calendar', year: m[1] ? Number(m[1]) : null, month: m[2] ? Number(m[2]) - 1 : null };
     m = hash.match(/^#\/courses\/(\d+)(?:\/([a-z]+)(?:\/(\d+))?)?$/);
@@ -443,7 +469,78 @@ BSX.ui = (() => {
     if (BSX.gradescope) BSX.gradescope.clear();
     render();
   };
-  const turnOff = () => (location.hash = OFF);
+  // Show a Brightspace page as it is, without the wrapper: a page loaded once without it.
+  function openRaw(u) {
+    try {
+      sessionStorage.setItem('bsx.raw', u);
+    } catch {}
+    location.assign(u);
+  }
+  const turnOff = () => {
+    const r = route();
+    if (r.view === 'open') return openRaw(r.u);
+    location.hash = OFF;
+  };
+
+  // Brightspace links clicked inside the wrapper open in the wrapper's frame view instead of
+  // leaving it. Downloads, API files and links meant for a new tab are left alone.
+  function interceptLinks(ev) {
+    if (ev.defaultPrevented || ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+    const a = ev.composedPath().find((el) => el && el.tagName === 'A');
+    if (!a || !a.href || a.target === '_blank' || a.hasAttribute('download')) return;
+    let u;
+    try {
+      u = new URL(a.href, location.href);
+    } catch {
+      return;
+    }
+    if (u.origin !== location.origin || !u.pathname.startsWith('/d2l/') || /^\/d2l\/api\//i.test(u.pathname)) return;
+    if (u.pathname === location.pathname && u.search === location.search && u.hash.startsWith('#/')) return; // a wrapper route
+    if (RAW.test(u.pathname)) return;
+    ev.preventDefault();
+    location.hash = `#/open?u=${encodeURIComponent(u.pathname + u.search)}`;
+  }
+
+  // The "open" view: a Brightspace page in a frame, under Canvas's navigation. Brightspace's
+  // own top bar is hidden inside the frame (the wrapper's rail replaces it). When the frame
+  // moves to a page the wrapper stands in for, the wrapper page is shown instead.
+  views.open = async (r) => {
+    const params = new URLSearchParams(r.u.split('?')[1] || '');
+    const ou = Number(params.get('ou')) || Number((r.u.match(/^\/d2l\/(?:le\/(?:content\/)?|home\/)(\d+)/) || [])[1]) || null;
+    const courses = ou ? await data.courses().catch(() => []) : [];
+    const course = courses.find((c) => c.id === ou) || null;
+    const title = h('span', { class: 'here' }, 'Brightspace');
+    const f = h('iframe', { class: 'viewer full', src: r.u, title: 'Brightspace page' });
+    f.addEventListener('load', () => {
+      let doc;
+      let path;
+      try {
+        doc = f.contentDocument;
+        path = f.contentWindow.location.pathname + f.contentWindow.location.search;
+      } catch {
+        return; // another site (a tool or the sign-in page): leave it be
+      }
+      if (/^\/d2l\/login/i.test(path)) return location.assign(path); // signed out: sign in at the top
+      const target = detectEntry(f.contentWindow.location.pathname, f.contentWindow.location.search);
+      if (target && path !== r.u) return location.assign(path); // a page the wrapper replaces
+      if (path !== r.u) history.replaceState(null, '', `${location.pathname}${location.search}#/open?u=${encodeURIComponent(path)}`);
+      const t = (doc.title || '').replace(/\s*-\s*[^-]*$/, '').trim();
+      title.textContent = t || 'Brightspace';
+      if (t) setTitle(t);
+      // Hide Brightspace's own header and navigation bar inside the frame.
+      for (const el of doc.querySelectorAll('d2l-navigation, header > nav, .d2l-navigation-s, .d2l-navigation-s-header')) el.style.setProperty('display', 'none', 'important');
+    });
+    const crumbs = course ? [{ label: nameOf(course), href: courseHref(course.id) }, { label: title }] : [{ label: title }];
+    return {
+      crumbs,
+      actions: h('button', { class: 'btn', type: 'button', title: 'Show this page without the Canvas view', onclick: () => openRaw(lastOpen()) }, 'Without Canvas view'),
+      body: f,
+    };
+  };
+  const lastOpen = () => {
+    const r = route();
+    return r.view === 'open' ? r.u : here;
+  };
 
   // ---- global navigation and trays ------------------------------------------
   function setTheme(theme) {
@@ -594,6 +691,10 @@ BSX.ui = (() => {
     try {
       // Arriving on a Brightspace URL: pick the wrapper page that stands in for it.
       if (r.view === 'entry') {
+        if (!entry) {
+          history.replaceState(null, '', '#/');
+          return render();
+        }
         const courses = entry.id ? await data.courses() : [];
         const known = courses.some((c) => c.id === entry.id);
         let target;
@@ -610,7 +711,7 @@ BSX.ui = (() => {
       clearTimeout(keepTimer);
       keepTimer = setTimeout(() => (keepScroll = null), 4000);
       lastHash = location.hash;
-      setTitle(page.crumbs ? page.crumbs.slice().reverse().map((c) => c.label).join(': ') : page.title);
+      setTitle(page.crumbs ? page.crumbs.slice().reverse().map((c) => (typeof c.label === 'string' ? c.label : c.label.textContent)).join(': ') : page.title);
       try {
         sessionStorage.setItem(LAST, location.pathname + location.search + location.hash);
       } catch {}
@@ -785,6 +886,7 @@ BSX.ui = (() => {
   function start() {
     window.addEventListener('hashchange', render);
     window.addEventListener('keydown', onKey);
+    root.addEventListener('click', interceptLinks);
     loadFonts();
     window.addEventListener('hashchange', updateBadge);
     loadSettings().then(() => setTimeout(updateBadge, 3000));
@@ -792,7 +894,8 @@ BSX.ui = (() => {
     // answers differ, redraw in place, unless the student is typing or has a dialog open.
     client.onChange(() => {
       const busy = root.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(root.activeElement.tagName);
-      if (!busy && !root.querySelector('.modal, .wi.changed') && route().view !== 'off') render();
+      // A framed Brightspace page is not redrawn: that would reload it and lose its state.
+      if (!busy && !root.querySelector('.modal, .wi.changed') && !['off', 'open'].includes(route().view)) render();
     });
     loadSettings().then(render);
   }

@@ -242,6 +242,7 @@ a.t:hover { color: var(--link); }
 .psub { font-weight: 700; margin-top: 10px; }
 
 .viewer { display: block; width: 100%; height: calc(100vh - 230px); min-height: 460px; border: 1px solid var(--line); border-radius: 4px; background: #fff; margin: 12px 0; }
+.viewer.full { height: calc(100vh - 140px); margin: 0; }
 .pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; }
 .pager .btn { max-width: 48%; overflow: hidden; }
 .linkcard { display: flex; gap: 16px; align-items: center; padding: 22px; border: 1px solid var(--line); border-radius: 4px; margin: 14px 0; }
@@ -267,6 +268,14 @@ a.t:hover { color: var(--link); }
 .submitbox .msg { margin-top: 10px; font-size: 14px; }
 .submitbox .msg.bad { color: var(--bad); }
 .btn[disabled] { opacity: .6; cursor: default; }
+.replyopen { display: flex; align-items: center; gap: 6px; width: 100%; margin: 18px 0 4px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--muted); text-align: left; font-size: 15px; transition: border-color .15s; }
+.replyopen:hover { border-color: var(--link); color: var(--fg); }
+.replybox { display: grid; gap: 10px; margin: 14px 0; padding: 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--soft); animation: bsx-rise .2s var(--ease); }
+.replybox label { display: grid; gap: 4px; font-weight: 700; font-size: 14px; }
+.replybox .msg { font-size: 14px; }
+.replybox .msg.bad { color: var(--bad); }
+.linkbtn { margin-top: 8px; border: 0; background: none; padding: 2px 0; color: var(--link); font-size: 14px; display: inline-flex; align-items: center; gap: 4px; }
+.linkbtn:hover { text-decoration: underline; }
 
 /* groups */
 .gcards { display: grid; gap: 14px; }
@@ -308,6 +317,9 @@ input.wi.changed { border-color: var(--link); background: var(--hi); }
   color: var(--fg); background: color-mix(in srgb, var(--c, var(--muted)) 12%, transparent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; text-align: left; font-family: inherit; }
 .etime { color: var(--muted); }
+.evmeta { display: grid; grid-template-columns: 22px 1fr; gap: 8px 10px; margin: 0; align-items: center; }
+.evmeta dt { display: inline-flex; justify-content: center; color: var(--muted); }
+.evmeta dd { margin: 0; }
 .calrow { display: flex; gap: 8px; align-items: center; padding: 6px 0; font-size: 14.5px; cursor: pointer; }
 
 .pill { position: fixed; z-index: 2147483647; left: 12px; bottom: 12px; padding: 7px 14px; border-radius: 18px; border: 1px solid #2d3b45;

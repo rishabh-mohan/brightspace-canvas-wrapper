@@ -1,6 +1,6 @@
 # Canvas-style wrapper for Brightspace
 
-A browser extension that shows your Brightspace courses in Canvas's layout. It makes exactly one kind of change on Brightspace: handing in an assignment file when you press **Submit Assignment**. Everything else that writes (taking a quiz, replying to a discussion, text or on-paper submissions) opens the real Brightspace page.
+A browser extension that shows your Brightspace courses in Canvas's layout. It changes things on Brightspace only when you press a button for it: **Submit Assignment** (hands in a file) and **Post Reply** (posts in a discussion). Taking a quiz and text submissions happen on Brightspace's own page, shown inside the wrapper.
 
 Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brightspace-vs-canvas-wrapper-plan.md).
 
@@ -46,6 +46,12 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 **Look and motion**: set in Lato, Canvas's typeface (bundled in `extension/fonts/` under the SIL Open Font Licence). Canvas-style Dashboard Options menu (views and colour overlay), flash alerts for actions, grey placeholder bars while data loads, and short transitions on trays, dialogs, menus and collapsing groups. All motion is switched off when the system asks for reduced motion.
 
 **Speed**: the last answer from each Brightspace address is kept in extension storage (this browser only, up to a week, about 4 MB), so pages appear at once from your previous visit while fresh data loads; the page redraws in place if anything changed. Refresh always waits for Brightspace. Signing out of Brightspace clears the kept copy.
+
+**Every other Brightspace page opens inside the wrapper**: quiz pages, discussion pages, Brightspace's own tools, and every "Open in Brightspace" link show in a frame under Canvas's navigation, with Brightspace's own top bar hidden. Opening such a page directly (a bookmark, an email link) goes to the wrapper with that page inside. **Without Canvas view** at the top shows the page on its own. Sign-in pages and quiz attempts in progress are never wrapped.
+
+**Discussions**: Reply and threaded replies are posted to Brightspace from the discussion page.
+
+**Calendar**: events that are not assignments (exams, office hours) open a detail panel with time, place and description.
 
 The wrapper stands in for the Brightspace home page, course home pages, and Brightspace's own Grades, Assignments, Announcements, Quizzes, Discussions, Classlist and Content list pages. On every other Brightspace page a small "← Canvas view" button leads back. The layout adapts down to phone width.
 

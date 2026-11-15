@@ -142,7 +142,7 @@ BSX.data = (() => {
     points_possible: null,
     grade_item_id: q.GradeItemId ?? null,
     grade,
-    html_url: `/d2l/lms/quizzing/quizzing.d2l?ou=${ou}&qi=${q.QuizId}`,
+    html_url: `/d2l/lms/quizzing/user/quiz_summary.d2l?qi=${q.QuizId}&ou=${ou}`, // the page with Start Quiz
   });
 
   const mapTopic = (t, ou) => ({
@@ -374,7 +374,15 @@ BSX.data = (() => {
     return raw.some((p) => !p.IsDeleted && sameId(p.PostingUserId, who.Identifier));
   }
 
-  // One discussion topic with its posts (read-only).
+  // Post in a discussion topic as the student: a new thread (no parent) or a reply.
+  // Brightspace's CreatePostData: { ParentPostId, Subject, Message: { Content, Type }, IsAnonymous }.
+  async function post(ou, forumId, topicId, { parentId = null, subject = '', message }) {
+    const body = JSON.stringify({ ParentPostId: parentId, Subject: subject || '', Message: { Content: message, Type: 'Text' }, IsAnonymous: false });
+    await client.send(`${ou}/discussions/forums/${forumId}/topics/${topicId}/posts/`, { body, type: 'application/json' });
+    client.clear();
+  }
+
+  // One discussion topic with its posts.
   async function discussion(ou, topicId) {
     const t = (await topicList(ou)).find((x) => sameId(x.TopicId, topicId));
     if (!t) return null;
@@ -755,6 +763,11 @@ BSX.data = (() => {
         start_at: e.StartDateTime || e.EndDateTime,
         end_at: e.EndDateTime || e.StartDateTime,
         all_day: Boolean(e.IsAllDayEvent),
+        description: e.Description || '', // may be HTML; sanitised before it is shown
+        location: e.LocationName || '',
+        // Events tied to an assignment, quiz or topic open that item; the rest (lectures,
+        // exams, office hours) open a detail panel in the calendar.
+        associated: Boolean(e.IsAssociatedWithEntity && e.AssociatedEntity?.Link),
         html_url: e.AssociatedEntity?.Link || e.CalendarEventViewUrl || null,
       }))
       .filter((e) => e.start_at)
@@ -763,7 +776,7 @@ BSX.data = (() => {
 
   return {
     courses, orgId, me, updates,
-    assignments, assignmentGroups, assignment, submission, canSubmit, submit, quiz, quizAttempts, parseQuizSummary, discussions, discussion,
+    assignments, assignmentGroups, assignment, submission, canSubmit, submit, quiz, quizAttempts, parseQuizSummary, discussions, discussion, post,
     todo, planner, overdue, recentFeedback,
     grades, estimate, estimable, courseTotals,
     announcements, recentAnnouncements,

@@ -243,6 +243,14 @@ const assert = require('assert');
   assert.match(bodyText, /Content-Type: application\/json\r\n\r\n\{"Text":"my comment","Html":null\}\r\n--/);
   assert.match(bodyText, /filename="file"[\s\S]*Content-Type: text\/plain\r\n\r\nhello\r\n--bsx\w+--/);
 
+  // Posting in a discussion: one JSON POST in Brightspace's CreatePostData shape.
+  posts.length = 0;
+  await data.post(12, 1, 31, { parentId: 7, subject: 'Re: Week 1', message: 'Agreed.' });
+  const pp = posts.find((x) => x.p.endsWith('/posts/'));
+  assert.strictEqual(pp.p, '/d2l/api/le/1.100/12/discussions/forums/1/topics/31/posts/');
+  assert.strictEqual(pp.opts.headers['Content-Type'], 'application/json');
+  assert.deepStrictEqual(JSON.parse(pp.opts.body), { ParentPostId: 7, Subject: 'Re: Week 1', Message: { Content: 'Agreed.', Type: 'Text' }, IsAnonymous: false });
+
   // Saved answers: a new page draws from the last visit at once, then redraws when
   // Brightspace's real answer differs.
   const savedKey = 'bsxCache:x.brightspace.com';

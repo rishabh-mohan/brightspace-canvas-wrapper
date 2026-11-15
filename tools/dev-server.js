@@ -73,7 +73,7 @@ function page(real) {
     const r = root();
     const err = r?.querySelector('.error');
     const content = r?.querySelector('.content');
-    document.documentElement.setAttribute('data-bsx-status', !r ? 'missing' : err ? 'error: ' + err.textContent : content && content.textContent.trim().length > 20 ? 'ok' : r.querySelector('.pill') ? 'off' : 'empty');
+    document.documentElement.setAttribute('data-bsx-status', !r ? 'missing' : err ? 'error: ' + err.textContent : content && (content.textContent.trim().length > 20 || content.querySelector('iframe.viewer')) ? 'ok' : r.querySelector('.pill') ? 'off' : 'empty');
     document.documentElement.setAttribute('data-bsx-text', (r?.querySelector('.app')?.textContent || '').replace(/\\s+/g, ' ').slice(0, 20000));
     // Also tell the server, so browsers that cannot dump the page (Firefox) can be checked.
     navigator.sendBeacon('/__status', JSON.stringify({ page: location.pathname + location.search + location.hash, status: document.documentElement.getAttribute('data-bsx-status'), styled: r ? getComputedStyle(r.querySelector('.rail') || document.body).display : '', browser: navigator.userAgent }));

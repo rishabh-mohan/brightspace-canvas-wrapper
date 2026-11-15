@@ -348,6 +348,10 @@
     // Ed: token and region.
     const token = h('input', { class: 'txt', type: 'password', autocomplete: 'off', placeholder: ed.token ? 'Saved (paste a new one to replace it)' : 'Paste your Ed API token', 'aria-label': 'Ed API token' });
     const region = h('select', { class: 'txt pick', 'aria-label': 'Ed region' }, [['us', 'United States (edstem.org/us)'], ['au', 'Australia (edstem.org/au)'], ['eu', 'Europe (edstem.org/eu)'], ['ca', 'Canada (edstem.org/ca)']].map(([v, t]) => h('option', { value: v, selected: ed.region === v }, t)));
+    // Ed's token page, for the chosen region (it is not in Ed's settings menu).
+    const tokenUrl = () => `https://edstem.org/${region.value}/settings/api-tokens`;
+    const tokenLink = h('a', { class: 'small', href: tokenUrl(), target: '_blank', rel: 'noopener noreferrer', style: 'font-weight:400' }, 'Get a token on Ed ', ic('external', 12));
+    region.addEventListener('change', () => (tokenLink.href = tokenUrl()));
     const saveToken = () => { if (token.value.trim()) ed.token = token.value.trim(); ed.region = region.value; ed.on = true; save(); ui.flash('Ed settings saved.'); };
     const forget = () => { ed.token = ''; ed.on = false; save(); ui.flash('Ed token removed.'); };
 
@@ -412,7 +416,7 @@
         h('h2', { class: 'sect' }, 'Ed Discussion'),
         h('div', { class: 'row', style: 'align-items:center' }, onoff(ed.on, (v) => (ed.on = v)), h('span', { class: 'muted small' }, 'Reads your Ed lessons and their due dates.')),
         h('div', { class: 'edform' },
-          h('label', null, 'API token', token),
+          h('label', null, h('span', { class: 'row', style: 'justify-content:space-between;align-items:baseline' }, 'API token', tokenLink), token),
           h('label', null, 'Region', region),
           h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'button', onclick: saveToken }, 'Save'), ed.token ? h('button', { class: 'btn', type: 'button', onclick: forget }, 'Remove token') : null,
             ed.token ? h('button', { class: 'btn', type: 'button', title: 'Copies field names and types of Ed’s answers, with no values', onclick: async (ev) => {
@@ -430,7 +434,7 @@
                 ui.flash('Select the report below and copy it.');
               }
             } }, 'Check Ed') : null),
-          h('p', { class: 'muted small' }, 'Make a token in Ed under Settings → API Tokens. It is kept in this browser only and sent only to edstem.org.')),
+          h('p', { class: 'muted small' }, 'Make a token on Ed’s API Tokens page (linked above; it is not listed in Ed’s settings menu). Ed only lets you create one once two-factor authentication is turned on for your Ed account. The token is kept in this browser only and sent only to edstem.org.')),
         edPart,
         h('h2', { class: 'sect' }, 'Same assignment in more than one place'),
         h('p', { class: 'muted small' }, 'Matching names due within a day and a half are shown as one, keeping Brightspace’s copy first, then Gradescope’s, then Ed’s. Change any match here.'),

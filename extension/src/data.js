@@ -510,9 +510,11 @@ BSX.data = (() => {
   });
 
   function markedDropped(v, system, c, dropNames, name) {
+    // The Grades page's mark counts even for an item with no grade yet (Brightspace drops
+    // empty items too, and they would otherwise come in as zeros).
+    if (dropNames && name && dropNames.has(String(name).trim().toLowerCase())) return true;
     if (!v) return false;
     if (v.IsDropped === true || v.Dropped === true) return true;
-    if (dropNames && name && dropNames.has(String(name).trim().toLowerCase())) return true;
     const rule = (c?.NumberOfLowestToDrop || 0) + (c?.NumberOfHighestToDrop || 0) > 0;
     return Boolean(rule && system === 'Weighted' && v.PointsNumerator != null && v.WeightedDenominator === 0);
   }

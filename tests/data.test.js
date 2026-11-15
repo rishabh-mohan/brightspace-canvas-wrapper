@@ -136,6 +136,23 @@ const assert = require('assert');
     { id: 2, type: 'Numeric', points_possible: 10, value: { score: 9, points_possible: 10 } },
     { id: 3, type: 'Numeric', points_possible: 10, value: { score: 7, points_possible: 10 } }] }] };
   assert.deepEqual({ ...data.estimate(dropped) }, { score: 16, points_possible: 20 });
+  // What-If: MaxPoints missing from the item list is taken from the category's list; drop-down
+  // grades count; an unweighted item in a weighted category gets an equal share; reasons given.
+  routes['/d2l/api/le/1.100/15/grades/'] = [
+    { Id: 1, Name: 'HW', GradeType: 'Numeric', CategoryId: 9, Weight: 0, IsHidden: false },
+    { Id: 2, Name: 'Lab', GradeType: 'SelectBox', CategoryId: 9, Weight: 0, IsHidden: false },
+    { Id: 3, Name: 'Attended', GradeType: 'PassFail', CategoryId: 9, Weight: 0, IsHidden: false }];
+  routes['/d2l/api/le/1.100/15/grades/categories/'] = [{ Id: 9, Name: 'Work', Weight: 60, Grades: [{ Id: 1, MaxPoints: 10 }, { Id: 2, MaxPoints: 4 }, { Id: 3, MaxPoints: 1 }] }];
+  routes['/d2l/api/le/1.100/15/grades/setup/'] = { GradingSystem: 'Weighted' };
+  const wg = await data.grades(15);
+  const [hw, lab, att] = wg.groups[0].items;
+  assert.strictEqual(hw.points_possible, 10, 'MaxPoints filled in from the category');
+  assert.strictEqual(data.estimable(wg, hw), true, 'unweighted item gets a share of its category');
+  assert.strictEqual(data.estimable(wg, lab), true, 'drop-down grades count');
+  assert.strictEqual(data.estimable(wg, att), false);
+  assert.strictEqual(data.whyNot(wg, att), 'Pass/fail item');
+  assert.deepEqual({ ...data.estimate(wg, new Map([[1, 5], [2, 4]])) }, { score: 30, points_possible: 40 });
+
   // Unticked "based only on graded assignments": ungraded items count as zero.
   const some = { system: 'Points', groups: [{ items: [
     { id: 1, type: 'Numeric', points_possible: 10, value: { score: 8, points_possible: 10 } },

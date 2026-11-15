@@ -329,6 +329,7 @@ table.grid { border-collapse: collapse; width: 100%; }
 .tlabel { font-weight: 700; font-size: 15px; }
 input.wi { width: 84px; padding: 3px 6px; font: inherit; text-align: right; border: 1px solid var(--line); border-radius: 4px; color: var(--fg); background: var(--bg); }
 input.wi.changed { border-color: var(--link); background: var(--hi); }
+.wilock { color: var(--muted); cursor: help; white-space: nowrap; }
 
 /* calendar */
 .calnav { display: flex; gap: 8px; align-items: center; }

@@ -41,13 +41,17 @@
       .then((list) => {
         if (!list.length) return;
         // Grouped the way Brightspace's navigation bar groups them; loose links under "Course tools".
+        // Same-named groups are one group (case aside), shown with Brightspace's spelling.
         const groups = new Map();
         for (const t of list) {
-          const g = t.group || 'Course tools';
-          if (!groups.has(g)) groups.set(g, []);
-          groups.get(g).push(t);
+          const label = t.group || 'Course Tools';
+          const key = label.toLowerCase();
+          if (!groups.has(key)) groups.set(key, { label, items: [] });
+          const g = groups.get(key);
+          if (t.group) g.label = t.group;
+          g.items.push(t);
         }
-        more.replaceChildren(...[...groups.entries()].flatMap(([g, items]) => [h('div', { class: 'sep' }, g), ...items.map((t) => h('a', { href: t.url, title: `${t.title} (Brightspace)` }, t.title))]));
+        more.replaceChildren(...[...groups.values()].flatMap((g) => [h('div', { class: 'sep' }, g.label), ...g.items.map((t) => h('a', { href: t.url, title: `${t.title} (Brightspace)` }, t.title))]));
       })
       .catch(() => {});
     return h('nav', { class: 'cnav', 'aria-label': 'Course navigation' },
@@ -706,6 +710,10 @@
             drawTotal();
           });
           scoreCell = h('td', { class: 'num' }, input);
+        } else if (whatIf.on) {
+          // Locked in What-If: say why, so it is not a mystery.
+          const why = data.whyNot(g, i) || 'Cannot be changed here';
+          scoreCell = h('td', { class: 'num' }, h('span', { class: 'wilock', title: why, 'aria-label': `${why}. Score: ${v ? num(v.score) : 'none'}` }, ic('lock', 13), ' ', v ? num(v.score) : '–'));
         } else {
           scoreCell = h('td', { class: 'num' }, v ? h('span', { title: v.displayed || null }, num(v.score)) : '–');
         }

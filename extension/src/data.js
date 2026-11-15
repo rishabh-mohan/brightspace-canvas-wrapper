@@ -494,6 +494,11 @@ BSX.data = (() => {
     ]);
     const byId = new Map(values.map((v) => [String(v.GradeObjectIdentifier), v]));
     const categoryById = new Map(categories.map((c) => [c.Id, c]));
+    // Some courses leave MaxPoints off the grade-item list but give it in each category's
+    // own list of items; fill it in from there.
+    const fromCategories = new Map(categories.flatMap((c) => (c.Grades || []).map((g) => [g.Id, g])));
+    const itemCount = new Map();
+    for (const item of items) if (!item.IsHidden) itemCount.set(item.CategoryId, (itemCount.get(item.CategoryId) || 0) + 1);
     const groups = new Map();
     for (const item of items) {
       if (item.IsHidden) continue;
@@ -510,15 +515,17 @@ BSX.data = (() => {
           items: [],
         });
       }
+      const full = fromCategories.get(item.Id) || {};
       groups.get(key).items.push({
         id: item.Id,
         name: item.Name,
-        type: item.GradeType,
-        points_possible: item.MaxPoints,
-        weight: item.Weight,
+        type: item.GradeType || full.GradeType,
+        points_possible: item.MaxPoints ?? full.MaxPoints ?? null,
+        weight: item.Weight ?? full.Weight ?? null,
         group_weight: categoryById.get(key)?.Weight ?? null,
-        bonus: Boolean(item.IsBonus),
-        excluded: Boolean(item.ExcludeFromFinalGradeCalculation),
+        group_count: itemCount.get(item.CategoryId) || 1,
+        bonus: Boolean(item.IsBonus ?? full.IsBonus),
+        excluded: Boolean(item.ExcludeFromFinalGradeCalculation ?? full.ExcludeFromFinalGradeCalculation),
         value: toValue(byId.get(String(item.Id))) || null,
       });
     }
@@ -530,14 +537,30 @@ BSX.data = (() => {
   // An item's points and its share of the final grade, or null when it cannot count.
   // Weighted gradebooks report the share on graded items; for ungraded ones it comes from
   // the item's weight within its category times the category's weight.
+  // Grade types with points: plain numbers, and drop-down ("select box") grades.
+  const POINTS_TYPES = new Set(['Numeric', 'SelectBox']);
+
+  // Why an item cannot take part in an estimate or a What-If score, or null when it can.
+  function whyNot(g, i) {
+    if (i.excluded) return 'Not counted in the final grade';
+    if (i.type && !POINTS_TYPES.has(i.type)) return i.type === 'PassFail' ? 'Pass/fail item' : i.type === 'Text' ? 'Comment-only item' : `${i.type} item (worked out by Brightspace)`;
+    const pp = i.value?.points_possible ?? i.points_possible;
+    if (!(pp > 0)) return 'Brightspace does not say what this is out of';
+    if (g.system !== 'Points' && g.system !== 'Weighted') return 'This gradebook is not points or weighted';
+    if (g.system === 'Weighted' && !share(g, i)) return 'Brightspace does not give this item a weight';
+    return null;
+  }
+
   function share(g, i) {
-    if (i.excluded || i.type !== 'Numeric') return null;
+    if (i.excluded || (i.type && !POINTS_TYPES.has(i.type))) return null;
     const pp = i.value?.points_possible ?? i.points_possible;
     if (!(pp > 0)) return null;
     if (g.system === 'Points') return { pp, wp: pp };
     if (g.system !== 'Weighted') return null;
     let wp = i.value?.weighted_possible;
     if (!(wp > 0) && i.weight > 0) wp = i.group_weight != null ? (i.group_weight * i.weight) / 100 : i.weight;
+    // No weight of its own: an equal share of its category's weight.
+    if (!(wp > 0) && i.group_weight > 0) wp = i.group_weight / (i.group_count || 1);
     return wp > 0 ? { pp, wp } : null;
   }
 
@@ -840,7 +863,7 @@ BSX.data = (() => {
     courses, orgId, me, updates,
     assignments, assignmentGroups, assignment, submission, canSubmit, submit, quiz, quizAttempts, parseQuizSummary, discussions, discussion, post,
     todo, planner, tasks, overdue, recentFeedback,
-    grades, estimate, estimable, courseTotals,
+    grades, estimate, estimable, whyNot, courseTotals,
     announcements, recentAnnouncements,
     modules, externalTools, files, syllabus, syllabusLink, notificationsLink, homeLinks, courseTools, people, groups,
     calendar,

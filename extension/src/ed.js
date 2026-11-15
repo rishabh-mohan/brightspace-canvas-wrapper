@@ -155,6 +155,18 @@ BSX.ed = (() => {
         // Which status words appear, so completion can be read correctly (words only, no titles).
         out.lessonStatusValues = [...new Set(list.map((l) => String(l.status ?? '')).filter(Boolean))].slice(0, 20);
         out.lessonStateValues = [...new Set(list.map((l) => String(l.state ?? '')).filter(Boolean))].slice(0, 20);
+        // Where scores live: one lesson the student has done, its details (slides, and any
+        // challenge in them), and that challenge's submissions. Shapes only, never values.
+        const done = list.find((l) => /completed|attempted/i.test(String(l.status || ''))) || list.find((l) => l.submitted_at);
+        if (done) {
+          const detail = await get(`/api/lessons/${done.id}?view=1`).catch((e) => ({ error: e.code || e.message }));
+          out.lessonDetail = shape(detail);
+          const slides = detail?.lesson?.slides || detail?.slides || [];
+          out.slideTypeValues = [...new Set(slides.map((s) => String(s.type ?? '')).filter(Boolean))];
+          const challenge = slides.find((s) => s.challenge_id != null);
+          if (challenge) out.challengeSubmissions = shape(await get(`/api/challenges/${challenge.challenge_id}/submissions`).catch((e) => ({ error: e.code || e.message })));
+          else out.notes.push('No slide with a challenge_id in the first done lesson.');
+        } else out.notes.push('No completed or attempted lesson found to inspect.');
         const threads = await get(`/api/courses/${first.id}/threads?limit=50&offset=0&sort=new`).catch((e) => ({ error: e.code || e.message }));
         out.threads = shape(threads);
         out.threadTypeValues = [...new Set((threads.threads || []).map((t) => String(t.type ?? '')).filter(Boolean))];

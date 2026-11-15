@@ -26,11 +26,12 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   // Ed Discussion (edstem.org) for the optional Ed reader. Ed signs requests with a personal
   // API token the student pastes into the wrapper; it is read from extension storage here,
-  // so it never passes through the page. Only three GET routes are allowed: the user's
-  // courses, a course's lessons, and a course's newest threads (for announcements).
+  // so it never passes through the page. Only these GET routes are allowed: the user's
+  // courses, a course's lessons, a course's newest threads (for announcements), one
+  // lesson's details, and a challenge's submissions (for scores).
   if (msg && msg.type === 'bsx-ed' && sender.id === api.runtime.id) {
     const path = String(msg.path || '');
-    if (!/^\/api\/(user|courses\/\d+\/lessons|courses\/\d+\/threads\?limit=\d{1,3}&offset=0&sort=new)$/.test(path)) {
+    if (!/^\/api\/(user|courses\/\d+\/lessons|courses\/\d+\/threads\?limit=\d{1,3}&offset=0&sort=new|lessons\/\d+(\?view=1)?|challenges\/\d+\/submissions)$/.test(path)) {
       sendResponse({ error: 'Not allowed.' });
       return undefined;
     }

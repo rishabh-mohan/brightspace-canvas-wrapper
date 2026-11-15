@@ -257,11 +257,12 @@ BSX.ui = (() => {
   const keyOf = (i) => (i.personal ? `todo-${i.source_id}` : `${i.kind || 'overdue'}-${i.course_id}-${i.source_id ?? i.id}`);
   const isDone = (i) => Boolean(settings.done[keyOf(i)]);
   const isDismissed = (i) => Boolean(settings.dismissed[keyOf(i)]);
-  function setFlag(bag, i, on) {
+  // `quiet`: save only; the caller updates its own part of the page instead of a full redraw.
+  function setFlag(bag, i, on, { quiet = false } = {}) {
     if (on) settings[bag][keyOf(i)] = 1;
     else delete settings[bag][keyOf(i)];
     saveSettings();
-    render();
+    if (!quiet) render();
   }
   // Personal items shaped like assignments so every list can show them.
   const personalItems = (from, to, courseIds) =>

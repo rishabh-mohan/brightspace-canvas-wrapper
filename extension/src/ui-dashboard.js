@@ -146,14 +146,24 @@
           day.items.map((i) => {
             const settled = Boolean(i.grade) || Boolean(i.submitted); // Brightspace or the outside tool already says so
             const done = settled || ui.isDone(i);
-            const check = h('button', { class: done ? 'pcheck done' : 'pcheck', type: 'button', disabled: settled, title: i.grade ? 'Graded' : i.submitted ? 'Submitted' : done ? 'Marked done. Click to undo' : 'Mark as done', 'aria-label': `${done ? 'Done' : 'Not done'}: ${i.name}`, onclick: () => ui.setFlag('done', i, !ui.isDone(i)) }, done ? ic('check', 14) : null);
-            return h('div', { class: done ? 'prow isdone' : 'prow', style: `--c:${tint(i.course_id)}` },
+            // Ticking updates this row only; the rest of the page stays as it is.
+            const check = h('button', { class: done ? 'pcheck done' : 'pcheck', type: 'button', disabled: settled, title: i.grade ? 'Graded' : i.submitted ? 'Submitted' : done ? 'Marked done. Click to undo' : 'Mark as done', 'aria-label': `${done ? 'Done' : 'Not done'}: ${i.name}`, onclick: () => {
+              const now = !ui.isDone(i);
+              ui.setFlag('done', i, now, { quiet: true });
+              check.classList.toggle('done', now);
+              check.replaceChildren(...(now ? [ic('check', 14)] : []));
+              check.title = now ? 'Marked done. Click to undo' : 'Mark as done';
+              check.setAttribute('aria-label', `${now ? 'Done' : 'Not done'}: ${i.name}`);
+              rowEl.classList.toggle('isdone', now);
+            } }, done ? ic('check', 14) : null);
+            const rowEl = h('div', { class: done ? 'prow isdone' : 'prow', style: `--c:${tint(i.course_id)}` },
               check,
               h('span', { class: 'pic' }, ic(KIND_ICON[i.kind] || 'assignment', 22)),
               h('div', { class: 'pmid' }, h('div', { class: 'ctx' }, i.course_id == null ? 'My To Do' : names.get(i.course_id) || ''), titleOf(i, courses)),
               i.source ? ui.tag(i.source) : null,
               i.grade ? ui.tag('Graded', 'okt') : i.submitted ? ui.tag('Submitted', 'okt') : null,
               h('div', { class: 'pend' }, i.grade ? h('div', null, `${num(i.grade.score)} / ${num(i.grade.points_possible)}`) : i.points_possible != null ? h('div', null, `${num(i.points_possible)} pts`) : null, h('div', { class: 'muted' }, `${i.personal ? '' : 'Due '}${ui.fmt.time.format(new Date(i.due_at))}`)));
+            return rowEl;
           })));
       // Open on today (or the next day with work), the way a planner does.
       if (!listSeen) {
@@ -205,7 +215,8 @@
     for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
     return n;
   };
-  function ringChart(rings, big, small) {
+  // `prev`: each ring's last value, so a repaint moves the ring from there rather than from empty.
+  function ringChart(rings, big, small, prev = []) {
     const size = 150;
     const gap = 2;
     const hole = 38; // radius kept clear for the percentage in the middle
@@ -216,7 +227,7 @@
       if (radius < hole) return; // too many courses for another ring; the legend still lists it
       const length = 2 * Math.PI * radius;
       const track = svg('circle', { cx: size / 2, cy: size / 2, r: radius, fill: 'none', 'stroke-width': width, class: 'tktrack' });
-      const fill = svg('circle', { cx: size / 2, cy: size / 2, r: radius, fill: 'none', stroke: r.color, 'stroke-width': width, 'stroke-linecap': 'round', 'stroke-dasharray': `${length}`, 'stroke-dashoffset': `${length}`, transform: `rotate(-90 ${size / 2} ${size / 2})`, class: 'tkarc' });
+      const fill = svg('circle', { cx: size / 2, cy: size / 2, r: radius, fill: 'none', stroke: r.color, 'stroke-width': width, 'stroke-linecap': 'round', 'stroke-dasharray': `${length}`, 'stroke-dashoffset': `${length * (1 - Math.min(1, prev[i] || 0))}`, transform: `rotate(-90 ${size / 2} ${size / 2})`, class: 'tkarc' });
       const title = svg('title', {});
       title.textContent = r.label;
       fill.append(title);
@@ -260,12 +271,25 @@
       h('button', { class: 'iconbtn xs', type: 'button', 'aria-label': 'Next week', onclick: shift(1) }, ic('right', 16)));
     const add = h('button', { class: 'iconbtn xs', type: 'button', title: 'Add task', 'aria-label': 'Add task', onclick: () => ui.todoDialog(null, courses) }, ic('plus', 16));
 
-    const mine = ui.personalItems(start.getTime(), end.getTime(), null).map((t) => ({ ...t, done: ui.isDone(t) }));
-    const outside = ui.externalWork(courses).then((items) => items.filter((i) => i.due_at && Date.parse(i.due_at) >= start && Date.parse(i.due_at) < end).map((i) => ({ ...i, done: Boolean(i.submitted || i.grade) || ui.isDone(i) }))).catch(() => []);
+    // `base`: done according to Brightspace or the outside site; `done` adds the student's ticks.
+    const mine = ui.personalItems(start.getTime(), end.getTime(), null).map((t) => ({ ...t, base: false, done: ui.isDone(t) }));
+    const outside = ui.externalWork(courses).then((items) => items.filter((i) => i.due_at && Date.parse(i.due_at) >= start && Date.parse(i.due_at) < end).map((i) => ({ ...i, base: Boolean(i.submitted || i.grade), done: Boolean(i.submitted || i.grade) || ui.isDone(i) }))).catch(() => []);
     const all = Promise.all([data.tasks(courses, start.getTime(), end.getTime() - 1), outside]).then(([work, ext]) =>
-      [...work.map((a) => ({ ...a, done: a.done || ui.isDone(a) })), ...ext, ...mine].filter((i) => !ui.isDismissed(i)).sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at)));
+      [...work.map((a) => ({ ...a, base: a.done, done: a.done || ui.isDone(a) })), ...ext, ...mine].filter((i) => !ui.isDismissed(i)).sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at)));
 
-    const body = ui.lazy(all, (items) => {
+    // Ticking a task or switching tabs repaints this panel only, from the week's data
+    // already loaded, so the rest of the page is left alone. The rings move from their last
+    // value instead of refilling from empty.
+    let items = [];
+    let lastRings = [];
+    const panel = h('div');
+    const repaint = () => panel.replaceChildren(...[paint(items)].flat(Infinity).filter(Boolean));
+    const body = ui.lazy(all, (list) => {
+      items = list;
+      repaint();
+      return panel;
+    });
+    function paint(items) {
       // One bar per course with work this week, in the course's colour.
       const byCourse = new Map();
       for (const i of items) {
@@ -288,18 +312,25 @@
       }
       // Concentric rings, one per course (outermost first), each filled by the share done.
       const entries = [...byCourse.entries()];
-      const rings = ringChart(entries.map(([id, c]) => ({ value: c.total ? c.done / c.total : 0, color: id ? colorOf(id) : 'var(--muted)', label: `${id ? names.get(id) || '' : 'My tasks'}: ${c.done} of ${c.total} done` })),
-        items.length ? `${Math.round((done / items.length) * 100)}%` : '–', items.length ? `${done}/${items.length}` : 'none due');
+      const ringValues = entries.map(([, c]) => (c.total ? c.done / c.total : 0));
+      const rings = ringChart(entries.map(([id, c], n) => ({ value: ringValues[n], color: id ? colorOf(id) : 'var(--muted)', label: `${id ? names.get(id) || '' : 'My tasks'}: ${c.done} of ${c.total} done` })),
+        items.length ? `${Math.round((done / items.length) * 100)}%` : '–', items.length ? `${done}/${items.length}` : 'none due', lastRings);
+      lastRings = ringValues;
       const legend = h('div', { class: 'tklegend' }, entries.map(([id, c]) => h('div', { class: 'tkkey' },
         h('span', { class: 'dot', style: `background:${id ? colorOf(id) : 'var(--muted)'}` }),
         h('span', { class: 'tkname' }, id ? names.get(id) || '' : 'My tasks'),
         h('span', { class: 'muted small' }, `${c.done}/${c.total}`))));
 
       const list = items.filter((i) => (taskView.tab === 'completed' ? i.done : !i.done));
-      const tab = (key, text, n) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(taskView.tab === key), class: taskView.tab === key ? 'on' : null, onclick: () => { taskView.tab = key; ui.render(); } }, `${text} (${n})`);
+      const tab = (key, text, n) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(taskView.tab === key), class: taskView.tab === key ? 'on' : null, onclick: () => { taskView.tab = key; repaint(); } }, `${text} (${n})`);
       const row = (i) => {
         const late = !i.done && Date.parse(i.due_at) < Date.now();
-        const tick = h('button', { class: i.done ? 'pcheck done' : 'pcheck', type: 'button', 'aria-pressed': String(i.done), 'aria-label': i.done ? `Mark ${i.name || i.title} not done` : `Mark ${i.name || i.title} done`, onclick: () => ui.setFlag('done', i, !i.done) }, i.done ? ic('check', 14) : null);
+        const tick = h('button', { class: i.done ? 'pcheck done' : 'pcheck', type: 'button', 'aria-pressed': String(i.done), 'aria-label': i.done ? `Mark ${i.name || i.title} not done` : `Mark ${i.name || i.title} done`, onclick: () => {
+          const now = !i.done;
+          ui.setFlag('done', i, now, { quiet: true });
+          i.done = i.base || now;
+          repaint();
+        } }, i.done ? ic('check', 14) : null);
         return h('div', { class: 'tkrow', style: `--c:${i.course_id == null ? 'var(--muted)' : colorOf(i.course_id)}` },
           tick,
           h('div', { class: 'tmid' }, ui.itemLink(i, courses), h('div', { class: 'ctx', style: `--c:${i.course_id == null ? 'var(--muted)' : colorOf(i.course_id)}` }, i.course_id == null ? 'My task' : names.get(i.course_id) || ''),
@@ -310,7 +341,7 @@
         h('div', { class: 'seg tktabs', role: 'tablist' }, tab('unfinished', 'Unfinished', items.length - done), tab('completed', 'Completed', done)),
         list.length ? list.map(row) : h('div', { class: 'muted small pad' }, taskView.tab === 'completed' ? 'Nothing finished yet this week.' : 'All done for this week.'),
       ];
-    });
+    }
     return ui.sideSection(['Tasks', add], [head, body]);
   }
 

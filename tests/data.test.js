@@ -311,13 +311,7 @@ const assert = require('assert');
   assert.strictEqual(lessons[2].due_at, null);
   assert.strictEqual(lessons[1].due_at, soon, 'the student’s effective due date wins');
   assert.strictEqual(lessons[0].group, 'Week 1');
-  // Modules are placed by their first lesson's index, not by where the list puts them.
-  const ordered = edr.lessonItems({ id: 7 }, { lessons: [
-    { id: 1, title: 'A', module_id: 'late', index: 5 },
-    { id: 2, title: 'B', module_id: 'early', index: 1 },
-    { id: 3, title: 'C', module_id: 'early', index: 2 }], modules: [{ id: 'late', name: 'Week 2' }, { id: 'early', name: 'Week 1' }] }, bsCourses[0], 'us');
-  const sorted = Array.from(ordered).sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1]);
-  assert.deepStrictEqual(sorted.map((l) => `${l.group}:${l.name}`), ['Week 1:B', 'Week 1:C', 'Week 2:A']);
+  assert.deepStrictEqual(Array.from(lessons[0].order), [0, 0], 'lessons keep their Ed index');
   assert.strictEqual(lessons[0].html_url, 'https://edstem.org/us/courses/7/lessons/1');
   assert.strictEqual(lessons[0].course_id, 101);
 

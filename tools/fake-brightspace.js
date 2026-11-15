@@ -362,7 +362,7 @@ function ed(path) {
       { id: 7, title: 'Week 2 reading', due_at: null, state: 'active', status: 'unattempted', module_id: 30, index: 0 },
       { id: 5, title: 'Draft notes', due_at: due(5), state: 'draft' },
       { id: 6, title: 'Proj 6', due_at: (DATA.get(101).folders.find((f) => f.Name === 'Project 6') || {}).DueDate || due(10), effective_due_at: null, state: 'active', status: 'unattempted' },
-    ], modules: [{ id: 30, name: 'Week 2' }, { id: 31, name: 'Week 3' }] };
+    ], modules: [{ id: 31, name: 'Homework 2' }, { id: 30, name: 'Homework 1' }] };
   }
   if (path === '/api/courses/777/threads') {
     return { threads: [

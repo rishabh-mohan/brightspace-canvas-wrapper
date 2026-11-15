@@ -132,6 +132,41 @@
           : h('div', { class: 'irow muted small' }, 'No items in this module.'));
   }
 
+  // An outside site's own modules, arranged for the [Ed] module: by kind (other, exams,
+  // projects, homework, lessons), and modules that differ only by a number ("Homework 1",
+  // "Homework 2") gathered under one parent named for them ("Homework"), in number order.
+  // groups: [[module name, items]]. Returns [{ name, list } | { name, children: [[name, items]] }].
+  const KIND_ORDER = [
+    ['exams', /\b(exams?|midterms?|finals?|tests?)\b/i],
+    ['projects', /\b(projects?|proj)\b/i],
+    ['homework', /\b(homeworks?|hw\d*|hwk|problem sets?|psets?|assignments?)\b/i],
+    ['lessons', /\b(lessons?|lectures?|readings?)\b/i],
+  ];
+  const kindRank = (name) => {
+    const at = KIND_ORDER.findIndex(([, re]) => re.test(name));
+    return at < 0 ? 0 : at + 1; // anything else ("other") comes first
+  };
+  // "Homework 3: Graphs" -> "Homework"; a name without a number is its own namesake.
+  const namesake = (name) => {
+    const m = String(name).match(/^(.*?)\s*(?:#|no\.?\s*)?\d+\b/i);
+    return m && m[1].trim() ? m[1].trim().replace(/[\s:–-]+$/, '') : null;
+  };
+  const byName = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  function arrangeModules(groups) {
+    const families = new Map();
+    for (const [name, list] of groups) {
+      const base = namesake(name);
+      const key = base ? base.toLowerCase() : `\u0000${name}`;
+      if (!families.has(key)) families.set(key, { base: base || name, members: [] });
+      families.get(key).members.push([name, list]);
+    }
+    const entries = [...families.values()].map((f) =>
+      f.members.length > 1
+        ? { name: f.base, children: f.members.sort(([a], [b]) => byName(a, b)) }
+        : { name: f.members[0][0], list: f.members[0][1] });
+    return entries.sort((a, b) => kindRank(a.name) - kindRank(b.name) || byName(a.name, b.name));
+  }
+
   // Work imported from outside sites, as one module per site ("[Ed]", "[Gradescope]") after
   // the course's own modules. Items folded into a Brightspace assignment are listed too,
   // marked with the assignment they are shown as. Loads on its own, so a slow site never
@@ -165,16 +200,18 @@
         h('summary', null, ic('down', 16), h('span', { class: 'gname' }, name), h('span', { class: 'count' }, count)), kids);
       return [...bySource.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([source, items]) => {
         items.sort(byOrder);
-        // Sites with their own modules (Ed) get them as sub-modules, in the site's order.
+        // Sites with their own modules (Ed) get them as sub-modules, arranged by kind.
         if (!items.some((x) => x.group)) return box(`[${source}]`, items.map(row), items.length);
-        const groups = [];
+        const groups = new Map();
         for (const x of items) {
           const name = x.group || 'Other';
-          const last = groups[groups.length - 1];
-          if (last && last.name === name) last.items.push(x);
-          else groups.push({ name, items: [x] });
+          if (!groups.has(name)) groups.set(name, []);
+          groups.get(name).push(x);
         }
-        return box(`[${source}]`, groups.map((g) => box(g.name, g.items.map(row), g.items.length)), items.length);
+        return box(`[${source}]`, arrangeModules([...groups.entries()]).map((e) =>
+          e.children
+            ? box(e.name, e.children.map(([n, list]) => box(n, list.map(row), list.length)), e.children.reduce((s, [, list]) => s + list.length, 0))
+            : box(e.name, e.list.map(row), e.list.length)), items.length);
       });
     }, '');
   }

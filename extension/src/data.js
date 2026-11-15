@@ -705,6 +705,26 @@ BSX.data = (() => {
     return l ? { title: l.text, url: l.href } : null;
   }
 
+  // The course's own tools from Brightspace's navigation bar (Course Tools, Class Progress,
+  // and whatever else the school adds), less the pages the wrapper already has and links
+  // that lead away from this course (other courses, the personal menu).
+  const COVERED = /^\/d2l\/(home\b|lp\/|api\/|logout|le\/content\/|le\/lessons\/|lms\/dropbox\/|lms\/quizzing\/|le\/\d+\/discussions\/|lms\/grades\/my_grades\/|lms\/classlist\/|lms\/news\/|lms\/email\/|Notifications\/)/i;
+  async function courseTools(ou) {
+    const seen = new Set();
+    const out = [];
+    for (const l of await homeLinks(ou)) {
+      if (COVERED.test(l.href) || l.text.length > 60) continue;
+      const other = l.href.match(/[?&]ou=(\d+)/);
+      if (other && other[1] !== String(ou)) continue; // a link into another course
+      const key = l.href.replace(/#.*$/, '');
+      if (seen.has(key) || seen.has(`t:${l.text.toLowerCase()}`)) continue;
+      seen.add(key);
+      seen.add(`t:${l.text.toLowerCase()}`);
+      out.push({ title: l.text, url: key });
+    }
+    return out;
+  }
+
   // Brightspace's notification settings, found by its link (its address differs between schools).
   async function notificationsLink(ou) {
     const l = (await homeLinks(ou)).find((x) => /notification/i.test(x.text));
@@ -795,7 +815,7 @@ BSX.data = (() => {
     todo, planner, tasks, overdue, recentFeedback,
     grades, estimate, estimable, courseTotals,
     announcements, recentAnnouncements,
-    modules, externalTools, files, syllabus, syllabusLink, notificationsLink, homeLinks, people, groups,
+    modules, externalTools, files, syllabus, syllabusLink, notificationsLink, homeLinks, courseTools, people, groups,
     calendar,
   };
 })();

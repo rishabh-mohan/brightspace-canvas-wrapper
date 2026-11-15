@@ -21,7 +21,7 @@ function page(real) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Fake Brightspace</title>
 <style>body{margin:0;font:16px sans-serif;background:#eee}.banner{position:fixed;top:0;left:20%;right:20%;z-index:1000;background:#444;color:#fff;padding:24px;font-size:28px}</style>
 </head><body><div class="banner">Original Brightspace page</div>
-<nav hidden aria-label="Course navigation"><a href="/d2l/le/lti/101/simplesyllabus">Simple Syllabus</a><d2l-menu-item-link text="Notifications" href="/d2l/lp/notifications/made-up"></d2l-menu-item-link></nav><p style="padding:120px 40px">This stands in for the page the wrapper covers.</p>
+<nav hidden aria-label="Course navigation"><a href="/d2l/le/lti/101/simplesyllabus">Simple Syllabus</a><a href="/d2l/le/content/101/Home">Content</a><a href="/d2l/lms/grades/my_grades/main.d2l?ou=101">Grades</a><a href="/d2l/home/102">MA 26100</a><d2l-menu-item-link text="Class Progress" href="/d2l/le/classprogress/101/displayprogress"></d2l-menu-item-link><d2l-menu-item-link text="Checklist" href="/d2l/lms/checklist/checklists.d2l?ou=101"></d2l-menu-item-link><d2l-menu-item-link text="Attendance" href="/d2l/lms/attendance/user/attendance_list.d2l?ou=101"></d2l-menu-item-link><a href="/d2l/lp/profile/profile_edit.d2l">Profile</a><d2l-menu-item-link text="Notifications" href="/d2l/lp/notifications/made-up"></d2l-menu-item-link></nav><p style="padding:120px 40px">This stands in for the page the wrapper covers.</p>
 <script>
 // Stand-in for extension storage, backed by localStorage.
 (() => {

@@ -244,7 +244,11 @@
           return l ? l.href.replace(/\d+/g, '#').replace(/rcode=[^&]+/, 'rcode=…') : null;
         };
         row('Course home page links', { status: res.status });
-        report.results.push({ group, label: 'Course home page links', status: res.status, linkCount: links.length, syllabus: shape(/syllabus/i), notifications: shape(/notification/i) });
+        // Every link's name and the shape of its address (digits masked), so tools such as
+        // Course Tools and Class Progress can be checked against what the wrapper shows.
+        const seen = new Set();
+        const navLinks = links.filter((l) => l.text.length <= 60 && !seen.has(l.text) && seen.add(l.text)).map((l) => ({ text: l.text, path: l.href.replace(/\d+/g, '#').replace(/rcode=[^&]+/, 'rcode=…') }));
+        report.results.push({ group, label: 'Course home page links', status: res.status, linkCount: links.length, syllabus: shape(/syllabus/i), notifications: shape(/notification/i), navLinks });
       } catch (e) {
         report.results.push({ group, label: 'Course home page links', error: String(e) });
       }

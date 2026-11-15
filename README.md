@@ -28,6 +28,7 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 - Modules, led by a **Course Home** module (the instructor's Brightspace course homepage, shown in a frame, and the syllabus), with each item opening inside the wrapper: files in a viewer, external tools in a frame, links as a card, each with Previous and Next.
 - Syllabus: the course's syllabus tool (Simple Syllabus at Purdue) shown in place, found as a Content link or on the course navigation bar, then the course overview and a summary of dated work.
 - People, Files, Quizzes, Discussions.
+- Course tools: every other link on the course's Brightspace navigation bar (Course Tools, Class Progress, and whatever the school adds), read from the course home page, in the course menu. They open inside the wrapper.
 
 **Calendar**: month and agenda views, a checkbox per course, and your own To Do items.
 

@@ -34,8 +34,17 @@
         if (list.length) tools.replaceChildren(h('div', { class: 'sep' }, 'External tools'), ...list.slice(0, 8).map((t) => h('a', { href: courseHref(course.id, 'modules', t.id) }, t.title, ' ', ic('external', 13))));
       })
       .catch(() => {});
+    // Brightspace's Course Tools and the rest of its navigation bar (Class Progress and so
+    // on). These are Brightspace pages; a click opens them inside the wrapper.
+    const more = h('div');
+    data.courseTools(course.id)
+      .then((list) => {
+        if (list.length) more.replaceChildren(h('div', { class: 'sep' }, 'Course tools'), ...list.map((t) => h('a', { href: t.url, title: `${t.title} (Brightspace)` }, t.title)));
+      })
+      .catch(() => {});
     return h('nav', { class: 'cnav', 'aria-label': 'Course navigation' },
       Object.keys(LABEL).map((key) => h('a', { href: courseHref(course.id, key === 'home' ? null : key), class: current === key ? 'on' : null }, LABEL[key])),
+      more,
       h('div', { class: 'sep' }, 'Brightspace'),
       h('a', { href: bs.home(course.id) }, 'Original course home'),
       tools);

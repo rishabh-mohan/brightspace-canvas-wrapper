@@ -174,6 +174,31 @@ const assert = require('assert');
   assert.strictEqual(data.estimable(zg, zg.groups[0].items[1]), true);
   assert.deepEqual({ ...data.estimate(zg) }, { score: 8, points_possible: 20 });
 
+  // A category whose items are hidden but whose total is released shows as one line and
+  // counts; a category split by points weighs ungraded items by their points; a category
+  // excluded from the final grade makes its items "not counted".
+  routes['/d2l/api/le/1.100/17/grades/'] = [
+    { Id: 1, Name: 'Hidden project', GradeType: 'Numeric', MaxPoints: 50, CategoryId: 8, IsHidden: true },
+    { Id: 2, Name: 'HW big', GradeType: 'Numeric', MaxPoints: 30, CategoryId: 9, Weight: 0, IsHidden: false },
+    { Id: 3, Name: 'HW small', GradeType: 'Numeric', MaxPoints: 10, CategoryId: 9, Weight: 0, IsHidden: false },
+    { Id: 4, Name: 'Practice', GradeType: 'Numeric', MaxPoints: 10, CategoryId: 7, IsHidden: false }];
+  routes['/d2l/api/le/1.100/17/grades/categories/'] = [
+    { Id: 8, Name: 'Projects', Weight: 50, Grades: [] },
+    { Id: 9, Name: 'Homework', Weight: 40, WeightDistributionType: 1, Grades: [] },
+    { Id: 7, Name: 'Practice', Weight: 0, ExcludeFromFinalGrade: true, Grades: [] }];
+  routes['/d2l/api/le/1.100/17/grades/setup/'] = { GradingSystem: 'Weighted' };
+  routes['/d2l/api/le/1.100/17/grades/values/myGradeValues/'] = [
+    { GradeObjectIdentifier: '8', PointsNumerator: 45, PointsDenominator: 50, WeightedNumerator: 45, WeightedDenominator: 50, GradeObjectType: 9 }];
+  const cg = await data.grades(17);
+  const projects = cg.groups.find((x) => x.name === 'Projects');
+  assert.ok(projects, 'category with only a released total is shown');
+  assert.strictEqual(projects.items[0].total, true);
+  assert.strictEqual(projects.items[0].value.score, 45);
+  const hwGroup = cg.groups.find((x) => x.name === 'Homework');
+  assert.deepEqual({ ...data.estimate(cg, new Map([[2, 30], [3, 0]])) }, { score: 75, points_possible: 90 }, 'by points: 30 of 40 homework weight, 10 for the small one, plus projects 45 of 50');
+  assert.strictEqual(hwGroup.items[0].distribution, 1);
+  assert.strictEqual(cg.groups.find((x) => x.name === 'Practice').items[0].excluded, true, 'excluded category makes its items not counted');
+
   // Unticked "based only on graded assignments": ungraded items count as zero.
   const some = { system: 'Points', groups: [{ items: [
     { id: 1, type: 'Numeric', points_possible: 10, value: { score: 8, points_possible: 10 } },

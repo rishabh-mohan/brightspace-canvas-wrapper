@@ -489,6 +489,16 @@ BSX.data = (() => {
   }
 
   // ---- grades --------------------------------------------------------------
+  const newGroup = (key, c) => ({
+    id: key,
+    name: c ? c.Name : null,
+    weight: c ? c.Weight : null,
+    drop_lowest: c?.NumberOfLowestToDrop || 0,
+    drop_highest: c?.NumberOfHighestToDrop || 0,
+    value: c ? toValue(c.__value) || null : null,
+    items: [],
+  });
+
   async function grades(ou) {
     const [items, categories, values, final, setup] = await Promise.all([
       soft(client.le(`${ou}/grades/`), []),
@@ -498,7 +508,8 @@ BSX.data = (() => {
       soft(client.le(`${ou}/grades/setup/`), null),
     ]);
     const byId = new Map(values.map((v) => [String(v.GradeObjectIdentifier), v]));
-    const categoryById = new Map(categories.map((c) => [c.Id, c]));
+    // Each category carries its own released total (its subtotal row), for newGroup.
+    const categoryById = new Map(categories.map((c) => [c.Id, { ...c, __value: byId.get(String(c.Id)) }]));
     // Some courses leave MaxPoints off the grade-item list but give it in each category's
     // own list of items; fill it in from there.
     const fromCategories = new Map(categories.flatMap((c) => (c.Grades || []).map((g) => [g.Id, g])));
@@ -510,29 +521,56 @@ BSX.data = (() => {
       const key = categoryById.has(item.CategoryId) ? item.CategoryId : 0;
       if (!groups.has(key)) {
         const c = categoryById.get(key);
-        groups.set(key, {
-          id: key,
-          name: c ? c.Name : null,
-          weight: c ? c.Weight : null,
-          drop_lowest: c?.NumberOfLowestToDrop || 0,
-          drop_highest: c?.NumberOfHighestToDrop || 0,
-          value: c ? toValue(byId.get(String(c.Id))) || null : null,
-          items: [],
-        });
+        groups.set(key, newGroup(key, categoryById.get(key)));
       }
       const full = fromCategories.get(item.Id) || {};
+      const c = categoryById.get(key);
       groups.get(key).items.push({
         id: item.Id,
         name: item.Name,
         type: item.GradeType || full.GradeType,
         points_possible: item.MaxPoints ?? full.MaxPoints ?? null,
         weight: item.Weight ?? full.Weight ?? null,
-        group_weight: categoryById.get(key)?.Weight ?? null,
+        group_weight: c?.Weight ?? null,
         group_count: itemCount.get(item.CategoryId) || 1,
+        // How the category's weight is split among its items: 0 by hand (each item's own
+        // weight), 1 by points, 2 equally (Brightspace's WeightDistributionType).
+        distribution: c?.WeightDistributionType ?? null,
         bonus: Boolean(item.IsBonus ?? full.IsBonus),
-        excluded: Boolean(item.ExcludeFromFinalGradeCalculation ?? full.ExcludeFromFinalGradeCalculation),
+        // "Not counted": the instructor set Exclude from final grade on the item, or on its category.
+        excluded: Boolean(item.ExcludeFromFinalGradeCalculation ?? full.ExcludeFromFinalGradeCalculation) || Boolean(c?.ExcludeFromFinalGrade),
         value: toValue(byId.get(String(item.Id))) || null,
       });
+    }
+    // Points in each category, for categories that split their weight by points.
+    for (const g of groups.values()) {
+      const total = g.items.reduce((s, i) => s + (i.points_possible > 0 && !i.bonus ? i.points_possible : 0), 0);
+      for (const i of g.items) i.group_points = total;
+    }
+    // A category whose items are all hidden from students but whose total is released (say,
+    // "Projects" with only its subtotal visible): shown, with that total as its one line, so
+    // it is seen, counted and can be tried in What-If.
+    for (const c of categoryById.values()) {
+      if (groups.has(c.Id)) continue;
+      const v = toValue(c.__value);
+      if (!v || v.score == null) continue;
+      const g = newGroup(c.Id, c);
+      g.items.push({
+        id: `category-${c.Id}`,
+        name: `${c.Name} (group grade)`,
+        total: true,
+        type: 'Numeric',
+        points_possible: v.points_possible,
+        weight: null,
+        group_weight: c.Weight ?? null,
+        group_count: 1,
+        distribution: null,
+        group_points: v.points_possible,
+        bonus: false,
+        excluded: Boolean(c.ExcludeFromFinalGrade),
+        value: v,
+      });
+      groups.set(c.Id, g);
     }
     // null_is_zero: the course counts an empty grade as 0 (Brightspace's "treat ungraded as 0").
     const result = { system: setup?.GradingSystem || null, null_is_zero: Boolean(setup?.IsNullGradeZero), final: toValue(final) || null, estimate: null, groups: [...groups.values()] };
@@ -564,9 +602,11 @@ BSX.data = (() => {
     if (!(pp > 0)) return null;
     if (g.system === 'Points') return { pp, wp: pp };
     if (g.system !== 'Weighted') return null;
+    // Brightspace's own figure for a graded item; otherwise from the category's weight, split
+    // the way the category says: by the item's own weight, by points, or equally.
     let wp = i.value?.weighted_possible;
-    if (!(wp > 0) && i.weight > 0) wp = i.group_weight != null ? (i.group_weight * i.weight) / 100 : i.weight;
-    // No weight of its own: an equal share of its category's weight.
+    if (!(wp > 0) && i.weight > 0 && i.distribution !== 1 && i.distribution !== 2) wp = i.group_weight != null ? (i.group_weight * i.weight) / 100 : i.weight;
+    if (!(wp > 0) && i.group_weight > 0 && i.distribution === 1 && i.group_points > 0) wp = (i.group_weight * pp) / i.group_points;
     if (!(wp > 0) && i.group_weight > 0) wp = i.group_weight / (i.group_count || 1);
     return wp > 0 ? { pp, wp } : null;
   }

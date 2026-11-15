@@ -51,7 +51,7 @@
       ui.sideSection('Recent Feedback', ui.lazy(data.recentFeedback(courseList), (rows) =>
         rows.slice(0, 5).map((f) => h('div', { class: 'todo' },
           h('span', { class: 'todoic ok' }, ic('check')),
-          h('div', null,
+          h('div', { class: 'tmid' },
             h('a', { class: 't', href: courseHref(f.course_id, 'grades') }, f.title),
             labels ? h('div', { class: 'ctx', style: `--c:${colorOf(f.course_id)}` }, names.get(f.course_id) || '') : null,
             h('div', { class: 'm' }, `${num(f.grade.score)} out of ${num(f.grade.points_possible)}`),
@@ -183,6 +183,69 @@
 
   ui.activityView = activityView; // also a course's own Recent Activity
 
+  // ---- Tasks panel ---------------------------------------------------------
+  // A week of work in the sidebar, after the open-source Tasks for Canvas extension
+  // (MIT, github.com/jtcheng26/canvas-task-extension), rebuilt here on Brightspace data: a
+  // progress bar per course, then Unfinished and Completed lists. Work counts as done
+  // once it is graded above zero, handed in, attempted, posted in or ticked off.
+  const taskView = { week: 0, tab: 'unfinished' };
+  function weekRange(offset) {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + offset * 7);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
+    return [start, end];
+  }
+
+  function tasksPanel(courses) {
+    const [start, end] = weekRange(taskView.week);
+    const label = taskView.week === 0 ? 'This week' : taskView.week === -1 ? 'Last week' : taskView.week === 1 ? 'Next week' : `${ui.fmt.short.format(start)} – ${ui.fmt.short.format(new Date(end - 1))}`;
+    const shift = (d) => () => { taskView.week += d; ui.render(); };
+    const head = h('div', { class: 'tkhead' },
+      h('button', { class: 'iconbtn xs', type: 'button', 'aria-label': 'Previous week', onclick: shift(-1) }, ic('left', 16)),
+      h('span', { class: 'tkweek' }, label),
+      h('button', { class: 'iconbtn xs', type: 'button', 'aria-label': 'Next week', onclick: shift(1) }, ic('right', 16)));
+    const add = h('button', { class: 'iconbtn xs', type: 'button', title: 'Add task', 'aria-label': 'Add task', onclick: () => ui.todoDialog(null, courses) }, ic('plus', 16));
+
+    const mine = ui.personalItems(start.getTime(), end.getTime(), null).map((t) => ({ ...t, done: ui.isDone(t) }));
+    const outside = ui.externalWork(courses).then((items) => items.filter((i) => i.due_at && Date.parse(i.due_at) >= start && Date.parse(i.due_at) < end).map((i) => ({ ...i, done: Boolean(i.submitted || i.grade) || ui.isDone(i) }))).catch(() => []);
+    const all = Promise.all([data.tasks(courses, start.getTime(), end.getTime() - 1), outside]).then(([work, ext]) =>
+      [...work.map((a) => ({ ...a, done: a.done || ui.isDone(a) })), ...ext, ...mine].filter((i) => !ui.isDismissed(i)).sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at)));
+
+    const body = ui.lazy(all, (items) => {
+      // One bar per course with work this week, in the course's colour.
+      const byCourse = new Map();
+      for (const i of items) {
+        const k = i.course_id ?? 0;
+        if (!byCourse.has(k)) byCourse.set(k, { done: 0, total: 0 });
+        const c = byCourse.get(k);
+        c.total++;
+        if (i.done) c.done++;
+      }
+      const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
+      const done = items.filter((i) => i.done).length;
+      const bars = [...byCourse.entries()].map(([id, c]) => h('div', { class: 'tkbar', title: `${id ? names.get(id) || '' : 'My tasks'}: ${c.done} of ${c.total} done` },
+        h('div', { class: 'tkfill', style: `width:${c.total ? (c.done / c.total) * 100 : 0}%;background:${id ? colorOf(id) : 'var(--muted)'}` })));
+      const summary = h('div', { class: 'tksum' }, h('span', { class: 'tkbig' }, items.length ? `${Math.round((done / items.length) * 100)}%` : '–'), h('span', { class: 'muted small' }, items.length ? `${done} of ${items.length} done` : 'Nothing due'));
+
+      const list = items.filter((i) => (taskView.tab === 'completed' ? i.done : !i.done));
+      const tab = (key, text, n) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(taskView.tab === key), class: taskView.tab === key ? 'on' : null, onclick: () => { taskView.tab = key; ui.render(); } }, `${text} (${n})`);
+      const row = (i) => {
+        const late = !i.done && Date.parse(i.due_at) < Date.now();
+        const tick = h('button', { class: i.done ? 'pcheck done' : 'pcheck', type: 'button', 'aria-pressed': String(i.done), 'aria-label': i.done ? `Mark ${i.name || i.title} not done` : `Mark ${i.name || i.title} done`, onclick: () => ui.setFlag('done', i, !i.done) }, i.done ? ic('check', 14) : null);
+        return h('div', { class: 'tkrow', style: `--c:${i.course_id == null ? 'var(--muted)' : colorOf(i.course_id)}` },
+          tick,
+          h('div', { class: 'tmid' }, ui.itemLink(i, courses), h('div', { class: 'ctx', style: `--c:${i.course_id == null ? 'var(--muted)' : colorOf(i.course_id)}` }, i.course_id == null ? 'My task' : names.get(i.course_id) || ''),
+            h('div', { class: late ? 'm bad' : 'm' }, [late ? 'Missing · ' : '', ui.when(i.due_at), i.points_possible != null ? ` · ${num(i.points_possible)} pts` : ''].join(''))));
+      };
+      return [
+        h('div', { class: 'tkprog' }, summary, h('div', { class: 'tkbars' }, bars)),
+        h('div', { class: 'seg tktabs', role: 'tablist' }, tab('unfinished', 'Unfinished', items.length - done), tab('completed', 'Completed', done)),
+        list.length ? list.map(row) : h('div', { class: 'muted small pad' }, taskView.tab === 'completed' ? 'Nothing finished yet this week.' : 'All done for this week.'),
+      ];
+    });
+    return ui.sideSection(['Tasks', add], [head, body]);
+  }
+
   // ---- pages ---------------------------------------------------------------
   ui.views.dashboard = async () => {
     const courses = await data.courses();
@@ -195,6 +258,8 @@
     const actions = [
       h('button', { class: 'btn', type: 'button', onclick: () => ui.todoDialog(null, visible) }, ic('plus', 16), 'To Do'),
       ui.menu('Dashboard Options', [
+        { label: 'Tasks Panel', on: Boolean(settings.tasks), onclick: () => { settings.tasks = !settings.tasks; ui.saveSettings(); ui.render(); } },
+        null,
         pick('cards', 'Card View'), pick('list', 'List View'), pick('activity', 'Recent Activity'),
         mode === 'cards' ? null : undefined,
         mode === 'cards' ? { label: 'Color Overlay', on: overlay, onclick: () => { settings.overlay = !overlay; ui.saveSettings(); ui.render(); } } : undefined,
@@ -210,7 +275,9 @@
     if (mode === 'list') body = listView(visible);
     else if (mode === 'activity') body = activityView(visible);
     else body = visible.length ? h('div', { class: 'cards' }, visible.map(card)) : ui.empty('No current courses found.');
-    return { title: 'Dashboard', actions, body: [body, toggle], side: mode === 'list' ? null : ui.todoSide(visible) };
+    // With the Tasks panel on, it takes the To Do list's place at the top of the sidebar.
+    const side = mode === 'list' ? null : settings.tasks ? [tasksPanel(visible), ...ui.todoSide(visible).slice(1)] : ui.todoSide(visible);
+    return { title: 'Dashboard', actions, body: [body, toggle], side };
   };
 
   ui.views.courses = async () => {

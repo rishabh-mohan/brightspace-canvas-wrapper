@@ -450,6 +450,21 @@ BSX.data = (() => {
       .sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at));
   }
 
+  // Work due between two instants, each marked done or not: graded, handed in, attempted
+  // (quizzes) or posted in (discussions). For the Tasks panel's progress and lists.
+  async function tasks(courseList, from, to) {
+    const due = await planner(courseList, from, to);
+    return Promise.all(
+      due.map(async (a) => {
+        let done = Boolean(a.grade && a.grade.score > 0);
+        if (!done && a.kind === 'assignment') done = (await submission(a.course_id, a.source_id).catch(() => ({ submitted: false }))).submitted;
+        if (!done && a.kind === 'quiz') done = ((await quizAttempts(a.course_id, a.source_id).catch(() => ({ attempts_used: 0 }))).attempts_used || 0) > 0;
+        if (!done && a.kind === 'discussion') done = await posted(a.course_id, a.forum_id, a.source_id).catch(() => false);
+        return { ...a, done };
+      })
+    );
+  }
+
   async function overdue() {
     const items = await soft(client.leObjects('overdueItems/myItems'), []);
     return items
@@ -777,7 +792,7 @@ BSX.data = (() => {
   return {
     courses, orgId, me, updates,
     assignments, assignmentGroups, assignment, submission, canSubmit, submit, quiz, quizAttempts, parseQuizSummary, discussions, discussion, post,
-    todo, planner, overdue, recentFeedback,
+    todo, planner, tasks, overdue, recentFeedback,
     grades, estimate, estimable, courseTotals,
     announcements, recentAnnouncements,
     modules, externalTools, files, syllabus, syllabusLink, notificationsLink, homeLinks, people, groups,

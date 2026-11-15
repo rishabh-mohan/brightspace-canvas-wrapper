@@ -277,6 +277,21 @@ a.t:hover { color: var(--link); }
 .linkbtn { margin-top: 8px; border: 0; background: none; padding: 2px 0; color: var(--link); font-size: 14px; display: inline-flex; align-items: center; gap: 4px; }
 .linkbtn:hover { text-decoration: underline; }
 
+/* Tasks panel */
+.tkhead { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 8px; }
+.tkweek { font-weight: 700; font-size: 14px; }
+.tkprog { display: flex; gap: 14px; align-items: center; padding: 6px 0 12px; }
+.tksum { display: grid; text-align: center; min-width: 74px; }
+.tkbig { font-size: 26px; font-weight: 700; line-height: 1.1; }
+.tkbars { flex: 1; display: grid; gap: 6px; }
+.tkbar { height: 10px; border-radius: 5px; background: var(--soft2); overflow: hidden; }
+.tkfill { height: 100%; border-radius: 5px; transition: width .4s var(--ease); }
+.tktabs { display: flex; margin-bottom: 4px; }
+.tktabs button { flex: 1; font-size: 13.5px; padding: 5px 6px; }
+.tkrow { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0 9px 8px; border-bottom: 1px solid var(--line2); border-left: 3px solid var(--c); animation: bsx-fade .2s ease-out; }
+.tkrow .t { font-size: 15px; line-height: 1.3; }
+.tkrow .pcheck { width: 20px; height: 20px; margin-top: 1px; }
+
 /* groups */
 .gcards { display: grid; gap: 14px; }
 .gcard { border: 1px solid var(--line); border-left: 4px solid var(--c, var(--line)); border-radius: 4px; padding: 14px 16px; }

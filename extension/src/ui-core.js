@@ -218,6 +218,7 @@ BSX.ui = (() => {
       if (typeof saved.seenAt === 'number') settings.seenAt = saved.seenAt;
       if (typeof saved.overlay === 'boolean') settings.overlay = saved.overlay;
       if (typeof saved.wideCards === 'boolean') settings.wideCards = saved.wideCards;
+      if (typeof saved.tasks === 'boolean') settings.tasks = saved.tasks;
     } catch {}
   }
   function saveSettings() {

@@ -28,8 +28,8 @@ function page(real) {
   const q = new URLSearchParams(location.search);
   if (q.get('bsxframe')) window.BSX_DEV_FRAME = true; // phone-width preview, see /__phone
   localStorage.setItem('XSRF.Token', 'dev-xsrf'); // Brightspace keeps its anti-forgery token here
-  const preset = { theme: q.get('bsxtheme'), dash: q.get('bsxdash'), gradescope: q.get('bsxgs') ? true : null, wideCards: q.get('bsxwide') ? true : null };
-  const any = preset.theme || preset.dash || preset.gradescope || preset.wideCards;
+  const preset = { theme: q.get('bsxtheme'), dash: q.get('bsxdash'), gradescope: q.get('bsxgs') ? true : null, wideCards: q.get('bsxwide') ? true : null, tasks: q.get('bsxtasks') ? true : null };
+  const any = preset.theme || preset.dash || preset.gradescope || preset.wideCards || preset.tasks;
   const read = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   // When the real extension is loaded (tools/dev-extension.js) it has its own storage and
   // background script; these stand-ins are only for the plain page.

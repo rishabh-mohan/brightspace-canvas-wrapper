@@ -37,7 +37,8 @@ p { margin: 12px 0; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 5px; flex: none; }
 
 /* global navigation */
-.rail { width: 84px; flex: none; background: var(--rail); display: flex; flex-direction: column; overflow-y: auto; }
+/* the rail sits above the tray, so a tray slides out from underneath it */
+.rail { width: 84px; flex: none; background: var(--rail); display: flex; flex-direction: column; overflow-y: auto; position: relative; z-index: 3; }
 .rail a, .rail button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 11px 2px 9px; color: #fff; font-size: 13.5px; line-height: 1.2;
   background: none; border: 0; text-align: center; }
 .rail a:hover, .rail button:hover { background: var(--rail-hover); text-decoration: none; }

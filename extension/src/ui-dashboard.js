@@ -196,6 +196,35 @@
     return [start, end];
   }
 
+  // Concentric progress rings drawn in SVG. rings: [{ value 0..1, color, label }].
+  const SVG = 'http://www.w3.org/2000/svg';
+  const svg = (tag, attrs) => {
+    const n = document.createElementNS(SVG, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    return n;
+  };
+  function ringChart(rings, big, small) {
+    const size = 150;
+    const gap = 2;
+    const hole = 38; // radius kept clear for the percentage in the middle
+    const width = Math.max(4, Math.min(11, (size / 2 - hole) / Math.max(rings.length, 1) - gap));
+    const root = svg('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size, class: 'tkrings', role: 'img', 'aria-label': `${big} done this week` });
+    rings.forEach((r, i) => {
+      const radius = size / 2 - width / 2 - i * (width + gap) - 1;
+      if (radius < hole) return; // too many courses for another ring; the legend still lists it
+      const length = 2 * Math.PI * radius;
+      const track = svg('circle', { cx: size / 2, cy: size / 2, r: radius, fill: 'none', 'stroke-width': width, class: 'tktrack' });
+      const fill = svg('circle', { cx: size / 2, cy: size / 2, r: radius, fill: 'none', stroke: r.color, 'stroke-width': width, 'stroke-linecap': 'round', 'stroke-dasharray': `${length}`, 'stroke-dashoffset': `${length}`, transform: `rotate(-90 ${size / 2} ${size / 2})`, class: 'tkarc' });
+      const title = svg('title', {});
+      title.textContent = r.label;
+      fill.append(title);
+      root.append(track, fill);
+      // Start empty, then fill, so the rings sweep round when they appear.
+      requestAnimationFrame(() => requestAnimationFrame(() => fill.setAttribute('stroke-dashoffset', `${length * (1 - Math.min(1, r.value))}`)));
+    });
+    return h('div', { class: 'tkchart' }, root, h('div', { class: 'tkcenter' }, h('span', { class: 'tkbig' }, big), h('span', { class: 'muted small' }, small)));
+  }
+
   function tasksPanel(courses) {
     const [start, end] = weekRange(taskView.week);
     const label = taskView.week === 0 ? 'This week' : taskView.week === -1 ? 'Last week' : taskView.week === 1 ? 'Next week' : `${ui.fmt.short.format(start)} – ${ui.fmt.short.format(new Date(end - 1))}`;
@@ -223,9 +252,14 @@
       }
       const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
       const done = items.filter((i) => i.done).length;
-      const bars = [...byCourse.entries()].map(([id, c]) => h('div', { class: 'tkbar', title: `${id ? names.get(id) || '' : 'My tasks'}: ${c.done} of ${c.total} done` },
-        h('div', { class: 'tkfill', style: `width:${c.total ? (c.done / c.total) * 100 : 0}%;background:${id ? colorOf(id) : 'var(--muted)'}` })));
-      const summary = h('div', { class: 'tksum' }, h('span', { class: 'tkbig' }, items.length ? `${Math.round((done / items.length) * 100)}%` : '–'), h('span', { class: 'muted small' }, items.length ? `${done} of ${items.length} done` : 'Nothing due'));
+      // Concentric rings, one per course (outermost first), each filled by the share done.
+      const entries = [...byCourse.entries()];
+      const rings = ringChart(entries.map(([id, c]) => ({ value: c.total ? c.done / c.total : 0, color: id ? colorOf(id) : 'var(--muted)', label: `${id ? names.get(id) || '' : 'My tasks'}: ${c.done} of ${c.total} done` })),
+        items.length ? `${Math.round((done / items.length) * 100)}%` : '–', items.length ? `${done}/${items.length}` : 'none due');
+      const legend = h('div', { class: 'tklegend' }, entries.map(([id, c]) => h('div', { class: 'tkkey' },
+        h('span', { class: 'dot', style: `background:${id ? colorOf(id) : 'var(--muted)'}` }),
+        h('span', { class: 'tkname' }, id ? names.get(id) || '' : 'My tasks'),
+        h('span', { class: 'muted small' }, `${c.done}/${c.total}`))));
 
       const list = items.filter((i) => (taskView.tab === 'completed' ? i.done : !i.done));
       const tab = (key, text, n) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(taskView.tab === key), class: taskView.tab === key ? 'on' : null, onclick: () => { taskView.tab = key; ui.render(); } }, `${text} (${n})`);
@@ -238,7 +272,7 @@
             h('div', { class: late ? 'm bad' : 'm' }, [late ? 'Missing · ' : '', ui.when(i.due_at), i.points_possible != null ? ` · ${num(i.points_possible)} pts` : ''].join(''))));
       };
       return [
-        h('div', { class: 'tkprog' }, summary, h('div', { class: 'tkbars' }, bars)),
+        h('div', { class: 'tkprog' }, rings, legend),
         h('div', { class: 'seg tktabs', role: 'tablist' }, tab('unfinished', 'Unfinished', items.length - done), tab('completed', 'Completed', done)),
         list.length ? list.map(row) : h('div', { class: 'muted small pad' }, taskView.tab === 'completed' ? 'Nothing finished yet this week.' : 'All done for this week.'),
       ];

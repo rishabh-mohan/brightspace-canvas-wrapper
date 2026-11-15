@@ -280,12 +280,16 @@ a.t:hover { color: var(--link); }
 /* Tasks panel */
 .tkhead { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 8px; }
 .tkweek { font-weight: 700; font-size: 14px; }
-.tkprog { display: flex; gap: 14px; align-items: center; padding: 6px 0 12px; }
-.tksum { display: grid; text-align: center; min-width: 74px; }
-.tkbig { font-size: 26px; font-weight: 700; line-height: 1.1; }
-.tkbars { flex: 1; display: grid; gap: 6px; }
-.tkbar { height: 10px; border-radius: 5px; background: var(--soft2); overflow: hidden; }
-.tkfill { height: 100%; border-radius: 5px; transition: width .4s var(--ease); }
+.tkprog { display: grid; justify-items: center; gap: 12px; padding: 4px 0 12px; }
+.tkchart { position: relative; width: 150px; height: 150px; }
+.tkrings { display: block; }
+.tktrack { stroke: var(--soft2); }
+.tkarc { transition: stroke-dashoffset .9s var(--ease); }
+.tkcenter { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; line-height: 1.1; }
+.tkbig { font-size: 22px; font-weight: 700; }
+.tklegend { width: 100%; min-width: 0; display: grid; gap: 4px; }
+.tkkey { display: flex; align-items: center; gap: 6px; font-size: 13px; min-width: 0; }
+.tkname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tktabs { display: flex; margin-bottom: 4px; }
 .tktabs button { flex: 1; font-size: 13.5px; padding: 5px 6px; }
 .tkrow { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0 9px 8px; border-bottom: 1px solid var(--line2); border-left: 3px solid var(--c); animation: bsx-fade .2s ease-out; }

@@ -37,7 +37,7 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 
 **Preferences** (Account): light, dark or automatic theme, and whether to show current courses or all. Preferences and your To Do items are stored in the extension, in this browser only.
 
-**Tasks Panel** (Dashboard Options → Tasks Panel, off by default): a week of work in the sidebar in place of To Do, with a progress bar per course, Unfinished and Completed lists, ticking off, + Add task, and previous and next weeks. The idea and layout follow [Tasks for Canvas](https://github.com/jtcheng26/canvas-task-extension) by jtcheng26 (MIT); this is a separate implementation on Brightspace data, with no code taken from it.
+**Tasks Panel** (Dashboard Options → Tasks Panel, off by default): a week of work in the sidebar in place of To Do, with concentric progress rings (one per course, in its colour, with the overall percentage in the middle), Unfinished and Completed lists, ticking off, + Add task, and previous and next weeks. The idea and layout follow [Tasks for Canvas](https://github.com/jtcheng26/canvas-task-extension) by jtcheng26 (MIT); this is a separate implementation on Brightspace data, with no code taken from it.
 
 **Groups** (left rail): the groups you belong to, with their course, category and members where Brightspace lets a student see them.
 

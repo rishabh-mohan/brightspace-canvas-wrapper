@@ -553,10 +553,38 @@ BSX.ui = (() => {
     } catch {}
     location.assign(u);
   }
-  const turnOff = () => {
+  // The Brightspace page that matches the wrapper page being shown, for the Brightspace switch.
+  function brightspacePage(r) {
+    const strip = (u) => u.replace(OFF, '');
+    if (r.view === 'course') {
+      const ou = r.courseId;
+      const id = r.itemId;
+      switch (r.section) {
+        case 'announcements': return strip(bs.news(ou));
+        case 'assignments': return id != null ? `/d2l/lms/dropbox/user/folder_submit_files.d2l?db=${id}&ou=${ou}` : strip(bs.assignments(ou));
+        case 'quizzes': return id != null ? `/d2l/lms/quizzing/user/quiz_summary.d2l?qi=${id}&ou=${ou}` : strip(bs.quizzes(ou));
+        case 'discussions': return id != null ? `/d2l/le/${ou}/discussions/topics/${id}/View` : strip(bs.discussions(ou));
+        case 'grades': return strip(bs.grades(ou));
+        case 'people': return strip(bs.classlist(ou));
+        case 'modules': return id != null && id > 0 ? `/d2l/le/content/${ou}/viewContent/${id}/View` : id == null ? strip(bs.content(ou)) : strip(bs.home(ou));
+        default: return strip(bs.home(ou));
+      }
+    }
+    return '/d2l/home';
+  }
+
+  const turnOff = async () => {
     const r = route();
     if (r.view === 'open') return openRaw(r.u);
-    location.hash = OFF;
+    let target = brightspacePage(r);
+    // Brightspace's calendar and email hang off the school's own org unit.
+    if (r.view === 'calendar' || r.view === 'inbox') {
+      const org = await data.orgId().catch(() => null);
+      if (org) target = r.view === 'calendar' ? bs.calendar(org) : bs.email(org);
+    }
+    // Go to the matching Brightspace page, marked to stay unwrapped. When that is the page
+    // already loaded underneath, only the hash changes and it shows at once.
+    location.assign(`${target}${OFF}`);
   };
 
   // Brightspace links clicked inside the wrapper open in the wrapper's frame view instead of

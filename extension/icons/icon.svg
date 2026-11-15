@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Original icon: a slate tile with three course cards, in the wrapper's own colours. -->
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="#394b58"/>
+  <g>
+    <rect x="22" y="26" width="38" height="34" rx="5" fill="#ffffff"/>
+    <rect x="22" y="26" width="38" height="16" rx="5" fill="#0b874b"/>
+    <rect x="22" y="37" width="38" height="5" fill="#0b874b"/>
+    <rect x="68" y="26" width="38" height="34" rx="5" fill="#ffffff"/>
+    <rect x="68" y="26" width="38" height="16" rx="5" fill="#bd3c14"/>
+    <rect x="68" y="37" width="38" height="5" fill="#bd3c14"/>
+    <rect x="22" y="68" width="38" height="34" rx="5" fill="#ffffff"/>
+    <rect x="22" y="68" width="38" height="16" rx="5" fill="#0374b5"/>
+    <rect x="22" y="79" width="38" height="5" fill="#0374b5"/>
+    <rect x="68" y="68" width="38" height="34" rx="5" fill="none" stroke="#ffffff" stroke-width="5" stroke-dasharray="7 6"/>
+    <path d="M87 77v16M79 85h16" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+  </g>
+</svg>

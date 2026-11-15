@@ -734,6 +734,8 @@
     // ticks "based only on graded assignments".
     const allItems = (whatIf.allItems ?? g.null_is_zero) && canEstimate;
     const totalBox = h('div', { class: 'totalbox' });
+    // The same total above the table, shown instead of the sidebar's on narrow screens.
+    const totalTop = h('div', { class: 'totalbox top' });
     const blank = g.null_is_zero ? '0' : '–';
     const scoreText = (v, i) => (v && v.score != null ? num(v.score) : i && outside.has(i.id) ? num(outside.get(i.id).score) : blank);
     function drawTotal() {
@@ -751,6 +753,7 @@
         kids = [h('div', { class: 'tlabel' }, 'Total'), h('div', { class: 'muted' }, 'Not released by the instructor.')];
       }
       totalBox.replaceChildren(...kids.filter(Boolean));
+      totalTop.replaceChildren(...kids.filter(Boolean).map((n) => n.cloneNode(true)));
       markDropped();
     }
     // Scores a category's drop rule leaves out are struck through and tagged, as Canvas does.
@@ -832,6 +835,7 @@
     return {
       body: [
         h('div', { class: 'dhead' }, h('h1', null, 'Grades'), h('div', { class: 'row' }, arrange, picker)),
+        totalTop,
         whatIf.on ? h('div', { class: 'banner' }, weighted ? 'What-If scores: type a score to see the effect. In a weighted gradebook only graded items can be changed.' : 'What-If scores: type a score to see the effect, including for work that is not graded yet.') : null,
         table,
         gradescopeTable(course),

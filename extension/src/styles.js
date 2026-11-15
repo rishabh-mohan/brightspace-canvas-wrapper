@@ -331,6 +331,7 @@ table.grid { border-collapse: collapse; width: 100%; }
 .note { color: var(--muted); font-size: 13.5px; margin-top: 2px; white-space: pre-wrap; }
 .totalbox { border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; margin-bottom: 12px; }
 .tlabel { font-weight: 700; font-size: 15px; }
+.totalbox.top { display: none; margin-bottom: 16px; }
 input.wi { width: 84px; padding: 3px 6px; font: inherit; text-align: right; border: 1px solid var(--line); border-radius: 4px; color: var(--fg); background: var(--bg); }
 input.wi.changed { border-color: var(--link); background: var(--hi); }
 .wilock { color: var(--muted); cursor: help; white-space: nowrap; }
@@ -370,6 +371,7 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
 /* popup menus */
 .menuwrap { position: relative; display: inline-flex; }
 .menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 6; min-width: 210px; padding: 6px 0; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 20px var(--shadow); animation: bsx-zoom .14s var(--ease); transform-origin: top right; }
+.menu.toleft { right: auto; left: 0; transform-origin: top left; }
 .menu button { display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 14px 7px 8px; border: 0; background: none; text-align: left; font-size: 15px; color: var(--fg); }
 .menu button:hover, .menu button:focus-visible { background: var(--primary); color: #fff; outline: none; }
 .menu .mcheck { width: 20px; display: inline-flex; }
@@ -408,10 +410,14 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
 @media (max-width: 860px) {
   .layout { flex-direction: column; align-items: stretch; gap: 18px; padding: 16px; }
   .right, .cnav { width: 100%; }
+  /* Narrow screens: the grade total sits above the grades, not after them. */
+  .totalbox.top { display: block; }
+  .right .totalbox { display: none; }
   .cnav { display: flex; flex-wrap: wrap; gap: 0 2px; border-bottom: 1px solid var(--line); padding-bottom: 8px; max-height: 480px; transition: max-height .26s var(--ease), opacity .2s ease, padding .26s var(--ease); }
   .cnav > * { min-width: 0; }
   /* On narrow screens the menu is a strip above the page: it folds up instead of sideways. */
-  .cnav.closed { width: 100%; margin-right: 0; max-height: 0; padding-bottom: 0; border-bottom-width: 0; }
+  /* Hidden only once the fold has finished, so the closing is seen. */
+  .cnav.closed { width: 100%; margin-right: 0; max-height: 0; padding-bottom: 0; border-bottom-width: 0; transition: max-height .26s var(--ease), opacity .2s ease, padding .26s var(--ease), visibility 0s linear .26s; }
   .cnav a { border-left: 0; border-bottom: 2px solid transparent; padding: 4px 9px; }
   .cnav a.on { border-bottom-color: var(--fg); }
   .cnav .sep { width: 100%; margin: 8px 0 0; padding: 0 9px; }

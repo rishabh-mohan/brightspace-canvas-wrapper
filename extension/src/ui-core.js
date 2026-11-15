@@ -948,6 +948,12 @@ BSX.ui = (() => {
     pop.append(...items.map((it) => (it ? h('button', { type: 'button', role: it.on != null ? 'menuitemradio' : 'menuitem', 'aria-checked': it.on != null ? String(Boolean(it.on)) : null, class: it.on ? 'on' : null, onclick: () => { shut(); it.onclick(); } }, h('span', { class: 'mcheck' }, it.on ? ic('check', 16) : null), it.label) : h('div', { class: 'mdiv' }))));
     btn.addEventListener('click', () => {
       const open = pop.hidden;
+      // Open towards the side with room: on a phone the button can sit near the left menu.
+      if (open) {
+        const r = btn.getBoundingClientRect();
+        const railRight = frame?.rail.getBoundingClientRect().right || 0;
+        pop.classList.toggle('toleft', r.right - 230 < railRight + 8);
+      }
       pop.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
       if (open) {

@@ -67,8 +67,17 @@ BSX.ed = (() => {
   function lessonItems(edCourse, json, bsCourse, region) {
     const list = Array.isArray(json) ? json : json.lessons || [];
     const moduleNames = new Map((json.modules || []).map((m) => [m.id, m.name]));
-    // Ed's own order: modules as Ed lists them, lessons by their index within a module.
-    const moduleRank = new Map((json.modules || []).map((m, n) => [m.id, n]));
+    // Ed's own order. Ed's module list has no position of its own (it can come back in the
+    // order modules were made), but each lesson's index runs through the whole course, so a
+    // module sits where its first lesson does. Modules with no lessons follow, in list order.
+    const firstIndex = new Map();
+    for (const l of list) {
+      const at = l.index ?? l.number;
+      if (l.module_id == null || at == null) continue;
+      if (!firstIndex.has(l.module_id) || at < firstIndex.get(l.module_id)) firstIndex.set(l.module_id, at);
+    }
+    const moduleRank = new Map((json.modules || []).map((m, n) => [m.id, firstIndex.has(m.id) ? firstIndex.get(m.id) : 1e9 + n]));
+    for (const [id, at] of firstIndex) if (!moduleRank.has(id)) moduleRank.set(id, at);
     return list
       // Undated lessons (readings, slides) are kept too: they show in the [Ed] module, while
       // To Do, the calendar and the planner only take dated work.

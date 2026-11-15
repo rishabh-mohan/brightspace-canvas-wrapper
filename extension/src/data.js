@@ -632,6 +632,8 @@ BSX.data = (() => {
     return t.TypeIdentifier || 'Item';
   }
 
+  const MODULE_TEXT = 1e9; // ids of module-text items: this plus the module id
+
   // Content tree flattened to a list of modules; `depth` keeps the nesting for indentation.
   async function modules(ou) {
     const [toc, topicBase] = await Promise.all([soft(client.le(`${ou}/content/toc`), { Modules: [] }), client.lePath(`${ou}/content/topics`)]);
@@ -639,12 +641,18 @@ BSX.data = (() => {
     const walk = (mods, depth) => {
       for (const m of mods || []) {
         if (m.IsHidden) continue;
+        // A module's own text (and images), when it has any, is its first item, under the
+        // module's name. Its id is set apart from topic ids.
+        const html = m.Description?.Html || '';
+        const text = m.Description?.Text || '';
+        const hasText = Boolean(text.trim() || /<img\b/i.test(html));
+        const overview = hasText ? [{ id: MODULE_TEXT + m.ModuleId, title: m.Title, type: 'Module overview', unread: false, locked: Boolean(m.IsLocked), description_html: html, description: text, url: '', html_url: `/d2l/le/content/${ou}/Home?itemIdentifier=D2L.LE.Content.ContentObject.ModuleCO-${m.ModuleId}` }] : [];
         out.push({
           id: m.ModuleId,
           name: m.Title,
           depth,
           locked: Boolean(m.IsLocked),
-          items: (m.Topics || [])
+          items: [...overview, ...(m.Topics || [])
             .filter((t) => !t.IsHidden)
             .map((t) => ({
               id: t.TopicId,
@@ -656,7 +664,7 @@ BSX.data = (() => {
               url: t.Url || '', // a link's address, a tool's launch address, or a file's path
               file_url: `${topicBase}/${t.TopicId}/file?stream=true`, // the file itself, shown inline
               html_url: `/d2l/le/content/${ou}/viewContent/${t.TopicId}/View`,
-            })),
+            }))],
         });
         walk(m.Modules, depth + 1);
       }

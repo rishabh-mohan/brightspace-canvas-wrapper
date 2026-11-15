@@ -25,7 +25,7 @@ Background and decisions: [docs/brightspace-vs-canvas-wrapper-plan.md](docs/brig
 - Discussion pages: posts as a thread, with your own posts marked.
 - Announcement pages include their attachments.
 - Grades: every item with due date and score, group subtotals, the released total or a labelled estimate, group weights, What-If scores, Canvas's "Calculate based only on graded assignments" switch (untick to count ungraded work as zero), arranging by group, due date or title, and a course switcher.
-- Modules, led by a **Course Home** module (the instructor's Brightspace course homepage, shown in a frame, and the syllabus), with each item opening inside the wrapper: files in a viewer, external tools in a frame, links as a card, each with Previous and Next.
+- Modules, where a module's own text and images (its description in Brightspace) are its first item, under the module's name; led by a **Course Home** module (the instructor's Brightspace course homepage, shown in a frame, and the syllabus), with each item opening inside the wrapper: files in a viewer, external tools in a frame, links as a card, each with Previous and Next.
 - Syllabus: the course's syllabus tool (Simple Syllabus at Purdue) shown in place, found as a Content link or on the course navigation bar, then the course overview and a summary of dated work.
 - People, Files, Quizzes, Discussions.
 - Course tools: every other link on the course's Brightspace navigation bar (Course Tools, Class Progress, and whatever the school adds), read from the course home page, in the course menu. They open inside the wrapper.

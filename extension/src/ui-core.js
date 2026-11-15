@@ -164,8 +164,12 @@ BSX.ui = (() => {
         const tag = n.tagName.toUpperCase();
         if (DROP.has(tag)) continue;
         if (tag === 'IMG') {
-          const alt = n.getAttribute('alt');
-          dst.append(alt ? `[image: ${alt}]` : '[image]');
+          // Images keep only a checked http(s) address (Brightspace's own files resolve
+          // against this site) and their alt text.
+          const src = webHref(n.getAttribute('src') || '');
+          const alt = n.getAttribute('alt') || '';
+          if (src) dst.append(Object.assign(document.createElement('img'), { src, alt, loading: 'lazy', referrerPolicy: new URL(src).origin === location.origin ? 'same-origin' : 'no-referrer' }));
+          else dst.append(alt ? `[image: ${alt}]` : '[image]');
         } else if (KEEP.has(tag)) {
           const el = document.createElement(tag.toLowerCase());
           if (tag === 'A') {

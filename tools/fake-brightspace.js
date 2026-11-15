@@ -116,7 +116,8 @@ function build(c) {
 
   let tid = c.id * 1000;
   const topic = (title, type, url) => ({ IsExempt: false, IsHidden: false, SortOrder: 0, IsLocked: false, IsBroken: false, ActivityId: '', TopicId: ++tid, Identifier: String(tid), TypeIdentifier: type, Title: title, Bookmarked: false, Unread: tid % 3 === 0, Url: url, LastModifiedDate: at(-10), Description: rich('') });
-  const mod = (id, title, topicsIn, subs = []) => ({ IsHidden: false, SortOrder: id, IsLocked: false, ModuleId: c.id * 100 + id, Title: title, Modules: subs, Topics: topicsIn, LastModifiedDate: at(-10), Description: rich('') });
+  const intro = (id) => (id === 2 ? '<p>This week: <strong>recursion</strong> and the call stack. Read chapter 1 before Wednesday.</p><p><img src="/d2l/api/lp/1.64/courses/101/image" alt="Call stack diagram" width="600"></p><ul><li>Lecture 1: recursion basics</li><li>Lecture 2: tracing calls</li></ul>' : '');
+  const mod = (id, title, topicsIn, subs = []) => ({ IsHidden: false, SortOrder: id, IsLocked: false, ModuleId: c.id * 100 + id, Title: title, Modules: subs, Topics: topicsIn, LastModifiedDate: at(-10), Description: rich(intro(id)) });
   const toc = {
     Modules: [
       mod(1, 'Start Here', [topic('Syllabus', 'File', '/content/syllabus.pdf'), topic('Course Schedule', 'File', '/content/schedule.pdf'), ...(c.tool ? [topic(c.tool, 'Link', `/d2l/common/dialogs/quickLink/quickLink.d2l?ou=${c.id}&type=lti&rcode=abc`)] : [])]),

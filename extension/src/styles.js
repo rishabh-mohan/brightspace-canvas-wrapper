@@ -232,6 +232,7 @@ a.t:hover { color: var(--link); }
 .prose table { width: auto; border-collapse: collapse; }
 .prose td, .prose th { border: 1px solid var(--line); padding: 4px 8px; }
 .prose pre { white-space: pre-wrap; }
+.prose img { max-width: 100%; height: auto; border-radius: 4px; }
 .filelist { list-style: none; padding: 0; margin: 8px 0; }
 .filelist li { padding: 5px 0; }
 .bigscore { font-size: 30px; font-weight: 700; line-height: 1.2; }

@@ -11,8 +11,8 @@
     quiz: { icon: 'quiz', label: 'Quiz', group: 'Quizzes' },
     discussion: { icon: 'discussion', label: 'Discussion', group: 'Discussions' },
   };
-  const TYPE_ICON = { File: 'file', Link: 'link', 'External tool': 'external', Assignment: 'assignment', Quiz: 'quiz', Discussion: 'discussion', 'Course home': 'home', Syllabus: 'syllabus' };
-  const VIEWABLE = new Set(['File', 'Link', 'External tool', 'Course home']); // module items with a page inside the wrapper
+  const TYPE_ICON = { File: 'file', Link: 'link', 'External tool': 'external', Assignment: 'assignment', Quiz: 'quiz', Discussion: 'discussion', 'Course home': 'home', Syllabus: 'syllabus', 'Module overview': 'module' };
+  const VIEWABLE = new Set(['File', 'Link', 'External tool', 'Course home', 'Module overview']); // module items with a page inside the wrapper
 
   // The course's content plus a first "Course Home" module: the instructor's Brightspace
   // homepage (shown in a frame, so its widgets and welcome text stay as they made them)
@@ -136,7 +136,11 @@
 
     let view;
     let open;
-    if (i.type === 'Course home') {
+    if (i.type === 'Module overview') {
+      // The module's own text and images, as the instructor wrote them (sanitised).
+      view = h('div', { class: 'detail', style: 'margin-top:12px' }, prose(i.description_html, i.description));
+      open = [];
+    } else if (i.type === 'Course home') {
       view = frame(i.url, `${nameOf(course)} homepage`);
       open = [h('a', { class: 'btn', href: `${i.html_url}#brightspace` }, 'Open in Brightspace ', ic('external', 14))];
     } else if (i.type === 'File') {

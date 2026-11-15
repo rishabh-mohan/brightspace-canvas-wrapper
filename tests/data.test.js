@@ -182,6 +182,15 @@ const assert = require('assert');
   assert.strictEqual((await data.todo([{ id: 12, name: 'C' }])).length, 0);
   assert.strictEqual((await data.discussion(12, 31)).posts[0].mine, true);
 
+  // A module with its own text gets it as a first item under the module's name.
+  routes['/d2l/api/le/1.100/14/content/toc'] = { Modules: [
+    { ModuleId: 5, Title: 'Week 2', Description: { Text: 'Read chapter 2.', Html: '<p>Read chapter 2.</p>' }, Topics: [{ TopicId: 51, Title: 'Slides', TypeIdentifier: 'File', Url: '/x.pdf' }], Modules: [] },
+    { ModuleId: 6, Title: 'Week 3', Description: { Text: ' ', Html: '<p> </p>' }, Topics: [], Modules: [] }] };
+  const withText = await data.modules(14);
+  assert.deepStrictEqual(Array.from(withText[0].items, (i) => `${i.type}:${i.title}`), ['Module overview:Week 2', 'File:Slides']);
+  assert.strictEqual(withText[0].items[0].id, 1e9 + 5);
+  assert.strictEqual(withText[1].items.length, 0, 'empty module text adds nothing');
+
   // Module items carry the address of the file itself, for the in-page viewer.
   assert.strictEqual(mods[0].items[0].file_url, '/d2l/api/le/1.100/10/content/topics/11/file?stream=true');
 

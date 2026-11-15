@@ -229,7 +229,7 @@
 
   // Confetti for a finished week, drawn by canvas-confetti (vendor/, ISC licence by Kiril
   // Vatev) on a canvas inside the wrapper: a cannon on each side firing a couple of pieces
-  // every frame for 15 seconds, in the given (course) colours. No worker (the page's policy
+  // every frame for 5 seconds, in the given (course) colours. No worker (the page's policy
   // may refuse one), and nothing at all when reduced motion is asked for.
   function confetti(colors = COLORS.slice(0, 4)) {
     const app = ui.appEl();
@@ -238,7 +238,7 @@
     const canvas = h('canvas', { class: 'confetti', 'aria-hidden': 'true' });
     app.append(canvas);
     const fire = globalThis.confetti.create(canvas, { resize: true, useWorker: false });
-    const end = Date.now() + 15 * 1000;
+    const end = Date.now() + 5 * 1000;
     const frame = () => {
       fire({ particleCount: 2, angle: 60, spread: 55, origin: { x: 0 }, colors });
       fire({ particleCount: 2, angle: 120, spread: 55, origin: { x: 1 }, colors });

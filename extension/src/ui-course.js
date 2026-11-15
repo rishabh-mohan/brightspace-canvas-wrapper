@@ -132,8 +132,9 @@
           : h('div', { class: 'irow muted small' }, 'No items in this module.'));
   }
 
-  // An outside site's own modules, arranged for the [Ed] module: by kind (other, exams,
-  // projects, homework, lessons), and modules that differ only by a number ("Homework 1",
+  // An outside site's own modules, arranged for the [Ed] module: "Other" (lessons with no
+  // module) first, then exams, projects, homework, lessons, and anything else (such as
+  // "Week 1") last. Modules that differ only by a number ("Homework 1",
   // "Homework 2") gathered under one parent named for them ("Homework"), in number order.
   // groups: [[module name, items]]. Returns [{ name, list } | { name, children: [[name, items]] }].
   const KIND_ORDER = [
@@ -143,8 +144,9 @@
     ['lessons', /\b(lessons?|lectures?|readings?)\b/i],
   ];
   const kindRank = (name) => {
+    if (/^other$/i.test(String(name).trim())) return 0;
     const at = KIND_ORDER.findIndex(([, re]) => re.test(name));
-    return at < 0 ? 0 : at + 1; // anything else ("other") comes first
+    return at < 0 ? KIND_ORDER.length + 1 : at + 1; // names of no known kind go last
   };
   // "Homework 3: Graphs" -> "Homework"; a name without a number is its own namesake.
   const namesake = (name) => {

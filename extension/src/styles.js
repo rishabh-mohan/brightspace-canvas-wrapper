@@ -304,7 +304,7 @@ a.t:hover { color: var(--link); }
 .gres:hover, .gres.on { background: var(--hi); text-decoration: none; }
 .gres .imid { display: grid; min-width: 0; }
 .gres .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gkind { flex: none; width: 92px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.gkind { flex: none; width: 96px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* confetti for a finished week */
 .confetti { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }

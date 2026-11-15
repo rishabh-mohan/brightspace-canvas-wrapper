@@ -374,6 +374,9 @@
   // assignments, quizzes, discussion topics, announcements, and outside work. Built from data
   // the wrapper already caches, so a second search is instant.
   const LINKED = new Set(['File', 'Link', 'External tool', 'Module overview']); // open in the module viewer
+  // Short labels for module entry kinds; Brightspace's internal ones ("ContentService") read as "Content".
+  const KIND_LABEL = { 'Module overview': 'Module', 'External tool': 'Tool', File: 'File', Link: 'Link', Assignment: 'Assignment', Quiz: 'Quiz', Discussion: 'Discussion', 'Course home': 'Course', Syllabus: 'Syllabus' };
+  const kindLabel = (type) => KIND_LABEL[type] || 'Content';
   async function searchIndex() {
     const courses = ui.focusCourses(await data.courses());
     const per = await Promise.all(courses.map(async (c) => {
@@ -384,7 +387,7 @@
       const workKeys = new Set(work.map((a) => `${a.kind}:${a.name.trim().toLowerCase()}`));
       const dup = (i) => workKeys.has(`${String(i.type).toLowerCase()}:${String(i.title).trim().toLowerCase()}`);
       return [
-        ...mods.flatMap((m) => m.items.filter((i) => !dup(i)).map((i) => ({ title: i.title, kind: i.type === 'Module overview' ? 'Module' : i.type, where: `${course} · ${m.name}`, course: c.id, href: LINKED.has(i.type) ? courseHref(c.id, 'modules', i.id) : i.html_url, text: `${i.title} ${m.name}` }))),
+        ...mods.flatMap((m) => m.items.filter((i) => !dup(i)).map((i) => ({ title: i.title, kind: kindLabel(i.type), where: `${course} · ${m.name}`, course: c.id, href: LINKED.has(i.type) ? courseHref(c.id, 'modules', i.id) : i.html_url, text: `${i.title} ${m.name}` }))),
         ...work.map((a) => ({ title: a.name, kind: { assignment: 'Assignment', quiz: 'Quiz', discussion: 'Discussion' }[a.kind], where: `${course}${a.due_at ? ` · due ${when(a.due_at)}` : ''}`, course: c.id, href: itemHref(c.id, a), text: `${a.name} ${a.forum || ''}` })),
         ...news.map((n) => ({ title: n.title, kind: 'Announcement', where: `${course}${n.posted_at ? ` · ${when(n.posted_at)}` : ''}`, course: c.id, href: courseHref(c.id, 'announcements', n.id), text: `${n.title} ${ui.plainOf(n.message_html, n.message)}` })),
       ];

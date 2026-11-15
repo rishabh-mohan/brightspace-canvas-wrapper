@@ -248,7 +248,7 @@ a.t:hover { color: var(--link); }
 .filelist { list-style: none; padding: 0; margin: 8px 0; }
 .filelist li { padding: 5px 0; }
 .bigscore { font-size: 30px; font-weight: 700; line-height: 1.2; }
-.bigscore.hyp { color: var(--link); }
+.bigscore.hyp, .grouprow td.hyp { color: var(--link); }
 .substat { font-weight: 700; padding: 8px 0; }
 .post { border: 1px solid var(--line); border-radius: 4px; padding: 12px 16px; margin-bottom: 10px; }
 .phead { display: flex; gap: 10px; align-items: center; }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Brightspace Canvas Wrapper",
-  "version": "1.5.14",
+  "version": "1.5.15",
   "description": "A Canvas-style view of Brightspace, with file submission: dashboard, calendar, and per-course home, modules, assignments, quizzes, discussions, grades, announcements, files, syllabus and people.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://*.brightspace.com/*", "https://www.gradescope.com/*"],

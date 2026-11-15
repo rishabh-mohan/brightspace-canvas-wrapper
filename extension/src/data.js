@@ -678,16 +678,28 @@ BSX.data = (() => {
     let possible = 0;
     const out = new Set(); // every dropped item
     const marked = new Set(); // the ones Brightspace itself marked as dropped
+    // Each category's own result: { score, possible } in the gradebook's units (weight in a
+    // weighted one), its kept points, and whether it was worked out here (not Brightspace's).
+    const perGroup = new Map();
     for (const group of g.groups) {
       // Brightspace's own result for a category (its weight achieved) already includes what
       // it works out but does not show students: formulas, caps, drops. While nothing in the
       // category is changed here, that figure is used as it is.
-      const touched = allItems || group.items.some((i) => overrides.has(i.id));
+      // Counting blanks as 0 only changes a category that has a blank in it.
+      const touched = group.items.some((i) => overrides.has(i.id) || (allItems && !i.bonus && !i.total && (!i.value || i.value.score == null) && share(g, i)));
       const gv = group.value;
       const countable = group.items.some((i) => !i.excluded || g.count_excluded);
+      // A weighted category counts for its whole weight: its grade (kept score over kept share)
+      // times the weight, as Brightspace works it out, however many of its items are graded.
+      const add = (gs, gp, computed, points, pointsPossible) => {
+        if (!(gp > 0)) return;
+        const norm = g.system === 'Weighted' && group.name && group.weight > 0 ? group.weight / gp : 1;
+        score += gs * norm;
+        possible += gp * norm;
+        perGroup.set(group, { score: gs, possible: gp, points, points_possible: pointsPossible, computed });
+      };
       if (!touched && countable && group.name && g.system === 'Weighted' && gv && gv.weighted_score != null && gv.weighted_possible > 0) {
-        score += gv.weighted_score;
-        possible += gv.weighted_possible;
+        add(gv.weighted_score, gv.weighted_possible, false, gv.score, gv.points_possible);
         for (const i of group.items) if (i.marked_dropped) { out.add(i.id); marked.add(i.id); }
         continue;
       }
@@ -758,12 +770,15 @@ BSX.data = (() => {
       // drops are already left out of its figures, so its category share does not include them.
       const ruleDropShare = group.items.filter((i) => out.has(i.id) && !marked.has(i.id) && !noScale.has(i.id)).reduce((s, i) => s + shareOf(i), 0);
       const scale = g.system === 'Weighted' && keptShare > 0 && ruleDropShare > 0 && droppedShare > 0 ? (keptShare + ruleDropShare) / keptShare : 1;
+      let gs = 0, gp = 0, pts = 0, ptsP = 0;
       for (const c of counted) {
-        score += (c.ws != null ? c.ws : (c.s / c.pp) * c.wp) * scale;
-        if (!c.bonus) possible += c.wp * scale;
+        gs += (c.ws != null ? c.ws : (c.s / c.pp) * c.wp) * scale;
+        pts += c.s;
+        if (!c.bonus) { gp += c.wp * scale; ptsP += c.pp; }
       }
+      add(gs, gp, true, pts, ptsP);
     }
-    return { score, possible, dropped: out, marked };
+    return { score, possible, dropped: out, marked, groups: perGroup };
   }
 
   // Dropped items with where the decision came from: { dropped: Set, marked: Set (Brightspace's) }.
@@ -771,6 +786,10 @@ BSX.data = (() => {
     const t = tally(g, overrides, opts);
     return { dropped: t.dropped, marked: t.marked };
   };
+
+  // Each category's result for the same inputs as estimate(): Map(group → { score, possible,
+  // points, points_possible, computed }).
+  const groupResults = (g, overrides = new Map(), opts = {}) => tally(g, overrides, opts).groups;
 
   // A category's drop rule in words, e.g. "lowest 2 dropped".
   const dropRule = (group) => [group.drop_lowest ? `lowest ${group.drop_lowest} dropped` : null, group.drop_highest ? `highest ${group.drop_highest} dropped` : null].filter(Boolean).join(', ');
@@ -1037,7 +1056,7 @@ BSX.data = (() => {
     courses, orgId, me, updates,
     assignments, assignmentGroups, assignment, submission, canSubmit, submit, quiz, quizAttempts, parseQuizSummary, discussions, discussion, post,
     todo, planner, tasks, overdue, recentFeedback,
-    grades, estimate, dropped, dropInfo, dropRule, estimable, whyNot, courseTotals,
+    grades, estimate, dropped, dropInfo, groupResults, dropRule, estimable, whyNot, courseTotals,
     announcements, recentAnnouncements,
     modules, externalTools, files, syllabus, syllabusLink, notificationsLink, homeLinks, courseTools, people, groups,
     calendar,

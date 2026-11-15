@@ -228,7 +228,10 @@ const assert = require('assert');
   assert.strictEqual(data.estimable(wg, lab), true, 'drop-down grades count');
   assert.strictEqual(data.estimable(wg, att), false);
   assert.strictEqual(data.whyNot(wg, att), 'Pass/fail item');
-  assert.deepEqual({ ...data.estimate(wg, new Map([[1, 5], [2, 4]])) }, { score: 30, points_possible: 40 });
+  // The category counts for its whole 60: 75% of it.
+  assert.deepEqual({ ...data.estimate(wg, new Map([[1, 5], [2, 4]])) }, { score: 45, points_possible: 60 });
+  const wgCat = data.groupResults(wg, new Map([[1, 5], [2, 4]])).get(wg.groups[0]);
+  assert.deepStrictEqual([wgCat.points, wgCat.points_possible, wgCat.computed], [9, 14, true], 'category points worked out from the What-If scores');
 
   // A score given only as display text is read from it; "treat ungraded as 0" is reported;
   // "not counted" items join the total when the student says so.

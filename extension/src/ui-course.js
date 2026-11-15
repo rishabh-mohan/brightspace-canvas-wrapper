@@ -864,6 +864,7 @@
       totalBox.replaceChildren(...kids.filter(Boolean));
       totalTop.replaceChildren(...kids.filter(Boolean).map((n) => n.cloneNode(true)));
       markDropped();
+      drawGroups();
     }
     // Scores a category's drop rule leaves out are struck through and tagged, as Canvas does.
     // Worked out again on every What-If change, since a new score can change what is dropped.
@@ -879,6 +880,20 @@
       }
     }
 
+    // Category rows follow What-If: kept points and the category's grade as the total uses it.
+    const groupCells = [];
+    function drawGroups() {
+      const results = whatIf.on && canEstimate ? data.groupResults(g, inputs(), { allItems }) : null;
+      for (const { group, cells, actual } of groupCells) {
+        const r = results && results.get(group);
+        const texts = r && r.computed ? [num(r.points), num(r.points_possible), pct(r.score, r.possible)] : actual;
+        cells.forEach((c, n) => {
+          c.textContent = texts[n];
+          c.classList.toggle('hyp', Boolean(r && r.computed));
+        });
+      }
+    }
+
     const rows = [];
     const flat = [];
     for (const group of g.groups) {
@@ -886,7 +901,9 @@
         const v = group.value;
         const rule = data.dropRule(group);
         const ruleSpan = rule ? h('span', { class: 'muted small', style: 'font-weight:400' }, ` · ${rule}`) : null;
-        rows.push(h('tr', { class: 'grouprow' }, h('td', { colspan: '2' }, group.name, ruleSpan), h('td', { class: 'num' }, v ? num(v.score) : ''), h('td', { class: 'num' }, v ? num(v.points_possible) : ''), h('td', { class: 'num' }, v ? pct(v.score, v.points_possible) : '')));
+        const cells = [h('td', { class: 'num' }, v ? num(v.score) : ''), h('td', { class: 'num' }, v ? num(v.points_possible) : ''), h('td', { class: 'num' }, v ? pct(v.score, v.points_possible) : '')];
+        groupCells.push({ group, cells, actual: cells.map((c) => c.textContent) });
+        rows.push(h('tr', { class: 'grouprow' }, h('td', { colspan: '2' }, group.name, ruleSpan), ...cells));
       }
       for (const i of group.items) {
         const v = i.value;

@@ -227,6 +227,17 @@
       await c('Grade categories', 'grades/categories/');
       await c('Grade setup', 'grades/setup/');
       const gv = await c('My grade values', 'grades/values/myGradeValues/');
+      // Brightspace's Grades page marks dropped grades "Dropped!": how many rows, and whether a
+      // name can be read from each (counts only, never names or scores).
+      try {
+        const res = await fetch(`/d2l/lms/grades/my_grades/main.d2l?ou=${ou}`, { credentials: 'same-origin' });
+        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+        const rows = [...doc.querySelectorAll('tr')].filter((r) => /\bDropped!/.test(r.textContent || ''));
+        const named = rows.filter((r) => [...r.querySelectorAll('th, td')].some((c) => (c.textContent || '').trim() && !/Dropped!/.test(c.textContent))).length;
+        report.results.push({ group, label: 'Grades page drop marks', status: res.status, droppedRows: rows.length, rowsWithName: named, rowTags: [...new Set(rows.map((r) => r.parentElement?.tagName || ''))] });
+      } catch (e) {
+        report.results.push({ group, label: 'Grades page drop marks', error: String(e) });
+      }
       // Whether Brightspace marks dropped grades: counts only, never scores or names.
       if (Array.isArray(gv.body)) {
         report.results.push({

@@ -160,6 +160,15 @@ const assert = require('assert');
   const md = data.dropInfo(marked);
   assert.deepStrictEqual([Array.from(md.dropped), Array.from(md.marked)], [[2], [2]], 'Brightspace’s drop is used');
   assert.deepStrictEqual(Array.from(data.dropInfo(marked, new Map([[3, 1]])).marked), [], 'a What-If change works it out here instead');
+  // Brightspace's own weight achieved wins over score/points: participation at 23/27 that
+  // Brightspace counts as the full 5 (a rule it applies but does not show students).
+  const part = { system: 'Weighted', groups: [
+    { name: 'Participation', weight: 5, value: { score: 23, points_possible: 27, weighted_score: 5, weighted_possible: 5 }, items: [
+      { id: 7, type: 'Numeric', value: { score: 23, points_possible: 27, weighted_score: 5, weighted_possible: 5 } }] },
+    { name: 'Exams', weight: 95, items: [{ id: 8, type: 'Numeric', value: { score: 80, points_possible: 100, weighted_score: 76, weighted_possible: 95 } }] }] };
+  assert.deepEqual({ ...data.estimate(part) }, { score: 81, points_possible: 100 }, 'category figure used as is');
+  // Changing the exam in What-If leaves participation on Brightspace's figure.
+  assert.deepEqual({ ...data.estimate(part, new Map([[8, 100]])) }, { score: 100, points_possible: 100 });
   // A What-If score can change which one is dropped.
   assert.deepStrictEqual(Array.from(data.dropped(dropped, new Map([[3, 1]]))), [3]);
   assert.strictEqual(data.dropRule({ drop_lowest: 2, drop_highest: 1 }), 'lowest 2 dropped, highest 1 dropped');

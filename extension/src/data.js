@@ -489,9 +489,30 @@ BSX.data = (() => {
   }
 
   // ---- grades --------------------------------------------------------------
-  function markedDropped(v, system, c) {
+  // Names of the items Brightspace's own Grades page marks "Dropped!" (students see this
+  // there, though the grade API does not say it). Kept in the saved cache like other page facts.
+  const pageDrops = (ou) => client.keep(`drops:${ou}`, async () => {
+    const html = await client.page(`/d2l/lms/grades/my_grades/main.d2l?ou=${encodeURIComponent(ou)}`).catch((e) => {
+      if (e instanceof client.ApiError && e.status === 401) throw e;
+      return '';
+    });
+    if (!html || typeof DOMParser === 'undefined') return [];
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const names = new Set();
+    for (const row of doc.querySelectorAll('tr')) {
+      if (!/\bDropped!/.test(row.textContent || '')) continue;
+      // The item's name is the row's first header or first cell with text.
+      const cell = [...row.querySelectorAll('th, td')].find((c) => (c.textContent || '').replace(/\s+/g, ' ').trim() && !/Dropped!/.test(c.textContent));
+      const name = cell ? cell.textContent.replace(/\s+/g, ' ').trim() : '';
+      if (name) names.add(name.toLowerCase());
+    }
+    return [...names];
+  });
+
+  function markedDropped(v, system, c, dropNames, name) {
     if (!v) return false;
     if (v.IsDropped === true || v.Dropped === true) return true;
+    if (dropNames && name && dropNames.has(String(name).trim().toLowerCase())) return true;
     const rule = (c?.NumberOfLowestToDrop || 0) + (c?.NumberOfHighestToDrop || 0) > 0;
     return Boolean(rule && system === 'Weighted' && v.PointsNumerator != null && v.WeightedDenominator === 0);
   }
@@ -507,13 +528,15 @@ BSX.data = (() => {
   });
 
   async function grades(ou) {
-    const [items, categories, values, final, setup] = await Promise.all([
+    const [items, categories, values, final, setup, dropList] = await Promise.all([
       soft(client.le(`${ou}/grades/`), []),
       soft(client.le(`${ou}/grades/categories/`), []),
       gradeValues(ou),
       soft(client.le(`${ou}/grades/final/values/myGradeValue`), null),
       soft(client.le(`${ou}/grades/setup/`), null),
+      pageDrops(ou).catch(() => []),
     ]);
+    const dropNames = new Set(dropList);
     const byId = new Map(values.map((v) => [String(v.GradeObjectIdentifier), v]));
     // Each category carries its own released total (its subtotal row), for newGroup.
     const categoryById = new Map(categories.map((c) => [c.Id, { ...c, __value: byId.get(String(c.Id)) }]));
@@ -548,7 +571,7 @@ BSX.data = (() => {
         excluded: Boolean(item.ExcludeFromFinalGradeCalculation ?? full.ExcludeFromFinalGradeCalculation) || Boolean(c?.ExcludeFromFinalGrade),
         // Dropped by Brightspace itself: a dropped flag if one is sent, or, in a weighted
         // gradebook with a drop rule, a graded item Brightspace gives no share of the grade.
-        marked_dropped: markedDropped(byId.get(String(item.Id)), setup?.GradingSystem, c),
+        marked_dropped: markedDropped(byId.get(String(item.Id)), setup?.GradingSystem, c, dropNames, item.Name),
         value: toValue(byId.get(String(item.Id))) || null,
       });
     }
@@ -644,6 +667,18 @@ BSX.data = (() => {
     const out = new Set(); // every dropped item
     const marked = new Set(); // the ones Brightspace itself marked as dropped
     for (const group of g.groups) {
+      // Brightspace's own result for a category (its weight achieved) already includes what
+      // it works out but does not show students: formulas, caps, drops. While nothing in the
+      // category is changed here, that figure is used as it is.
+      const touched = allItems || group.items.some((i) => overrides.has(i.id));
+      const gv = group.value;
+      const countable = group.items.some((i) => !i.excluded || g.count_excluded);
+      if (!touched && countable && group.name && g.system === 'Weighted' && gv && gv.weighted_score != null && gv.weighted_possible > 0) {
+        score += gv.weighted_score;
+        possible += gv.weighted_possible;
+        for (const i of group.items) if (i.marked_dropped) { out.add(i.id); marked.add(i.id); }
+        continue;
+      }
       let counted = [];
       for (const i of group.items) {
         const sh = share(g, i);
@@ -652,7 +687,10 @@ BSX.data = (() => {
         let s = override != null ? override : i.value ? i.value.score : null;
         if (s == null && allItems && !i.bonus) s = 0;
         if (s == null) continue;
-        counted.push({ ...sh, s, bonus: i.bonus, id: i.id });
+        // An unchanged, graded item: Brightspace's weight achieved for it, which can differ from
+        // score/points (a formula or cap it applies on its side).
+        const ws = override == null && g.system === 'Weighted' && i.value && i.value.weighted_score != null && i.value.weighted_possible > 0 ? i.value.weighted_score : null;
+        counted.push({ ...sh, s, ws, bonus: i.bonus, id: i.id });
       }
       const drops = (group.drop_lowest || 0) + (group.drop_highest || 0);
       const regular = counted.filter((c) => !c.bonus).sort((a, b) => a.s / a.pp - b.s / b.pp);
@@ -684,7 +722,7 @@ BSX.data = (() => {
       const droppedShare = group.items.filter((i) => out.has(i.id)).reduce((s, i) => s + shareOf(i), 0);
       const scale = g.system === 'Weighted' && keptShare > 0 && droppedShare > 0 ? (keptShare + droppedShare) / keptShare : 1;
       for (const c of counted) {
-        score += (c.s / c.pp) * c.wp * scale;
+        score += (c.ws != null ? c.ws : (c.s / c.pp) * c.wp) * scale;
         if (!c.bonus) possible += c.wp * scale;
       }
     }

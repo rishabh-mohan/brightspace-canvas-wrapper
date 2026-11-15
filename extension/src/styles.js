@@ -351,6 +351,7 @@ table.grid { border-collapse: collapse; width: 100%; }
 .note { color: var(--muted); font-size: 13.5px; margin-top: 2px; white-space: pre-wrap; }
 .totalbox { border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; margin-bottom: 12px; }
 .tlabel { font-weight: 700; font-size: 15px; }
+.tnote { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line2); font-size: 12.5px; }
 .totalbox.top { display: none; margin-bottom: 16px; }
 input.wi { width: 84px; padding: 3px 6px; font: inherit; text-align: right; border: 1px solid var(--line); border-radius: 4px; color: var(--fg); background: var(--bg); }
 input.wi.changed { border-color: var(--link); background: var(--hi); }

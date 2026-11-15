@@ -52,17 +52,23 @@ BSX.ed = (() => {
     return (key && bsCourses.find((c) => subjectKey(c.course_code) === key || subjectKey(c.name) === key)) || null;
   }
 
+  // Ed's lesson status is unattempted, attempted or completed (confirmed on a real account);
+  // a submission time also means it was handed in.
   const doneStatus = (l) => {
-    const s = String(l.status || l.state_user || '').toLowerCase();
-    if (l.is_completed || l.completed || l.completed_at || s === 'completed' || s === 'complete') return 'Completed';
-    if (l.attempted || s === 'attempted' || s === 'in_progress') return 'Attempted';
+    const s = String(l.status || '').toLowerCase();
+    if (s === 'completed' || l.submitted_at) return 'Completed';
+    if (s === 'attempted' || l.attempted_at) return 'Attempted';
     return '';
   };
 
+  // Ed gives each student an effective due date (it includes extensions); prefer it.
+  const dueOf = (l) => l.effective_due_at || l.due_at || l.effective_locked_at || l.locked_at || null;
+
   function lessonItems(edCourse, json, bsCourse, region) {
     const list = Array.isArray(json) ? json : json.lessons || [];
+    const moduleNames = new Map((json.modules || []).map((m) => [m.id, m.name]));
     return list
-      .filter((l) => l && l.id != null && !l.is_hidden && l.state !== 'draft' && (l.due_at || l.locked_at))
+      .filter((l) => l && l.id != null && !l.is_hidden && !l.is_unlisted && l.state !== 'draft' && dueOf(l))
       .map((l) => {
         const status = doneStatus(l);
         return {
@@ -71,7 +77,8 @@ BSX.ed = (() => {
           source_id: `ed-${edCourse.id}-${l.id}`,
           course_id: bsCourse.id,
           name: l.title || 'Ed lesson',
-          due_at: l.due_at || l.locked_at || null,
+          group: moduleNames.get(l.module_id) || null,
+          due_at: dueOf(l),
           points_possible: null,
           grade: null,
           submitted: status === 'Completed',

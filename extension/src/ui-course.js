@@ -114,7 +114,7 @@
           items.sort((a, b) => Date.parse(a.due_at || 8.64e15) - Date.parse(b.due_at || 8.64e15)).map((x) => {
             const done = Boolean(x.submitted || (x.grade && x.grade.score != null));
             const late = !done && x.due_at && Date.parse(x.due_at) < now;
-            const sub = [x.due_at ? `Due ${when(x.due_at)}` : 'No due date', x.grade ? `${num(x.grade.score)}/${num(x.grade.points_possible)} pts` : null, x.into ? `Shown with “${x.into}”` : null].filter(Boolean).join('  |  ');
+            const sub = [x.group, x.due_at ? `Due ${when(x.due_at)}` : 'No due date', x.grade ? `${num(x.grade.score)}/${num(x.grade.points_possible)} pts` : null, x.into ? `Shown with “${x.into}”` : null].filter(Boolean).join('  |  ');
             return h('div', { class: 'irow' },
               h('span', { class: done ? 'iic ok' : 'iic' }, ic('assignment', 22)),
               h('div', { class: 'imid' }, ui.itemLink(x), h('div', { class: 'muted small' }, sub)),

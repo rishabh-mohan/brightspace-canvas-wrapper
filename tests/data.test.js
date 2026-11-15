@@ -259,13 +259,19 @@ const assert = require('assert');
   assert.strictEqual(edr.brightspaceFor({ id: 7, code: 'CS 251', name: 'DSA' }, bsCourses, { 7: 102 }).id, 102);
   assert.strictEqual(edr.brightspaceFor({ id: 7, code: 'CS 251', name: 'DSA' }, bsCourses, { 7: 0 }), null);
   assert.strictEqual(edr.brightspaceFor({ id: 8, code: 'ECE 100', name: 'Club' }, bsCourses), null);
+  // Shapes as seen on a real Ed account: status unattempted/attempted/completed,
+  // effective_due_at for the student's own date, unlisted lessons, named modules.
   const lessons = edr.lessonItems({ id: 7 }, { lessons: [
-    { id: 1, title: 'HW 1', due_at: soon, status: 'completed' },
-    { id: 2, title: 'HW 2', due_at: soon, status: 'unattempted' },
+    { id: 1, title: 'HW 1', due_at: soon, status: 'completed', module_id: 3 },
+    { id: 2, title: 'HW 2', due_at: past, effective_due_at: soon, status: 'unattempted', state: 'active' },
     { id: 3, title: 'Hidden', due_at: soon, is_hidden: true },
     { id: 4, title: 'Draft', due_at: soon, state: 'draft' },
-    { id: 5, title: 'No date' }] }, bsCourses[0], 'us');
-  assert.deepStrictEqual(Array.from(lessons, (l) => `${l.name}:${l.submitted}`), ['HW 1:true', 'HW 2:false']);
+    { id: 5, title: 'No date', status: 'unattempted' },
+    { id: 6, title: 'Unlisted', due_at: soon, is_unlisted: true },
+    { id: 7, title: 'HW 3', due_at: soon, status: 'attempted', submitted_at: past }], modules: [{ id: 3, name: 'Week 1' }] }, bsCourses[0], 'us');
+  assert.deepStrictEqual(Array.from(lessons, (l) => `${l.name}:${l.submitted}`), ['HW 1:true', 'HW 2:false', 'HW 3:true']);
+  assert.strictEqual(lessons[1].due_at, soon, 'the student’s effective due date wins');
+  assert.strictEqual(lessons[0].group, 'Week 1');
   assert.strictEqual(lessons[0].html_url, 'https://edstem.org/us/courses/7/lessons/1');
   assert.strictEqual(lessons[0].course_id, 101);
 

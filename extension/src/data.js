@@ -575,10 +575,17 @@ BSX.data = (() => {
         value: toValue(byId.get(String(item.Id))) || null,
       });
     }
-    // Points in each category, for categories that split their weight by points.
+    // Points in each category, for categories that split their weight by points; and the usual
+    // share of an item in it, for items Brightspace reports with no share (ones it dropped),
+    // so they stay in play when What-If works the category out again.
     for (const g of groups.values()) {
       const total = g.items.reduce((s, i) => s + (i.points_possible > 0 && !i.bonus ? i.points_possible : 0), 0);
-      for (const i of g.items) i.group_points = total;
+      const shares = g.items.map((i) => i.value?.weighted_possible).filter((w) => w > 0);
+      const peer = shares.length ? shares.reduce((s, w) => s + w, 0) / shares.length : null;
+      for (const i of g.items) {
+        i.group_points = total;
+        i.peer_wp = peer;
+      }
     }
     // A category whose items are all hidden from students but whose total is released (say,
     // "Projects" with only its subtotal visible): shown, with that total as its one line, so
@@ -641,6 +648,9 @@ BSX.data = (() => {
     if (!(wp > 0) && i.weight > 0 && i.distribution !== 1 && i.distribution !== 2) wp = i.group_weight != null ? (i.group_weight * i.weight) / 100 : i.weight;
     if (!(wp > 0) && i.group_weight > 0 && i.distribution === 1 && i.group_points > 0) wp = (i.group_weight * pp) / i.group_points;
     if (!(wp > 0) && i.group_weight > 0) wp = i.group_weight / (i.group_count || 1);
+    // Still nothing (an item Brightspace dropped, reported with no share): the share its
+    // category's other items have.
+    if (!(wp > 0) && i.peer_wp > 0) wp = i.peer_wp;
     return wp > 0 ? { pp, wp } : null;
   }
 

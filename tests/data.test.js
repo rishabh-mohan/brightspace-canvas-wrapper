@@ -169,6 +169,17 @@ const assert = require('assert');
   assert.deepEqual({ ...data.estimate(part) }, { score: 81, points_possible: 100 }, 'category figure used as is');
   // Changing the exam in What-If leaves participation on Brightspace's figure.
   assert.deepEqual({ ...data.estimate(part, new Map([[8, 100]])) }, { score: 100, points_possible: 100 });
+  // Editing a score in a category with a Brightspace-dropped item: the dropped item (reported
+  // with no share and no weight of its own) stays in play, and the rule still drops one.
+  const bare = { system: 'Weighted', groups: [
+    { weight: 30, drop_lowest: 1, items: [
+      { id: 1, type: 'Numeric', peer_wp: 10, value: { score: 2, points_possible: 10, weighted_possible: 10 } },
+      { id: 2, type: 'Numeric', peer_wp: 10, marked_dropped: true, value: { score: 1, points_possible: 10, weighted_possible: 0 } },
+      { id: 3, type: 'Numeric', peer_wp: 10, value: { score: 8, points_possible: 10, weighted_possible: 10 } }] }] };
+  const edited = data.dropInfo(bare, new Map([[3, 9]]));
+  assert.deepStrictEqual(Array.from(edited.dropped), [2], 'still drops the lowest after an edit');
+  const editedTotal = data.estimate(bare, new Map([[3, 9]]));
+  assert.ok(Math.abs(editedTotal.score / editedTotal.points_possible - 0.55) < 1e-9, `kept 2 and 9 of 10: got ${editedTotal.score}/${editedTotal.points_possible}`);
   // A What-If score can change which one is dropped.
   assert.deepStrictEqual(Array.from(data.dropped(dropped, new Map([[3, 1]]))), [3]);
   assert.strictEqual(data.dropRule({ drop_lowest: 2, drop_highest: 1 }), 'lowest 2 dropped, highest 1 dropped');

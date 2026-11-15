@@ -226,7 +226,16 @@
       await c('Grade items', 'grades/');
       await c('Grade categories', 'grades/categories/');
       await c('Grade setup', 'grades/setup/');
-      await c('My grade values', 'grades/values/myGradeValues/');
+      const gv = await c('My grade values', 'grades/values/myGradeValues/');
+      // Whether Brightspace marks dropped grades: counts only, never scores or names.
+      if (Array.isArray(gv.body)) {
+        report.results.push({
+          group,
+          label: 'Dropped-grade marks',
+          gradedWithZeroWeight: gv.body.filter((v) => v.PointsNumerator != null && v.WeightedDenominator === 0).length,
+          dropFields: [...new Set(gv.body.flatMap((v) => Object.keys(v).filter((k) => /drop/i.test(k))))],
+        });
+      }
       await c('My final grade', 'grades/final/values/myGradeValue');
       await c('Announcements', 'news/');
       await c('Calendar events', `calendar/events/myEvents/?${range}`);

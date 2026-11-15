@@ -864,12 +864,22 @@
     // Scores a category's drop rule leaves out are struck through and tagged, as Canvas does.
     // Worked out again on every What-If change, since a new score can change what is dropped.
     const rowById = new Map();
+    const ruleById = new Map(); // category id -> the span after its name ("· lowest 1 dropped: Quiz 3")
     function markDropped() {
-      const out = data.dropped(g, inputs(), { allItems });
+      const { dropped, marked } = data.dropInfo(g, inputs(), { allItems });
       for (const [itemId, tr] of rowById) {
-        const on = out.has(itemId);
+        const on = dropped.has(itemId);
         tr.classList.toggle('dropped', on);
-        tr.querySelector('.droptag').hidden = !on;
+        const tag = tr.querySelector('.droptag');
+        tag.hidden = !on;
+        tag.title = marked.has(itemId) ? 'Dropped by Brightspace' : 'Dropped by this group’s rule (worked out here)';
+      }
+      // Each category with a drop rule names the items it drops.
+      for (const group of g.groups) {
+        const span = ruleById.get(group.id);
+        if (!span) continue;
+        const names = group.items.filter((i) => dropped.has(i.id)).map((i) => i.name);
+        span.textContent = ` · ${data.dropRule(group)}${names.length ? `: ${names.join(', ')}` : ' (nothing dropped yet)'}`;
       }
     }
 
@@ -879,7 +889,9 @@
       if (group.name) {
         const v = group.value;
         const rule = data.dropRule(group);
-        rows.push(h('tr', { class: 'grouprow' }, h('td', { colspan: '2' }, group.name, rule ? h('span', { class: 'muted small', style: 'font-weight:400' }, ` · ${rule}`) : null), h('td', { class: 'num' }, v ? num(v.score) : ''), h('td', { class: 'num' }, v ? num(v.points_possible) : ''), h('td', { class: 'num' }, v ? pct(v.score, v.points_possible) : '')));
+        const ruleSpan = rule ? h('span', { class: 'muted small', style: 'font-weight:400' }, ` · ${rule}`) : null;
+        if (ruleSpan) ruleById.set(group.id, ruleSpan);
+        rows.push(h('tr', { class: 'grouprow' }, h('td', { colspan: '2' }, group.name, ruleSpan), h('td', { class: 'num' }, v ? num(v.score) : ''), h('td', { class: 'num' }, v ? num(v.points_possible) : ''), h('td', { class: 'num' }, v ? pct(v.score, v.points_possible) : '')));
       }
       for (const i of group.items) {
         const v = i.value;

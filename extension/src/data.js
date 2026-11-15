@@ -489,6 +489,13 @@ BSX.data = (() => {
   }
 
   // ---- grades --------------------------------------------------------------
+  function markedDropped(v, system, c) {
+    if (!v) return false;
+    if (v.IsDropped === true || v.Dropped === true) return true;
+    const rule = (c?.NumberOfLowestToDrop || 0) + (c?.NumberOfHighestToDrop || 0) > 0;
+    return Boolean(rule && system === 'Weighted' && v.PointsNumerator != null && v.WeightedDenominator === 0);
+  }
+
   const newGroup = (key, c) => ({
     id: key,
     name: c ? c.Name : null,
@@ -539,6 +546,9 @@ BSX.data = (() => {
         bonus: Boolean(item.IsBonus ?? full.IsBonus),
         // "Not counted": the instructor set Exclude from final grade on the item, or on its category.
         excluded: Boolean(item.ExcludeFromFinalGradeCalculation ?? full.ExcludeFromFinalGradeCalculation) || Boolean(c?.ExcludeFromFinalGrade),
+        // Dropped by Brightspace itself: a dropped flag if one is sent, or, in a weighted
+        // gradebook with a drop rule, a graded item Brightspace gives no share of the grade.
+        marked_dropped: markedDropped(byId.get(String(item.Id)), setup?.GradingSystem, c),
         value: toValue(byId.get(String(item.Id))) || null,
       });
     }
@@ -631,7 +641,8 @@ BSX.data = (() => {
   function tally(g, overrides, { allItems = false } = {}) {
     let score = 0;
     let possible = 0;
-    const out = new Set();
+    const out = new Set(); // every dropped item
+    const marked = new Set(); // the ones Brightspace itself marked as dropped
     for (const group of g.groups) {
       let counted = [];
       for (const i of group.items) {
@@ -645,7 +656,17 @@ BSX.data = (() => {
       }
       const drops = (group.drop_lowest || 0) + (group.drop_highest || 0);
       const regular = counted.filter((c) => !c.bonus).sort((a, b) => a.s / a.pp - b.s / b.pp);
-      if (drops > 0 && regular.length > drops) {
+      // Brightspace's own marks win while the category's scores are the real ones; once a
+      // What-If score (or counting ungraded work as 0) changes them, the rule is worked out here.
+      const brightspaceSays = group.items.filter((i) => i.marked_dropped).map((i) => i.id);
+      const untouched = !allItems && !group.items.some((i) => overrides.has(i.id));
+      if (drops > 0 && brightspaceSays.length && untouched) {
+        for (const id of brightspaceSays) {
+          out.add(id);
+          marked.add(id);
+        }
+        counted = counted.filter((c) => !out.has(c.id));
+      } else if (drops > 0 && regular.length > drops) {
         const kept = regular.slice(group.drop_lowest || 0, regular.length - (group.drop_highest || 0));
         for (const c of regular) if (!kept.includes(c)) out.add(c.id);
         counted = [...kept, ...counted.filter((c) => c.bonus)];
@@ -654,15 +675,27 @@ BSX.data = (() => {
       // (as Brightspace does), so the category still counts for as much as before the drop
       // instead of shrinking. Points gradebooks just leave the dropped points out.
       const keptShare = counted.filter((c) => !c.bonus).reduce((s, c) => s + c.wp, 0);
-      const droppedShare = regular.filter((c) => out.has(c.id)).reduce((s, c) => s + c.wp, 0);
+      // A dropped item's share: Brightspace reports 0 for ones it dropped, so use the item's
+      // weight from the category instead (as share() would without Brightspace's figure).
+      const shareOf = (i) => {
+        const known = regular.find((c) => c.id === i.id)?.wp;
+        return known > 0 ? known : share(g, { ...i, value: i.value ? { ...i.value, weighted_possible: null } : null })?.wp || 0;
+      };
+      const droppedShare = group.items.filter((i) => out.has(i.id)).reduce((s, i) => s + shareOf(i), 0);
       const scale = g.system === 'Weighted' && keptShare > 0 && droppedShare > 0 ? (keptShare + droppedShare) / keptShare : 1;
       for (const c of counted) {
         score += (c.s / c.pp) * c.wp * scale;
         if (!c.bonus) possible += c.wp * scale;
       }
     }
-    return { score, possible, dropped: out };
+    return { score, possible, dropped: out, marked };
   }
+
+  // Dropped items with where the decision came from: { dropped: Set, marked: Set (Brightspace's) }.
+  const dropInfo = (g, overrides = new Map(), opts = {}) => {
+    const t = tally(g, overrides, opts);
+    return { dropped: t.dropped, marked: t.marked };
+  };
 
   // A category's drop rule in words, e.g. "lowest 2 dropped".
   const dropRule = (group) => [group.drop_lowest ? `lowest ${group.drop_lowest} dropped` : null, group.drop_highest ? `highest ${group.drop_highest} dropped` : null].filter(Boolean).join(', ');
@@ -929,7 +962,7 @@ BSX.data = (() => {
     courses, orgId, me, updates,
     assignments, assignmentGroups, assignment, submission, canSubmit, submit, quiz, quizAttempts, parseQuizSummary, discussions, discussion, post,
     todo, planner, tasks, overdue, recentFeedback,
-    grades, estimate, dropped, dropRule, estimable, whyNot, courseTotals,
+    grades, estimate, dropped, dropInfo, dropRule, estimable, whyNot, courseTotals,
     announcements, recentAnnouncements,
     modules, externalTools, files, syllabus, syllabusLink, notificationsLink, homeLinks, courseTools, people, groups,
     calendar,

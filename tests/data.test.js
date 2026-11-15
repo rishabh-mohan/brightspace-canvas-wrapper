@@ -150,6 +150,16 @@ const assert = require('assert');
   // ...and What-If uses the same rule: raising the dropped one past another moves the drop.
   const wi = data.estimate(wdrop, new Map([[1, 10]]));
   assert.ok(Math.abs(wi.score - (((10 + 9) / 20) * 30 + 50)) < 1e-9, `what-if with drop: got ${wi.score}`);
+  // Brightspace's own drop (a graded item it gives no weight) wins over working it out:
+  // here it dropped the 9, not the lowest 2, and that is what counts until a What-If change.
+  const marked = { system: 'Weighted', groups: [
+    { weight: 30, drop_lowest: 1, items: [
+      { id: 1, type: 'Numeric', weight: 33.33, group_weight: 30, value: { score: 2, points_possible: 10, weighted_possible: 10 } },
+      { id: 2, type: 'Numeric', weight: 33.33, group_weight: 30, marked_dropped: true, value: { score: 9, points_possible: 10, weighted_possible: 0 } },
+      { id: 3, type: 'Numeric', weight: 33.33, group_weight: 30, value: { score: 8, points_possible: 10, weighted_possible: 10 } }] }] };
+  const md = data.dropInfo(marked);
+  assert.deepStrictEqual([Array.from(md.dropped), Array.from(md.marked)], [[2], [2]], 'Brightspace’s drop is used');
+  assert.deepStrictEqual(Array.from(data.dropInfo(marked, new Map([[3, 1]])).marked), [], 'a What-If change works it out here instead');
   // A What-If score can change which one is dropped.
   assert.deepStrictEqual(Array.from(data.dropped(dropped, new Map([[3, 1]]))), [3]);
   assert.strictEqual(data.dropRule({ drop_lowest: 2, drop_highest: 1 }), 'lowest 2 dropped, highest 1 dropped');

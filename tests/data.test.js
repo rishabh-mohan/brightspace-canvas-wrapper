@@ -175,6 +175,21 @@ const assert = require('assert');
   const zBefore = data.estimate(zeros);
   const zAfter = data.estimate(zeros, new Map([[3, 1]]));
   assert.ok(Math.abs(zBefore.score / zBefore.points_possible - 1) < 1e-9 && Math.abs(zAfter.score / zAfter.points_possible - 1) < 1e-9, `zeros stay dropped: ${zBefore.score}/${zBefore.points_possible} then ${zAfter.score}/${zAfter.points_possible}`);
+  // Lowest-2 rule, one graded 100, one 0 Brightspace dropped, one empty: the empty one is the
+  // second drop once anything is edited, and editing the empty one keeps the weights as they were.
+  for (const markedEmpty of [true, false]) {
+    const mid = { system: 'Weighted', groups: [{ name: 'Midterm', weight: 15, drop_lowest: 2, value: { score: 15, points_possible: 15, weighted_score: 15, weighted_possible: 15 }, items: [
+      { id: 1, type: 'Numeric', points_possible: 100, group_weight: 15, group_count: 3, distribution: 2, peer_wp: 15, value: { score: 100, points_possible: 100, weighted_score: 15, weighted_possible: 15 } },
+      { id: 2, type: 'Numeric', points_possible: 100, group_weight: 15, group_count: 3, distribution: 2, peer_wp: 15, marked_dropped: true, value: { score: 0, points_possible: 100, weighted_score: 0, weighted_possible: 0 } },
+      { id: 3, type: 'Numeric', points_possible: 100, group_weight: 15, group_count: 3, distribution: 2, peer_wp: 15, marked_dropped: markedEmpty, value: null }] }] };
+    for (const [ov, want] of [[new Map([[1, 90]]), 0.9], [new Map([[3, 50]]), 1]]) {
+      for (const allItems of [false, true]) {
+        const e = data.estimate(mid, ov, { allItems });
+        assert.deepStrictEqual(Array.from(data.dropped(mid, ov, { allItems })).sort(), [2, 3], `empty item dropped (marked ${markedEmpty}, allItems ${allItems})`);
+        assert.ok(Math.abs(e.score / e.points_possible - want) < 1e-9, `midterm estimate ${e.score}/${e.points_possible}, want ${want}`);
+      }
+    }
+  }
   // Brightspace's own weight achieved wins over score/points: participation at 23/27 that
   // Brightspace counts as the full 5 (a rule it applies but does not show students).
   const part = { system: 'Weighted', groups: [

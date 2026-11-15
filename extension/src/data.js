@@ -706,6 +706,12 @@ BSX.data = (() => {
       }
       const drops = (group.drop_lowest || 0) + (group.drop_highest || 0);
       const regular = counted.filter((c) => !c.bonus).sort((a, b) => a.s / a.pp - b.s / b.pp);
+      // Empty items Brightspace's drop rule can still pick (it drops them, lowest of all). They
+      // are not counted, so dropping one moves no weight anywhere.
+      const empties = drops > 0
+        ? group.items.filter((i) => !i.bonus && !i.total && !counted.some((c) => c.id === i.id) && !overrides.has(i.id) && (!i.value || i.value.score == null) && share(g, i)).map((i) => ({ id: i.id, s: 0, pp: 1, empty: true }))
+        : [];
+      const noScale = new Set(empties.map((e) => e.id)); // drops that move no weight to the rest
       // Brightspace's own marks win while the category's scores are the real ones; once a
       // What-If score (or counting ungraded work as 0) changes them, the rule is worked out here.
       const brightspaceSays = group.items.filter((i) => i.marked_dropped).map((i) => i.id);
@@ -721,13 +727,21 @@ BSX.data = (() => {
         }
         const freed = brightspaceSays.length - keep.length;
         const extra = Math.max(0, (group.drop_lowest || 0) - brightspaceSays.length);
-        const inPlay = regular.filter((c) => !out.has(c.id)); // already lowest first
-        for (const c of inPlay.slice(0, Math.min(freed + extra, Math.max(0, inPlay.length - 1)))) out.add(c.id);
+        // Lowest first, empty items before any score; at least one real score stays in.
+        const inPlay = [...empties, ...regular].filter((c) => !out.has(c.id));
+        const room = Math.max(0, inPlay.length - (regular.some((c) => !out.has(c.id)) ? 1 : 0));
+        // Brightspace's shares for the kept items already make up the category's whole weight,
+        // so none of these drops moves weight to the rest.
+        for (const c of inPlay.slice(0, Math.min(freed + extra, room))) {
+          out.add(c.id);
+          noScale.add(c.id);
+        }
         counted = counted.filter((c) => !out.has(c.id));
-      } else if (drops > 0 && regular.length > drops) {
-        const kept = regular.slice(group.drop_lowest || 0, regular.length - (group.drop_highest || 0));
-        for (const c of regular) if (!kept.includes(c)) out.add(c.id);
-        counted = [...kept, ...counted.filter((c) => c.bonus)];
+      } else if (drops > 0 && regular.length + empties.length > drops) {
+        const all = [...empties, ...regular];
+        const kept = all.slice(group.drop_lowest || 0, all.length - (group.drop_highest || 0));
+        for (const c of all) if (!kept.includes(c)) out.add(c.id);
+        counted = [...kept.filter((c) => !c.empty), ...counted.filter((c) => c.bonus)];
       }
       // Weighted gradebooks: the share of a dropped score goes to the scores the category keeps
       // (as Brightspace does), so the category still counts for as much as before the drop
@@ -742,7 +756,7 @@ BSX.data = (() => {
       const droppedShare = group.items.filter((i) => out.has(i.id)).reduce((s, i) => s + shareOf(i), 0);
       // Only drops worked out from the rule move weight to the kept scores; Brightspace's own
       // drops are already left out of its figures, so its category share does not include them.
-      const ruleDropShare = group.items.filter((i) => out.has(i.id) && !marked.has(i.id)).reduce((s, i) => s + shareOf(i), 0);
+      const ruleDropShare = group.items.filter((i) => out.has(i.id) && !marked.has(i.id) && !noScale.has(i.id)).reduce((s, i) => s + shareOf(i), 0);
       const scale = g.system === 'Weighted' && keptShare > 0 && ruleDropShare > 0 && droppedShare > 0 ? (keptShare + ruleDropShare) / keptShare : 1;
       for (const c of counted) {
         score += (c.ws != null ? c.ws : (c.s / c.pp) * c.wp) * scale;

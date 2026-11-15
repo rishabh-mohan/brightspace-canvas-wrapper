@@ -723,6 +723,7 @@ BSX.ui = (() => {
         h('div', { class: 'trayhead' }, h('h2', null, 'Help'), close),
         tip('What this is', 'A Canvas-style view of your Brightspace courses. The only change it makes on Brightspace is handing in an assignment file when you press Submit Assignment.'),
         tip('Doing the work', 'Start Assignment hands in a file from here. Quizzes, discussion posts and text submissions open the real Brightspace page.'),
+        h('button', { class: 'trayitem', type: 'button', onclick: () => { openTray(null); BSX.ui.searchDialog?.(); } }, ic('search', 18), ' Search all courses (press s)'),
         h('button', { class: 'trayitem', type: 'button', onclick: () => { openTray(null); shortcutsDialog(); } }, ic('keyboard', 18), ' Keyboard shortcuts (press ?)'),
         tip('Work outside Brightspace', 'Use “+ To Do” for Gradescope, publisher sites or anything else. Those items appear in To Do, the list view and the calendar.'),
         tip('Grades', 'A total marked as an estimate is computed here from graded items. It applies each group\'s dropped-score rules but is not official.'),
@@ -1001,6 +1002,7 @@ BSX.ui = (() => {
     ['g then i', 'Inbox'],
     ['g then g', 'Grades for all courses'],
     ['g then p', 'Groups'],
+    ['s', 'Search all courses'],
     ['/', 'Search this page'],
     ['j / k', 'Next / previous item'],
     ['[ / ]', 'Previous / next module item'],
@@ -1034,6 +1036,7 @@ BSX.ui = (() => {
     pendingG = 0;
     if (k === 'g') pendingG = Date.now();
     else if (k === '?') shortcutsDialog();
+    else if (k === 's' && BSX.ui.searchDialog) BSX.ui.searchDialog();
     else if (k === 'r') reload();
     else if (k === '/') {
       const box = frame.main.querySelector('input.search');

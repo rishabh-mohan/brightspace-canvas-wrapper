@@ -7,7 +7,7 @@ It works on any school's Brightspace (`*.brightspace.com`) with a student accoun
 ## Install
 
 - **Firefox, permanently:** install the signed version from Firefox Add-ons (your own link from the Developer Hub).
-- **Firefox, for testing:** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on…**, and pick `extension/manifest.json`. It is removed when Firefox closes.
+- **Firefox, for testing:** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-onâ€¦**, and pick `extension/manifest.json`. It is removed when Firefox closes.
 - **Firefox for Android:** install the signed version from Firefox Add-ons.
 - **Chrome or Edge:** open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, and pick the `extension` folder.
 
@@ -20,10 +20,10 @@ If nothing appears in Firefox, open `about:addons`, choose the extension, and un
 **Left menu:** Account, Dashboard, Courses, Groups, Calendar, Inbox, Help, and **Brightspace**, which switches back to plain Brightspace for this tab until you pick **Canvas view** again.
 
 **Dashboard**
-- **Card View** shows this term's courses. The ⋮ on a card sets a nickname and colour.
+- **Card View** shows this term's courses. The â‹® on a card sets a nickname and colour.
 - **List View** is a day-by-day planner where you can tick items off.
 - **Recent Activity** shows new announcements and grades.
-- **Dashboard Options** (⋮ at the top) switches between views and has these options:
+- **Dashboard Options** (â‹® at the top) switches between views and has these options:
   - **Color Overlay** and **Wide Cards**, for the course cards.
   - **Tasks Panel**: a weekly sidebar with completion rings per course.
 - The sidebar has **To Do** (overdue first), **Recent Feedback** and a link to grades. **+ To Do** adds your own items.
@@ -31,7 +31,7 @@ If nothing appears in Firefox, open `about:addons`, choose the extension, and un
 **In a course**
 - **Home**: recent announcements and the course's modules.
 - **Modules**:
-  - **Pin** any entry from the ⋮ on its left. Pinned entries show in a **Pinned** module at the top of Home and Modules.
+  - **Pin** any entry from the â‹® on its left. Pinned entries show in a **Pinned** module at the top of Home and Modules.
   - **Course Home** comes next, with the instructor's Brightspace homepage and the syllabus.
   - Each module's own text and images are its first item.
   - Imported work gets **[Gradescope]** and **[Ed]** modules.
@@ -59,13 +59,14 @@ If nothing appears in Firefox, open `about:addons`, choose the extension, and un
 
 **Also**:
 - **Light, dark or automatic theme**: set under Account.
+- **Search all courses**: the Search button on the Dashboard, `s` anywhere, or Help → Search all courses. Finds module entries, files, assignments, quizzes, discussion topics, announcements, and Gradescope and Ed work.
 - **Keyboard shortcuts**: press `?` for the list.
 - **Toolbar badge**: the extension icon counts new grades and announcements.
 - **Phone layout**: the pages adapt to phone width.
 
 ## Gradescope and Ed Discussion
 
-Both are off until you switch them on under **Account → Connected sites**.
+Both are off until you switch them on under **Account â†’ Connected sites**.
 
 **Gradescope** reads your Gradescope assignments, due dates and scores with your own Gradescope sign-in. In Firefox, press **Allow Gradescope access** the first time it asks.
 
@@ -76,7 +77,7 @@ Both are off until you switch them on under **Account → Connected sites**.
 
 **The same assignment in more than one place** is shown once. Brightspace's copy is kept first, then Gradescope's, then Ed's, and the others become small "Gradescope" and "Ed" links on it.
 - **How matching works:** names match even when written differently ("HW 4", "Homework Assignment #4"), and the due dates must be within a day and a half.
-- **Changing it:** on Connected Sites, link any item by hand (**Same as …**) or keep it apart (**Keep separate**).
+- **Changing it:** on Connected Sites, link any item by hand (**Same as â€¦**) or keep it apart (**Keep separate**).
 
 ## Privacy and what it changes
 
@@ -132,5 +133,5 @@ powershell -File tools\package.ps1 # builds dist/brightspace-canvas-wrapper-<ver
 ## Credits
 
 - **Tasks Panel:** its idea and layout follow [Tasks for Canvas](https://github.com/jtcheng26/canvas-task-extension) by jtcheng26 (MIT). It was written separately for Brightspace, with no code taken from that project.
-- **Lato font:** by Łukasz Dziedzic, under the SIL Open Font License.
+- **Lato font:** by Åukasz Dziedzic, under the SIL Open Font License.
 - **Licence:** MIT. See [LICENSE](LICENSE).

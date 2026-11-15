@@ -297,6 +297,15 @@ a.t:hover { color: var(--link); }
 .edform { display: grid; gap: 10px; max-width: 520px; margin: 14px 0; }
 .edform label { display: grid; gap: 4px; font-weight: 700; font-size: 14px; }
 
+/* search across every course */
+.dialog.wide { width: min(640px, 94vw); }
+.gsearch { max-height: 56vh; overflow-y: auto; display: grid; gap: 2px; }
+.gres { display: flex; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 4px; border-left: 3px solid var(--c, var(--line)); color: var(--fg); }
+.gres:hover, .gres.on { background: var(--hi); text-decoration: none; }
+.gres .imid { display: grid; min-width: 0; }
+.gres .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gkind { flex: none; width: 92px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+
 /* confetti for a finished week */
 @keyframes bsx-confetti { 0% { transform: translate(0, -20px) rotate(0); opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(var(--drift), 100vh) rotate(var(--spin)); opacity: 0; } }
 .confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }

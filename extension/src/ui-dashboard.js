@@ -313,6 +313,7 @@
     const pick = (key, label) => ({ label, on: mode === key, onclick: () => { settings.dash = key; listSeen = false; ui.saveSettings(); ui.render(); } });
     const overlay = settings.overlay !== false;
     const actions = [
+      h('button', { class: 'btn', type: 'button', title: 'Search all courses (s)', onclick: () => ui.searchDialog() }, ic('search', 16), 'Search'),
       h('button', { class: 'btn', type: 'button', onclick: () => ui.todoDialog(null, visible) }, ic('plus', 16), 'To Do'),
       ui.menu('Dashboard Options', [
         { label: 'Tasks Panel', on: Boolean(settings.tasks), onclick: () => { settings.tasks = !settings.tasks; ui.saveSettings(); ui.render(); } },
@@ -355,6 +356,81 @@
         courses.length ? null : ui.empty('No courses found.'),
       ],
     };
+  };
+
+  // ---- search across every course ------------------------------------------------
+  // One list of everything searchable in the student's current courses: module entries,
+  // assignments, quizzes, discussion topics, announcements, and outside work. Built from data
+  // the wrapper already caches, so a second search is instant.
+  const LINKED = new Set(['File', 'Link', 'External tool', 'Module overview']); // open in the module viewer
+  async function searchIndex() {
+    const courses = ui.focusCourses(await data.courses());
+    const per = await Promise.all(courses.map(async (c) => {
+      const [mods, work, news] = await Promise.all([data.modules(c.id).catch(() => []), data.assignments(c.id).catch(() => []), data.announcements(c.id).catch(() => [])]);
+      const course = nameOf(c);
+      // A module entry that is the same assignment, quiz or discussion as one in the work
+      // list is listed once, as the work item (it has the due date).
+      const workKeys = new Set(work.map((a) => `${a.kind}:${a.name.trim().toLowerCase()}`));
+      const dup = (i) => workKeys.has(`${String(i.type).toLowerCase()}:${String(i.title).trim().toLowerCase()}`);
+      return [
+        ...mods.flatMap((m) => m.items.filter((i) => !dup(i)).map((i) => ({ title: i.title, kind: i.type === 'Module overview' ? 'Module' : i.type, where: `${course} · ${m.name}`, course: c.id, href: LINKED.has(i.type) ? courseHref(c.id, 'modules', i.id) : i.html_url, text: `${i.title} ${m.name}` }))),
+        ...work.map((a) => ({ title: a.name, kind: { assignment: 'Assignment', quiz: 'Quiz', discussion: 'Discussion' }[a.kind], where: `${course}${a.due_at ? ` · due ${when(a.due_at)}` : ''}`, course: c.id, href: itemHref(c.id, a), text: `${a.name} ${a.forum || ''}` })),
+        ...news.map((n) => ({ title: n.title, kind: 'Announcement', where: `${course}${n.posted_at ? ` · ${when(n.posted_at)}` : ''}`, course: c.id, href: courseHref(c.id, 'announcements', n.id), text: `${n.title} ${ui.plainOf(n.message_html, n.message)}` })),
+      ];
+    }));
+    const outside = await ui.externalWork(courses).catch(() => []);
+    const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
+    return [...per.flat(), ...outside.map((x) => ({ title: x.name, kind: x.source, where: `${names.get(x.course_id) || ''}${x.due_at ? ` · due ${when(x.due_at)}` : ''}`, course: x.course_id, href: x.html_url, external: true, text: `${x.name} ${x.group || ''}` }))];
+  }
+
+  // The search dialog: type to filter (every word must match), arrows and Enter to open.
+  ui.searchDialog = () => {
+    const app = document.getElementById('bsx-root')?.shadowRoot?.querySelector('.app');
+    if (!app || app.querySelector('.modal')) return;
+    const input = h('input', { class: 'txt', type: 'search', placeholder: 'Search modules, assignments, announcements…', 'aria-label': 'Search all courses' });
+    const list = h('div', { class: 'gsearch', role: 'listbox', 'aria-label': 'Results' }, h('div', { class: 'muted small pad' }, 'Loading your courses…'));
+    const close = () => overlay.remove();
+    const overlay = h('div', { class: 'modal', onclick: (ev) => ev.target === overlay && close() },
+      h('div', { class: 'dialog wide', role: 'dialog', 'aria-label': 'Search all courses' },
+        h('div', { class: 'trayhead' }, h('h2', null, 'Search all courses'), h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Close', onclick: close }, ic('close'))),
+        input, list));
+    let index = null;
+    let shown = [];
+    let at = 0;
+    const open = (r) => {
+      close();
+      if (r.external) window.open(r.href, '_blank', 'noopener,noreferrer');
+      else location.href = r.href;
+    };
+    const draw = () => {
+      if (!index) return;
+      const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+      if (!words.length) {
+        list.replaceChildren(h('div', { class: 'muted small pad' }, `Type to search ${index.length} items across your courses.`));
+        shown = [];
+        return;
+      }
+      shown = index.filter((r) => words.every((w) => `${r.text} ${r.where} ${r.kind}`.toLowerCase().includes(w)))
+        .sort((a, b) => Number(!a.title.toLowerCase().includes(words[0])) - Number(!b.title.toLowerCase().includes(words[0])))
+        .slice(0, 60);
+      at = Math.min(at, Math.max(0, shown.length - 1));
+      list.replaceChildren(...(shown.length
+        ? shown.map((r, n) => h('a', { class: n === at ? 'gres on' : 'gres', href: r.href, role: 'option', 'aria-selected': String(n === at), target: r.external ? '_blank' : null, rel: r.external ? 'noopener noreferrer' : null, style: `--c:${colorOf(r.course)}`, onclick: (ev) => { ev.preventDefault(); open(r); } },
+            h('span', { class: 'gkind' }, r.kind),
+            h('span', { class: 'imid' }, h('span', { class: 't' }, r.title, r.external ? [' ', ic('external', 12)] : null), h('span', { class: 'ctx' }, r.where))))
+        : [h('div', { class: 'muted small pad' }, 'Nothing matches.')]));
+      list.querySelector('.gres.on')?.scrollIntoView({ block: 'nearest' });
+    };
+    input.addEventListener('input', () => { at = 0; draw(); });
+    overlay.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') { ev.stopPropagation(); close(); }
+      else if (ev.key === 'ArrowDown' && shown.length) { ev.preventDefault(); at = (at + 1) % shown.length; draw(); }
+      else if (ev.key === 'ArrowUp' && shown.length) { ev.preventDefault(); at = (at - 1 + shown.length) % shown.length; draw(); }
+      else if (ev.key === 'Enter' && shown[at]) { ev.preventDefault(); open(shown[at]); }
+    });
+    app.append(overlay);
+    input.focus();
+    searchIndex().then((items) => { index = items; draw(); }).catch((e) => list.replaceChildren(h('div', { class: 'muted small pad' }, `Search is unavailable. ${e.message || e}`)));
   };
 
   // ---- Connected sites: Gradescope and Ed Discussion -------------------------

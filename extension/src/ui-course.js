@@ -84,6 +84,34 @@
           : h('div', { class: 'irow muted small' }, 'No items in this module.'));
   }
 
+  // Work imported from outside sites, as one module per site ("[Ed]", "[Gradescope]") after
+  // the course's own modules. Items folded into a Brightspace assignment are listed too,
+  // marked with the assignment they are shown as. Loads on its own, so a slow site never
+  // holds up the page.
+  function sourceModules(course) {
+    return ui.lazy(ui.externalWork([course]).catch(() => []), (kept) => {
+      const folded = [...(ui.folded.get(course.id)?.values() || [])].flat();
+      const bySource = new Map();
+      for (const x of [...kept, ...folded]) {
+        if (!bySource.has(x.source)) bySource.set(x.source, []);
+        bySource.get(x.source).push(x);
+      }
+      const now = Date.now();
+      return [...bySource.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([source, items]) =>
+        h('details', { class: 'group', open: true },
+          h('summary', null, ic('down', 16), h('span', { class: 'gname' }, `[${source}]`), h('span', { class: 'count' }, items.length)),
+          items.sort((a, b) => Date.parse(a.due_at || 8.64e15) - Date.parse(b.due_at || 8.64e15)).map((x) => {
+            const done = Boolean(x.submitted || (x.grade && x.grade.score != null));
+            const late = !done && x.due_at && Date.parse(x.due_at) < now;
+            const sub = [x.due_at ? `Due ${when(x.due_at)}` : 'No due date', x.grade ? `${num(x.grade.score)}/${num(x.grade.points_possible)} pts` : null, x.into ? `Shown with “${x.into}”` : null].filter(Boolean).join('  |  ');
+            return h('div', { class: 'irow' },
+              h('span', { class: done ? 'iic ok' : 'iic' }, ic('assignment', 22)),
+              h('div', { class: 'imid' }, ui.itemLink(x), h('div', { class: 'muted small' }, sub)),
+              h('span', { class: `small nowrap ${done ? 'ok' : late ? 'bad' : 'muted'}` }, x.status || ''));
+          })));
+    }, '');
+  }
+
   // One module item shown inside the wrapper: a file in a viewer, an external tool in a
   // frame, or a link. Each keeps a button to the original, in case the frame stays blank.
   async function moduleItem(course, r) {
@@ -126,7 +154,7 @@
   async function modules(course, r) {
     if (r && r.itemId != null) return moduleItem(course, r);
     const [list, work] = await Promise.all([courseModules(course), data.assignments(course.id).catch(() => [])]);
-    return { body: list.length ? [moduleList(course.id, list, work), h('p', { class: 'small' }, h('a', { href: bs.content(course.id) }, 'Open Content in Brightspace'))] : ui.empty('No content in this course yet.') };
+    return { body: [list.length ? moduleList(course.id, list, work) : ui.empty('No content in this course yet.'), sourceModules(course), h('p', { class: 'small' }, h('a', { href: bs.content(course.id) }, 'Open Content in Brightspace'))] };
   }
 
   // ---- home ------------------------------------------------------------------

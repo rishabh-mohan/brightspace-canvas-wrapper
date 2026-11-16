@@ -362,8 +362,6 @@
       { label: 'Three-Day View', on: Boolean(settings.threeDay), onclick: () => { settings.threeDay = !settings.threeDay; taskView.week = 0; taskView.all = false; ui.saveSettings(); ui.render(); } },
       null,
       ...[[0, 'Show All Tasks'], [10, 'Show 10 Tasks'], [5, 'Show 5 Tasks']].map(([n, text]) => ({ label: text, on: (settings.taskLimit || 0) === n, onclick: () => { settings.taskLimit = n; taskView.all = false; ui.saveSettings(); ui.render(); } })),
-      null,
-      { label: '24-Hour Clock', on: Boolean(settings.clock24), onclick: () => { settings.clock24 = !settings.clock24; ui.applyClock(); ui.saveSettings(); ui.render(); } },
     ]);
     return ui.sideSection(['Tasks', h('span', { class: 'tkact' }, add, options)], [head, body]);
   }
@@ -382,6 +380,7 @@
       h('button', { class: 'btn', type: 'button', onclick: () => ui.todoDialog(null, visible) }, ic('plus', 16), 'To Do'),
       ui.menu('Dashboard Options', [
         { label: 'Tasks Panel', on: Boolean(settings.tasks), onclick: () => { settings.tasks = !settings.tasks; ui.saveSettings(); ui.render(); } },
+        { label: '24-Hour Clock', on: Boolean(settings.clock24), onclick: () => { settings.clock24 = !settings.clock24; ui.applyClock(); ui.saveSettings(); ui.render(); } },
         null,
         pick('cards', 'Card View'), pick('list', 'List View'), pick('activity', 'Recent Activity'),
         mode === 'cards' ? null : undefined,

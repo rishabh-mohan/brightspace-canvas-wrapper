@@ -2,6 +2,9 @@
 
 Newest first. Each entry is short enough to paste into the add-on listing's version notes.
 
+## 1.5.19
+The 24-hour clock toggle is back in Dashboard Options, right under Tasks Panel.
+
 ## 1.5.18
 Tasks Panel: its options (three-day view, list length, 24-hour clock) moved to a three-dot menu beside the plus, so Dashboard Options stays short.
 

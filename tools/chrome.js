@@ -11,6 +11,9 @@ function chromeManifest(m) {
   // Chrome caps extension storage at 10 MB without this; the saved page cache can grow past it.
   out.permissions = [...new Set([...(m.permissions || []), 'unlimitedStorage'])];
   out.minimum_chrome_version = '121';
+  // The Chrome Web Store allows 132 characters here (Firefox has no such limit).
+  if (out.description.length > 132) out.description = 'A Canvas-style view of Brightspace: dashboard, calendar, modules, assignments, quizzes, grades with What-If, and more.';
+  if (out.description.length > 132) throw new Error(`Chrome description is ${out.description.length} characters; the limit is 132.`);
   return out;
 }
 

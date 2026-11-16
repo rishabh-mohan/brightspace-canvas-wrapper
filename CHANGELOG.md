@@ -2,6 +2,9 @@
 
 Newest first. Each entry is short enough to paste into the add-on listing's version notes.
 
+## 1.5.20
+Chrome and Edge: the extension's description is shortened to fit the Chrome Web Store's limit. Nothing changes in how it works.
+
 ## 1.5.19
 The 24-hour clock toggle is back in Dashboard Options, right under Tasks Panel.
 

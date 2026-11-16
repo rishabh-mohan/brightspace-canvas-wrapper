@@ -476,13 +476,13 @@
 
   const gradescopeNote = (g) =>
     g.state === 'signed_out' ? ['You are not signed in to Gradescope in this browser. ', h('a', { href: g.launch }, 'Open Gradescope from this course'), ' once, then press Refresh.']
-    : g.state === 'no_permission' ? ['Firefox has not allowed this extension on gradescope.com yet. ', h('button', { class: 'btn', type: 'button', onclick: () => (globalThis.browser || globalThis.chrome)?.runtime?.sendMessage({ type: 'bsx-grant' }) }, 'Allow Gradescope access'), ' then press Refresh.']
+    : g.state === 'no_permission' ? ['Your browser has not allowed this extension on gradescope.com yet. ', h('button', { class: 'btn', type: 'button', onclick: () => (globalThis.browser || globalThis.chrome)?.runtime?.sendMessage({ type: 'bsx-grant' }) }, 'Allow Gradescope access'), ' then press Refresh.']
     : g.state === 'no_match' ? 'No Gradescope course matching this one was found on your Gradescope account.'
     : g.state === 'error' ? `Gradescope could not be read. ${g.why || ''}`
     : null;
 
   const edNote = (state) =>
-    state === 'no_permission' ? ['Firefox has not allowed this extension on edstem.org yet. ', h('button', { class: 'btn', type: 'button', onclick: () => (globalThis.browser || globalThis.chrome)?.runtime?.sendMessage({ type: 'bsx-grant', site: 'ed' }) }, 'Allow Ed access'), ' then press Refresh.']
+    state === 'no_permission' ? ['Your browser has not allowed this extension on edstem.org yet. ', h('button', { class: 'btn', type: 'button', onclick: () => (globalThis.browser || globalThis.chrome)?.runtime?.sendMessage({ type: 'bsx-grant', site: 'ed' }) }, 'Allow Ed access'), ' then press Refresh.']
     : state === 'bad_token' ? ['Ed did not accept your API token. ', h('a', { href: '#/connections' }, 'Replace it'), '.']
     : null;
 

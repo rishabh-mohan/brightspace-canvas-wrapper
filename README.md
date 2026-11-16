@@ -9,9 +9,9 @@ It works on any school's Brightspace (`*.brightspace.com`) with a student accoun
 - **Firefox, permanently:** install the signed version from Firefox Add-ons (your own link from the Developer Hub).
 - **Firefox, for testing:** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on…**, and pick `extension/manifest.json`. It is removed when Firefox closes.
 - **Firefox for Android:** install the signed version from Firefox Add-ons.
-- **Chrome or Edge:** open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, and pick the `extension` folder.
+- **Chrome or Edge:** run `powershell -File tools\package.ps1` (or `node tools/chrome.js dist/chrome`). Then open `chrome://extensions` (`edge://extensions` in Edge), turn on **Developer mode**, choose **Load unpacked**, and pick the `dist/chrome` folder. The Chrome build is the same extension with a Chrome-style manifest.
 
-Needs Firefox 140 or later (Firefox for Android 142 or later). Then sign in to Brightspace and open its home page.
+Needs Firefox 140 or later (Firefox for Android 142 or later), or Chrome or Edge 121 or later. Then sign in to Brightspace and open its home page.
 
 If nothing appears in Firefox, open `about:addons`, choose the extension, and under **Permissions** allow brightspace.com.
 
@@ -106,12 +106,13 @@ node tools/dev-server.js           # made-up Brightspace, Gradescope and Ed at h
 node tests/data.test.js            # data-layer tests against a stubbed Brightspace
 powershell -File tools\shots.ps1   # opens every page in tools/pages.json in headless Chrome or Edge and checks it rendered
 node tools/version.js 1.4.0        # sets the version (writes the manifest as plain UTF-8)
-powershell -File tools\package.ps1 # builds dist/brightspace-canvas-wrapper-<version>.zip for Firefox Add-ons
+powershell -File tools\package.ps1 # builds the Firefox Add-ons zip, plus dist/chrome and a -chrome.zip for the Chrome Web Store / Edge Add-ons
+node tools/chrome.js <folder> [--dev] # Chrome build only; --dev also runs it on the dev server
 ```
 
 - **Screenshots:** `tools/shots.ps1 -Out <folder>` saves a screenshot of each page. Add `-Theme dark` for the dark theme.
 - **Phone width:** `http://localhost:8765/__phone?w=390&to=/d2l/home%23/` shows a page at phone width.
-- **Loading the real extension against the dev server:** `node tools/dev-extension.js <folder>` writes a copy of the extension that also runs on localhost.
+- **Loading the real extension against the dev server:** `node tools/dev-extension.js <folder>` writes a copy of the extension that also runs on localhost. For Chromium, `node tools/chrome.js <folder> --dev`, then start Edge with `--load-extension=<folder>` (Chrome no longer accepts that switch) and open pages with `?bsxreal=1`.
 - **Checking a real account:**
   - The toolbar button runs the **access probe**. It reports which Brightspace endpoints your account can read, as statuses and field names only.
   - **Check Ed** on Connected Sites does the same for Ed.

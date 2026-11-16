@@ -502,7 +502,7 @@
     // Ed courses and their Brightspace match, once Ed answers.
     const edPart = ed.on && ed.token && BSX.ed
       ? ui.lazy(BSX.ed.forCourses(visible, { map: ed.map, region: ed.region }), (r) => {
-          if (r.state === 'no_permission') return h('p', null, 'Firefox has not allowed this extension on edstem.org yet. ', grant('ed'), ' then press Refresh.');
+          if (r.state === 'no_permission') return h('p', null, 'Your browser has not allowed this extension on edstem.org yet. ', grant('ed'), ' then press Refresh.');
           if (r.state === 'bad_token') return h('p', { class: 'bad' }, 'Ed did not accept this token. Make a new one in Ed (Settings → API Tokens) and paste it above.');
           if (r.state === 'no_token') return h('p', { class: 'muted' }, 'Paste an Ed API token above.');
           if (!r.courses.length) return h('p', { class: 'muted' }, 'No current Ed courses with lessons were found on your Ed account.');

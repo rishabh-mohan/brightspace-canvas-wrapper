@@ -2,6 +2,9 @@
 
 Newest first. Each entry is short enough to paste into the add-on listing's version notes.
 
+## 1.5.16
+Now also available for Chrome and Edge. Messages about allowing Gradescope or Ed access no longer name a specific browser.
+
 ## 1.5.15
 What-If: section totals (Homework, Quizzes, Exams…) update as you change scores, and the total grade is now worked out from the section grades and their weights, as Brightspace does.
 

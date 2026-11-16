@@ -2,6 +2,9 @@
 
 Newest first. Each entry is short enough to paste into the add-on listing's version notes.
 
+## 1.5.18
+Tasks Panel: its options (three-day view, list length, 24-hour clock) moved to a three-dot menu beside the plus, so Dashboard Options stays short.
+
 ## 1.5.17
 Tasks Panel: finished work shows its score; a three-day view; a limit on how many tasks each list shows (all, 10 or 5, with "Show more"); and a 24-hour clock option. All are in Dashboard Options.
 

@@ -118,6 +118,8 @@ input.search { max-width: 340px; }
 
 /* sidebar */
 .sidesec { margin-bottom: 26px; }
+.tkact { display: inline-flex; align-items: center; }
+.tkact .menuwrap > .iconbtn { width: 26px; height: 26px; color: var(--muted); }
 .sidesec h2 { display: flex; align-items: center; justify-content: space-between; min-height: 32px; font-size: 15px; font-weight: 700; padding-bottom: 4px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
 .iconbtn.xs { width: 26px; height: 26px; color: var(--muted); }
 .todo { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line2); }

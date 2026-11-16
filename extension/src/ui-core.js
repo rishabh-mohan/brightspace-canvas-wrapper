@@ -237,7 +237,18 @@ BSX.ui = (() => {
       if (typeof saved.tasks === 'boolean') settings.tasks = saved.tasks;
       if (saved.ed && typeof saved.ed === 'object') settings.ed = { on: Boolean(saved.ed.on), token: typeof saved.ed.token === 'string' ? saved.ed.token : '', region: ['us', 'au', 'eu', 'ca'].includes(saved.ed.region) ? saved.ed.region : 'us', map: saved.ed.map && typeof saved.ed.map === 'object' ? { ...saved.ed.map } : {} };
       if (saved.links && typeof saved.links === 'object') settings.links = { ...saved.links };
+      if (typeof saved.threeDay === 'boolean') settings.threeDay = saved.threeDay;
+      if ([0, 5, 10].includes(saved.taskLimit)) settings.taskLimit = saved.taskLimit;
+      if (typeof saved.clock24 === 'boolean') settings.clock24 = saved.clock24;
     } catch {}
+    applyClock();
+  }
+  // Times follow the browser's own 12/24-hour habit unless the student asks for 24-hour.
+  // The formats are changed in place so every page that holds `fmt` sees the new clock.
+  function applyClock() {
+    const hour12 = settings.clock24 ? false : undefined;
+    fmt.full = F({ month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12 });
+    fmt.time = F({ hour: 'numeric', minute: '2-digit', hour12 });
   }
   function saveSettings() {
     try {
@@ -1094,7 +1105,7 @@ BSX.ui = (() => {
   }
 
   return {
-    h, ic, safeHref, cleanHtml, prose, plainOf, clip, num, pct, fmt, when, dayKey, bytes, DAY, COLORS,
+    h, ic, safeHref, cleanHtml, prose, plainOf, clip, num, pct, fmt, applyClock, when, dayKey, bytes, DAY, COLORS,
     settings, saveSettings, colorOf, nameOf, focusCourses, state,
     keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork, alsoOn, alsoChips, setLink, sameWork, workKey, outsideAnnouncements, edStatus: () => edState, folded,
     courseHref, itemHref, wrapHref, bs, PLURAL,

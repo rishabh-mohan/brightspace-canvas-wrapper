@@ -200,9 +200,15 @@
   // (MIT, github.com/jtcheng26/canvas-task-extension), rebuilt here on Brightspace data: a
   // progress bar per course, then Unfinished and Completed lists. Work counts as done
   // once it is graded above zero, handed in, attempted, posted in or ticked off.
-  const taskView = { week: 0, tab: 'unfinished' };
+  // `week` is the step from now (a week, or three days); `all`: list shown in full past the length limit.
+  const taskView = { week: 0, tab: 'unfinished', all: false };
   function weekRange(offset) {
     const now = new Date();
+    if (settings.threeDay) {
+      // Three days starting today.
+      const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset * 3);
+      return [from, new Date(from.getFullYear(), from.getMonth(), from.getDate() + 3)];
+    }
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + offset * 7);
     const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
     return [start, end];
@@ -263,12 +269,15 @@
 
   function tasksPanel(courses) {
     const [start, end] = weekRange(taskView.week);
-    const label = taskView.week === 0 ? 'This week' : taskView.week === -1 ? 'Last week' : taskView.week === 1 ? 'Next week' : `${ui.fmt.short.format(start)} – ${ui.fmt.short.format(new Date(end - 1))}`;
-    const shift = (d) => () => { taskView.week += d; ui.render(); };
+    const unit = settings.threeDay ? 'days' : 'week';
+    const label = settings.threeDay
+      ? taskView.week === 0 ? 'Next 3 days' : `${ui.fmt.short.format(start)} – ${ui.fmt.short.format(new Date(end - 1))}`
+      : taskView.week === 0 ? 'This week' : taskView.week === -1 ? 'Last week' : taskView.week === 1 ? 'Next week' : `${ui.fmt.short.format(start)} – ${ui.fmt.short.format(new Date(end - 1))}`;
+    const shift = (d) => () => { taskView.week += d; taskView.all = false; ui.render(); };
     const head = h('div', { class: 'tkhead' },
-      h('button', { class: 'iconbtn xs', type: 'button', 'aria-label': 'Previous week', onclick: shift(-1) }, ic('left', 16)),
+      h('button', { class: 'iconbtn xs', type: 'button', 'aria-label': `Previous ${unit === 'week' ? 'week' : '3 days'}`, onclick: shift(-1) }, ic('left', 16)),
       h('span', { class: 'tkweek' }, label),
-      h('button', { class: 'iconbtn xs', type: 'button', 'aria-label': 'Next week', onclick: shift(1) }, ic('right', 16)));
+      h('button', { class: 'iconbtn xs', type: 'button', 'aria-label': `Next ${unit === 'week' ? 'week' : '3 days'}`, onclick: shift(1) }, ic('right', 16)));
     const add = h('button', { class: 'iconbtn xs', type: 'button', title: 'Add task', 'aria-label': 'Add task', onclick: () => ui.todoDialog(null, courses) }, ic('plus', 16));
 
     // `base`: done according to Brightspace or the outside site; `done` adds the student's ticks.
@@ -334,12 +343,18 @@
         return h('div', { class: 'tkrow', style: `--c:${i.course_id == null ? 'var(--muted)' : colorOf(i.course_id)}` },
           tick,
           h('div', { class: 'tmid' }, ui.itemLink(i, courses), h('div', { class: 'ctx', style: `--c:${i.course_id == null ? 'var(--muted)' : colorOf(i.course_id)}` }, i.course_id == null ? 'My task' : names.get(i.course_id) || ''),
-            h('div', { class: late ? 'm bad' : 'm' }, [late ? 'Missing · ' : '', ui.when(i.due_at), i.points_possible != null ? ` · ${num(i.points_possible)} pts` : ''].join(''))));
+            h('div', { class: late ? 'm bad' : 'm' }, [late ? 'Missing · ' : '', ui.when(i.due_at), gradeText(i) || (i.points_possible != null ? ` · ${num(i.points_possible)} pts` : '')].join(''))));
       };
+      // A graded item shows its score on the Completed tab: " · 18 / 20 pts".
+      const gradeText = (i) => (i.done && i.grade && i.grade.score != null ? ` · ${num(i.grade.score)}${i.grade.points_possible > 0 ? ` / ${num(i.grade.points_possible)}` : ''} pts` : '');
+      // The list-length setting; "Show N more" opens the rest.
+      const limit = settings.taskLimit || 0;
+      const shown = limit && !taskView.all ? list.slice(0, limit) : list;
+      const more = list.length > shown.length ? h('button', { class: 'btn small', type: 'button', onclick: () => { taskView.all = true; repaint(); } }, `Show ${list.length - shown.length} more`) : null;
       return [
         h('div', { class: 'tkprog' }, rings, legend),
         h('div', { class: 'seg tktabs', role: 'tablist' }, tab('unfinished', 'Unfinished', items.length - done), tab('completed', 'Completed', done)),
-        list.length ? list.map(row) : h('div', { class: 'muted small pad' }, taskView.tab === 'completed' ? 'Nothing finished yet this week.' : 'All done for this week.'),
+        list.length ? [shown.map(row), more] : h('div', { class: 'muted small pad' }, taskView.tab === 'completed' ? `Nothing finished yet ${settings.threeDay ? 'in these days' : 'this week'}.` : `All done for ${settings.threeDay ? 'these days' : 'this week'}.`),
       ];
     }
     return ui.sideSection(['Tasks', add], [head, body]);
@@ -359,6 +374,9 @@
       h('button', { class: 'btn', type: 'button', onclick: () => ui.todoDialog(null, visible) }, ic('plus', 16), 'To Do'),
       ui.menu('Dashboard Options', [
         { label: 'Tasks Panel', on: Boolean(settings.tasks), onclick: () => { settings.tasks = !settings.tasks; ui.saveSettings(); ui.render(); } },
+        settings.tasks ? { label: 'Three-Day View', on: Boolean(settings.threeDay), onclick: () => { settings.threeDay = !settings.threeDay; taskView.week = 0; taskView.all = false; ui.saveSettings(); ui.render(); } } : undefined,
+        ...(settings.tasks ? [[0, 'Show All Tasks'], [10, 'Show 10 Tasks'], [5, 'Show 5 Tasks']].map(([n, text]) => ({ label: text, on: (settings.taskLimit || 0) === n, onclick: () => { settings.taskLimit = n; taskView.all = false; ui.saveSettings(); ui.render(); } })) : []),
+        { label: '24-Hour Clock', on: Boolean(settings.clock24), onclick: () => { settings.clock24 = !settings.clock24; ui.applyClock(); ui.saveSettings(); ui.render(); } },
         null,
         pick('cards', 'Card View'), pick('list', 'List View'), pick('activity', 'Recent Activity'),
         mode === 'cards' ? null : undefined,

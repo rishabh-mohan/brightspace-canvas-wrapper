@@ -2,6 +2,9 @@
 
 Newest first. Each entry is short enough to paste into the add-on listing's version notes.
 
+## 1.5.17
+Tasks Panel: finished work shows its score; a three-day view; a limit on how many tasks each list shows (all, 10 or 5, with "Show more"); and a 24-hour clock option. All are in Dashboard Options.
+
 ## 1.5.16
 Now also available for Chrome and Edge. Messages about allowing Gradescope or Ed access no longer name a specific browser.
 

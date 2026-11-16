@@ -25,7 +25,7 @@ If nothing appears in Firefox, open `about:addons`, choose the extension, and un
 - **Recent Activity** shows new announcements and grades.
 - **Dashboard Options** (â‹® at the top) switches between views and has these options:
   - **Color Overlay** and **Wide Cards**, for the course cards.
-  - **Tasks Panel**: a weekly sidebar with completion rings per course.
+  - **Tasks Panel**: a weekly sidebar with completion rings per course. Dashboard Options also offers a three-day view, a limit on how many tasks each list shows, and a 24-hour clock. Finished work shows its score.
 - The sidebar has **To Do** (overdue first), **Recent Feedback** and a link to grades. **+ To Do** adds your own items.
 
 **In a course**

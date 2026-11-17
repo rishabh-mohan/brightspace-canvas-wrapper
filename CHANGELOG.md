@@ -2,6 +2,9 @@
 
 Newest first. Each entry is short enough to paste into the add-on listing's version notes.
 
+## 1.5.23
+Wide Cards: the whole banner image is shown (nothing cropped) at the same card height, with the course colour on either side if the image is narrower.
+
 ## 1.5.22
 Wide Cards: the picture is the same height as on normal cards, so wide cards are no longer much taller.
 

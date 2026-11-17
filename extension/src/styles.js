@@ -406,7 +406,6 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
 .card { transition: box-shadow .2s var(--ease); }
 .card:hover { box-shadow: 0 4px 12px var(--shadow); }
 .app[data-wide="on"] .cards { grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr)); }
-.app[data-wide="on"] .card .hero { height: auto; aspect-ratio: 12 / 5; }
 .app[data-overlay="off"] .card .hero img { opacity: 1; }
 .app[data-overlay="off"] .card:hover .hero img { opacity: .9; }
 .card .hero img { transition: opacity .25s; }

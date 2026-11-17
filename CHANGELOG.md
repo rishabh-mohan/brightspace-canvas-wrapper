@@ -2,6 +2,9 @@
 
 Newest first. Each entry is short enough to paste into the add-on listing's version notes.
 
+## 1.5.22
+Wide Cards: the picture is the same height as on normal cards, so wide cards are no longer much taller.
+
 ## 1.5.21
 Wide Cards: on a narrow screen, cards stay one column wide instead of growing past the screen.
 

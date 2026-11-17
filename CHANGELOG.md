@@ -2,6 +2,9 @@
 
 Newest first. Each entry is short enough to paste into the add-on listing's version notes.
 
+## 1.5.21
+Wide Cards: on a narrow screen, cards stay one column wide instead of growing past the screen.
+
 ## 1.5.20
 Chrome and Edge: the extension's description is shortened to fit the Chrome Web Store's limit. Nothing changes in how it works.
 

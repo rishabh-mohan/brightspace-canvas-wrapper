@@ -405,7 +405,7 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
 .btn:active, .iconbtn:active { transform: translateY(1px); }
 .card { transition: box-shadow .2s var(--ease); }
 .card:hover { box-shadow: 0 4px 12px var(--shadow); }
-.app[data-wide="on"] .cards { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
+.app[data-wide="on"] .cards { grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr)); }
 .app[data-wide="on"] .card .hero { height: auto; aspect-ratio: 12 / 5; }
 .app[data-overlay="off"] .card .hero img { opacity: 1; }
 .app[data-overlay="off"] .card:hover .hero img { opacity: .9; }
@@ -468,7 +468,7 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
   .cal .dow { padding: 4px 0; font-size: 11px; }
   .event { font-size: 10.5px; padding: 0 2px; border-left-width: 2px; }
   .meta { gap: 4px 18px; }
-  .cards { grid-template-columns: 1fr; gap: 18px; }
+  .cards, .app[data-wide] .cards { grid-template-columns: 1fr; gap: 18px; }
   .viewer { height: 70vh; }
   select.pick { max-width: 100%; }
   .rail { width: 60px; }

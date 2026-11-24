@@ -306,6 +306,10 @@ a.t:hover { color: var(--link); }
 .gres:hover, .gres.on { background: var(--hi); text-decoration: none; }
 .gres .imid { display: grid; min-width: 0; }
 .gres .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gsnip { font-size: 13px; color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.gfoot { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line2); }
+.gfoot:empty { display: none; }
+.gfoot .linkbtn { margin-top: 0; font-size: 13px; }
 .gkind { flex: none; width: 96px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* confetti for a finished week */

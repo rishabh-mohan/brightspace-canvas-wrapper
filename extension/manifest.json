@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Brightspace Canvas Wrapper",
-  "version": "1.5.24",
+  "version": "1.6.0",
   "description": "A Canvas-style view of Brightspace, with file submission: dashboard, calendar, and per-course home, modules, assignments, quizzes, discussions, grades, announcements, files, syllabus and people.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://*.brightspace.com/*", "https://www.gradescope.com/*"],
@@ -15,6 +15,9 @@
         "src/data.js",
         "src/gradescope.js",
         "src/ed.js",
+        "vendor/fuse.min.js",
+        "src/search.js",
+        "src/filetext.js",
         "src/styles.js",
         "src/icons.js",
         "src/ui-core.js",
@@ -26,7 +29,8 @@
       "run_at": "document_start"
     }
   ],
-  "web_accessible_resources": [{ "resources": ["fonts/*.woff2"], "matches": ["https://*.brightspace.com/*"] }],
+  "web_accessible_resources": [{ "resources": ["fonts/*.woff2", "ocr/*", "vendor/pdfjs/*", "vendor/tesseract/*"], "matches": ["https://*.brightspace.com/*"] }],
+  "content_security_policy": { "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" },
   "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "96": "icons/icon-96.png", "128": "icons/icon-128.png" },
   "action": { "default_title": "Run Brightspace access probe", "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" } },
   "background": { "scripts": ["background.js"], "service_worker": "background.js" },

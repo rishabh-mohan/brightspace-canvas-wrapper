@@ -240,6 +240,7 @@ BSX.ui = (() => {
       if (typeof saved.threeDay === 'boolean') settings.threeDay = saved.threeDay;
       if ([0, 5, 10].includes(saved.taskLimit)) settings.taskLimit = saved.taskLimit;
       if (typeof saved.clock24 === 'boolean') settings.clock24 = saved.clock24;
+      if (typeof saved.fileText === 'boolean') settings.fileText = saved.fileText;
     } catch {}
     applyClock();
   }
@@ -1013,7 +1014,7 @@ BSX.ui = (() => {
     ['g then i', 'Inbox'],
     ['g then g', 'Grades for all courses'],
     ['g then p', 'Groups'],
-    ['s', 'Search all courses'],
+    ['s or Ctrl+K (⌘K)', 'Search all courses, files and due dates'],
     ['/', 'Search this page'],
     ['j / k', 'Next / previous item'],
     ['[ / ]', 'Previous / next module item'],
@@ -1034,6 +1035,12 @@ BSX.ui = (() => {
   const GO = { d: '#/', c: '#/courses', l: '#/calendar', i: '#/inbox', g: '#/grades', p: '#/groups' };
   let pendingG = 0;
   function onKey(ev) {
+    // Ctrl+K (⌘K on a Mac) opens search from anywhere in the wrapper, even while typing.
+    if (frame && (ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey && ev.key.toLowerCase() === 'k' && route().view !== 'off' && BSX.ui.searchDialog) {
+      ev.preventDefault();
+      BSX.ui.searchDialog();
+      return;
+    }
     if (!frame || ev.ctrlKey || ev.metaKey || ev.altKey || route().view === 'off') return;
     const target = ev.composedPath()[0];
     if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)) return;

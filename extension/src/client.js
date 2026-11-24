@@ -96,6 +96,7 @@ BSX.client = (() => {
   function forget() {
     saved = new Map();
     persist();
+    if (BSX.filetext) BSX.filetext.forget(); // text read from course files, too
   }
 
   function changed() {

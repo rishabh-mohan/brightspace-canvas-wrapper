@@ -425,7 +425,9 @@
   // ---- search across every course ------------------------------------------------
   // One list of everything searchable in the student's current courses: module entries,
   // assignments, quizzes, discussion topics, announcements, and outside work. Built from data
-  // the wrapper already caches, so a second search is instant.
+  // the wrapper already caches, so a second search is instant. Module files also carry the
+  // text read from inside them (src/filetext.js), once the student has turned that on.
+  // Ranking is src/search.js (Fuse.js).
   const LINKED = new Set(['File', 'Link', 'External tool', 'Module overview']); // open in the module viewer
   // Short labels for module entry kinds; Brightspace's internal ones ("ContentService") read as "Content".
   const KIND_LABEL = { 'Module overview': 'Module', 'External tool': 'Tool', File: 'File', Link: 'Link', Assignment: 'Assignment', Quiz: 'Quiz', Discussion: 'Discussion', 'Course home': 'Course', Syllabus: 'Syllabus' };
@@ -440,28 +442,32 @@
       const workKeys = new Set(work.map((a) => `${a.kind}:${a.name.trim().toLowerCase()}`));
       const dup = (i) => workKeys.has(`${String(i.type).toLowerCase()}:${String(i.title).trim().toLowerCase()}`);
       return [
-        ...mods.flatMap((m) => m.items.filter((i) => !dup(i)).map((i) => ({ title: i.title, kind: kindLabel(i.type), where: `${course} · ${m.name}`, course: c.id, href: LINKED.has(i.type) ? courseHref(c.id, 'modules', i.id) : i.html_url, text: `${i.title} ${m.name}` }))),
-        ...work.map((a) => ({ title: a.name, kind: { assignment: 'Assignment', quiz: 'Quiz', discussion: 'Discussion' }[a.kind], where: `${course}${a.due_at ? ` · due ${when(a.due_at)}` : ''}`, course: c.id, href: itemHref(c.id, a), text: `${a.name} ${a.forum || ''}` })),
+        ...mods.flatMap((m) => m.items.filter((i) => !dup(i)).map((i) => ({ title: i.title, kind: kindLabel(i.type), where: `${course} · ${m.name}`, course: c.id, href: LINKED.has(i.type) ? courseHref(c.id, 'modules', i.id) : i.html_url, text: `${i.title} ${m.name}`,
+          ...(i.type === 'File' && BSX.filetext && BSX.filetext.kindOf(i) ? { file: { course: c.id, item: i }, body: BSX.filetext.textOf(c.id, i) || '' } : {}) }))),
+        ...work.map((a) => ({ title: a.name, kind: { assignment: 'Assignment', quiz: 'Quiz', discussion: 'Discussion' }[a.kind], where: `${course}${a.due_at ? ` · due ${when(a.due_at)}` : ''}`, course: c.id, href: itemHref(c.id, a), text: `${a.name} ${a.forum || ''}`, due: a.due_at || null })),
         ...news.map((n) => ({ title: n.title, kind: 'Announcement', where: `${course}${n.posted_at ? ` · ${when(n.posted_at)}` : ''}`, course: c.id, href: courseHref(c.id, 'announcements', n.id), text: `${n.title} ${ui.plainOf(n.message_html, n.message)}` })),
       ];
     }));
     const outside = await ui.externalWork(courses).catch(() => []);
     const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
-    return [...per.flat(), ...outside.map((x) => ({ title: x.name, kind: x.source, where: `${names.get(x.course_id) || ''}${x.due_at ? ` · due ${when(x.due_at)}` : ''}`, course: x.course_id, href: x.html_url, external: true, text: `${x.name} ${x.group || ''}` }))];
+    return [...per.flat(), ...outside.map((x) => ({ title: x.name, kind: x.source, where: `${names.get(x.course_id) || ''}${x.due_at ? ` · due ${when(x.due_at)}` : ''}`, course: x.course_id, href: x.html_url, external: true, text: `${x.name} ${x.group || ''}`, due: x.due_at || null }))];
   }
 
-  // The search dialog: type to filter (every word must match), arrows and Enter to open.
+  // The search dialog (s, or Ctrl/⌘+K): type to search (every word must match, typos allowed),
+  // arrows and Enter to open. Empty, it lists what is due in the next two weeks.
   ui.searchDialog = () => {
     const app = ui.appEl();
     if (!app || app.querySelector('.modal')) return;
-    const input = h('input', { class: 'txt', type: 'search', placeholder: 'Search modules, assignments, announcements…', 'aria-label': 'Search all courses' });
+    const input = h('input', { class: 'txt', type: 'search', placeholder: 'Search modules, assignments, files, announcements…', 'aria-label': 'Search all courses' });
+    const foot = h('div', { class: 'gfoot muted small' });
     const list = h('div', { class: 'gsearch', role: 'listbox', 'aria-label': 'Results' }, h('div', { class: 'muted small pad' }, 'Loading your courses…'));
     const close = () => overlay.remove();
     const overlay = h('div', { class: 'modal', onclick: (ev) => ev.target === overlay && close() },
       h('div', { class: 'dialog wide', role: 'dialog', 'aria-label': 'Search all courses' },
         h('div', { class: 'trayhead' }, h('h2', null, 'Search all courses'), h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Close', onclick: close }, ic('close'))),
-        input, list));
+        input, list, foot));
     let index = null;
+    let search = null;
     let shown = [];
     let at = 0;
     const open = (r) => {
@@ -471,22 +477,54 @@
     };
     const draw = () => {
       if (!index) return;
-      const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
-      if (!words.length) {
-        list.replaceChildren(h('div', { class: 'muted small pad' }, `Type to search ${index.length} items across your courses.`));
-        shown = [];
-        return;
-      }
-      shown = index.filter((r) => words.every((w) => `${r.text} ${r.where} ${r.kind}`.toLowerCase().includes(w)))
-        .sort((a, b) => Number(!a.title.toLowerCase().includes(words[0])) - Number(!b.title.toLowerCase().includes(words[0])))
-        .slice(0, 60);
+      const query = input.value.trim();
+      shown = query ? search(query) : BSX.search.upcoming(index);
       at = Math.min(at, Math.max(0, shown.length - 1));
-      list.replaceChildren(...(shown.length
+      const head = query ? null : h('div', { class: 'muted small pad' }, `${shown.length ? 'Due in the next two weeks.' : 'Nothing due in the next two weeks.'} Type to search ${index.length} items across your courses.`);
+      list.replaceChildren(...[head, ...(shown.length
         ? shown.map((r, n) => h('a', { class: n === at ? 'gres on' : 'gres', href: r.href, role: 'option', 'aria-selected': String(n === at), target: r.external ? '_blank' : null, rel: r.external ? 'noopener noreferrer' : null, style: `--c:${colorOf(r.course)}`, onclick: (ev) => { ev.preventDefault(); open(r); } },
             h('span', { class: 'gkind' }, r.kind),
-            h('span', { class: 'imid' }, h('span', { class: 't' }, r.title, r.external ? [' ', ic('external', 12)] : null), h('span', { class: 'ctx' }, r.where))))
-        : [h('div', { class: 'muted small pad' }, 'Nothing matches.')]));
+            h('span', { class: 'imid' }, h('span', { class: 't' }, r.title, r.external ? [' ', ic('external', 12)] : null), h('span', { class: 'ctx' }, r.where), r.snippet ? h('span', { class: 'gsnip' }, r.snippet) : null)))
+        : query ? [h('div', { class: 'muted small pad' }, 'Nothing matches.')] : [])].filter(Boolean));
       list.querySelector('.gres.on')?.scrollIntoView({ block: 'nearest' });
+    };
+    // Text inside PDFs and images: off until the student asks, since the first run downloads and
+    // reads every file (scans with OCR). Read text is kept, so later runs only read new files.
+    const files = () => index.filter((r) => r.file);
+    const turn = (on) => {
+      settings.fileText = on;
+      ui.saveSettings();
+      if (!on) {
+        BSX.filetext.forget();
+        for (const r of files()) r.body = '';
+        draw();
+      }
+      readFiles();
+    };
+    const readFiles = async () => {
+      if (!BSX.filetext || !index) return;
+      const rows = files();
+      if (!settings.fileText) {
+        foot.replaceChildren(...(rows.length ? [`${rows.length} PDF${rows.length === 1 ? '' : 's'} and images are not searched inside. `, h('button', { class: 'linkbtn', type: 'button', onclick: () => turn(true) }, 'Search inside files')] : []));
+        return;
+      }
+      const stop = h('button', { class: 'linkbtn', type: 'button', onclick: () => turn(false) }, 'Stop searching inside files');
+      const byItem = new Map(rows.map((r) => [r.file.item, r]));
+      try {
+        await BSX.filetext.index(rows.map((r) => r.file), {
+          onEach: (course, item, text) => {
+            const r = byItem.get(item);
+            if (r) r.body = text;
+            if (input.value.trim()) draw();
+          },
+          onProgress: (n, total) => {
+            if (!settings.fileText) return;
+            foot.replaceChildren(n < total ? `Reading files on this computer: ${n + 1} of ${total} (scanned pages take longer). ` : `Searching inside ${rows.length} file${rows.length === 1 ? '' : 's'}. `, stop);
+          },
+        });
+      } catch (e) {
+        foot.replaceChildren(`Could not read files: ${e.message || e} `, stop);
+      }
     };
     input.addEventListener('input', () => { at = 0; draw(); });
     overlay.addEventListener('keydown', (ev) => {
@@ -497,7 +535,7 @@
     });
     app.append(overlay);
     input.focus();
-    searchIndex().then((items) => { index = items; draw(); }).catch((e) => list.replaceChildren(h('div', { class: 'muted small pad' }, `Search is unavailable. ${e.message || e}`)));
+    searchIndex().then((items) => { index = items; search = BSX.search.make(items); draw(); readFiles(); }).catch((e) => list.replaceChildren(h('div', { class: 'muted small pad' }, `Search is unavailable. ${e.message || e}`)));
   };
 
   // ---- Connected sites: Gradescope and Ed Discussion -------------------------

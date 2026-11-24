@@ -59,7 +59,8 @@ If nothing appears in Firefox, open `about:addons`, choose the extension, and un
 
 **Also**:
 - **Light, dark or automatic theme**: set under Account.
-- **Search all courses**: the Search button on the Dashboard, `s` anywhere, or Help → Search all courses. Finds module entries, files, assignments, quizzes, discussion topics, announcements, and Gradescope and Ed work.
+- **Search all courses**: the Search button on the Dashboard, `s` or Ctrl+K (⌘K) anywhere, or Help → Search all courses. Finds module entries, files, assignments, quizzes, discussion topics, announcements, and Gradescope and Ed work. Small typos are forgiven. With nothing typed, it lists what is due in the next two weeks.
+  - **Search inside files** (off until you turn it on, at the bottom of the search box): reads the text of PDFs in your courses' Content, and reads scanned PDFs and images with OCR. Everything is read on your own computer and nothing is sent anywhere. The first time takes a while; after that only new or changed files are read. Scanned PDFs are read up to page 15, and files over 30 MB are skipped.
 - **Keyboard shortcuts**: press `?` for the list.
 - **Toolbar badge**: the extension icon counts new grades and announcements.
 - **Phone layout**: the pages adapt to phone width.
@@ -82,7 +83,7 @@ Both are off until you switch them on under **Account â†’ Connected sites**
 ## Privacy and what it changes
 
 - **Where your data goes:** everything runs in your browser with your own sign-ins. Nothing is sent anywhere except Brightspace, and Gradescope and Ed if you switch them on. The extension collects no data.
-- **What it keeps, and where:** preferences, your own To Do items, your Ed token and recent Brightspace answers (kept to load pages faster) are stored in this browser only. Signing out of Brightspace clears the kept answers.
+- **What it keeps, and where:** preferences, your own To Do items, your Ed token and recent Brightspace answers (kept to load pages faster) are stored in this browser only. If you turn on **Search inside files**, the text read from your course files is kept there too. Signing out of Brightspace clears the kept answers and file text.
 - **Changes to Brightspace:** it only changes anything when you press **Submit Assignment** or **Post Reply**. Quizzes and text-entry submissions use Brightspace's own pages, shown inside the wrapper.
 - **Showing instructor content:** text from Brightspace (announcements, instructions, posts) is cleaned before it is shown. Only formatting, links and images are kept.
 
@@ -104,6 +105,7 @@ Both are off until you switch them on under **Account â†’ Connected sites**
 ```
 node tools/dev-server.js           # made-up Brightspace, Gradescope and Ed at http://localhost:8765/d2l/home
 node tests/data.test.js            # data-layer tests against a stubbed Brightspace
+node tests/search.test.js          # search ranking and which files can be read
 powershell -File tools\shots.ps1   # opens every page in tools/pages.json in headless Chrome or Edge and checks it rendered
 node tools/version.js 1.4.0        # sets the version (writes the manifest as plain UTF-8)
 powershell -File tools\package.ps1 # builds the Firefox Add-ons zip, plus dist/chrome and a -chrome.zip for the Chrome Web Store / Edge Add-ons
@@ -126,6 +128,8 @@ node tools/chrome.js <folder> [--dev] # Chrome build only; --dev also runs it on
 | `extension/src/ui-dashboard.js` | Dashboard, Tasks Panel, Inbox, Groups, Connected Sites, all courses and grades |
 | `extension/src/ui-course.js` | Every page inside a course |
 | `extension/src/ui-calendar.js` | Calendar |
+| `extension/src/search.js` | Search ranking (Fuse.js), snippets, upcoming due dates |
+| `extension/src/filetext.js`, `extension/ocr/` | Search inside files: downloads PDFs and images, reads them in a hidden extension page (pdf.js, Tesseract OCR), keeps the text |
 | `extension/src/styles.js`, `icons.js` | Themes, layout, motion, icons |
 | `extension/background.js` | Access probe; Gradescope and Ed requests; toolbar badge |
 | `extension/fonts/` | Lato (SIL Open Font License) |
@@ -136,4 +140,6 @@ node tools/chrome.js <folder> [--dev] # Chrome build only; --dev also runs it on
 - **Tasks Panel:** its idea and layout follow [Tasks for Canvas](https://github.com/jtcheng26/canvas-task-extension) by jtcheng26 (MIT). It was written separately for Brightspace, with no code taken from that project.
 - **Lato font:** by Łukasz Dziedzic, under the SIL Open Font License.
 - **Confetti:** [canvas-confetti](https://github.com/catdad/canvas-confetti) 1.9.3 by Kiril Vatev (ISC licence), included unmodified as `extension/vendor/confetti.browser.js` from the published package, with its licence beside it.
+- **Search:** [Fuse.js](https://www.fusejs.io/) 7.0.0 by Kiro Risk (Apache 2.0), as `extension/vendor/fuse.min.js`.
+- **Reading files:** [pdf.js](https://mozilla.github.io/pdf.js/) 4.10.38 by Mozilla (Apache 2.0) in `extension/vendor/pdfjs/`; [Tesseract.js](https://tesseract.projectnaptha.com/) 5.1.1 and tesseract.js-core 5.1.1 (Apache 2.0) with the English `best_int` language data from `@tesseract.js-data/eng` 1.0.0 (Apache 2.0) in `extension/vendor/tesseract/`. All are included unmodified from the published npm packages, with their licences beside them.
 - **Licence:** MIT. See [LICENSE](LICENSE).

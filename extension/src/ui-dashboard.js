@@ -376,7 +376,7 @@
     const pick = (key, label) => ({ label, on: mode === key, onclick: () => { settings.dash = key; listSeen = false; ui.saveSettings(); ui.render(); } });
     const overlay = settings.overlay !== false;
     const actions = [
-      h('button', { class: 'btn', type: 'button', title: 'Search all courses (s)', onclick: () => ui.searchDialog() }, ic('search', 16), 'Search'),
+      h('button', { class: 'btn', type: 'button', title: 'Search all courses (s or Ctrl+K)', onclick: () => ui.searchDialog() }, ic('search', 16), 'Search'),
       h('button', { class: 'btn', type: 'button', onclick: () => ui.todoDialog(null, visible) }, ic('plus', 16), 'To Do'),
       ui.menu('Dashboard Options', [
         { label: 'Tasks Panel', on: Boolean(settings.tasks), onclick: () => { settings.tasks = !settings.tasks; ui.saveSettings(); ui.render(); } },

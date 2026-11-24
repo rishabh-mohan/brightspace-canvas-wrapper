@@ -29,7 +29,15 @@
       const seen = new Set();
       // A match that only works by forgiving typos ("edge" in "allergen") ranks below every result
       // that has all the words as typed, the plain matches inside files included.
-      const out = hits.map((h) => (seen.add(h.item.r), { ...h.item.r, score: h.score + (words.every((w) => h.item.all.toLowerCase().includes(w)) ? 0 : TYPO_PENALTY) }));
+      const out = hits.map((h) => {
+        seen.add(h.item.r);
+        const all = h.item.all.toLowerCase();
+        if (words.every((w) => all.includes(w))) return { ...h.item.r, score: h.score };
+        // Typo-only on its name, but every word is in its text as typed: ranks as a text hit.
+        const body = (h.item.r.body || '').toLowerCase();
+        const inText = body && words.every((w) => body.includes(w) || all.includes(w));
+        return { ...h.item.r, score: inText ? Math.min(FILE_SCORE, h.score + TYPO_PENALTY) : h.score + TYPO_PENALTY };
+      });
       for (const r of index) {
         if (seen.has(r) || !r.body) continue;
         const low = r.body.toLowerCase();

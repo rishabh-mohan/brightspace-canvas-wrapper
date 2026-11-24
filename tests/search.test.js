@@ -39,6 +39,14 @@ const noisy = S.make([
   { title: 'Project 1', where: 'CS 25100', kind: 'Assignment', text: 'Project 1', body: 'Feedback: watch the edge cases in part 2.' },
 ]);
 assert.deepStrictEqual(noisy('edge cases').map((r) => r.title)[0], 'Project 1');
+// A loose name match whose text has the words as typed still ranks as a text hit, with a snippet.
+const both = S.make([
+  { title: 'Allergen Free Pancakes', where: 'Hillenbrand', kind: 'Menu', text: 'Allergen Free Pancakes' },
+  { title: 'Ege cases review', where: 'CS 25100', kind: 'File', text: 'Ege cases review', body: 'Edge cases for the review.' },
+])('edge cases');
+assert.strictEqual(both[0].title, 'Ege cases review');
+assert.ok(both[0].score <= 0.45, String(both[0].score));
+assert.ok(both[0].snippet.includes('Edge cases'), both[0].snippet);
 // Extended-search operators typed by accident do not break the search.
 assert.doesNotThrow(() => search('!quiz | "2'));
 

@@ -33,6 +33,12 @@ assert.ok(rec[1].snippet.includes('recursion'), rec[1].snippet);
 // Inside a file, words are matched plainly, and may be split between the file name and its text.
 assert.deepStrictEqual(titles('lecture stack'), ['Lecture 4 notes.pdf']);
 assert.deepStrictEqual(titles('call stack'), ['Lecture 4 notes.pdf']);
+// Words found as typed inside a file beat a title that only matches by forgiving typos.
+const noisy = S.make([
+  { title: 'Allergen Free Pancakes', where: 'Hillenbrand', kind: 'Menu', text: 'Allergen Free Pancakes' },
+  { title: 'Project 1', where: 'CS 25100', kind: 'Assignment', text: 'Project 1', body: 'Feedback: watch the edge cases in part 2.' },
+]);
+assert.deepStrictEqual(noisy('edge cases').map((r) => r.title)[0], 'Project 1');
 // Extended-search operators typed by accident do not break the search.
 assert.doesNotThrow(() => search('!quiz | "2'));
 

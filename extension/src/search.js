@@ -7,6 +7,7 @@
 (function (root) {
   const Fuse = root.Fuse || (typeof require === 'function' ? require('../vendor/fuse.min.js') : null);
   const FILE_SCORE = 0.45; // where a hit only inside a file ranks (Fuse scores: 0 is perfect, 1 is none)
+  const TYPO_PENALTY = 0.5; // added to typo-only matches, so they come after FILE_SCORE hits
 
   const wordsOf = (query) => String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
 
@@ -26,7 +27,9 @@
       // Fuse patterns longer than 32 characters fall back to exact matching; long words are rare.
       const hits = fuse.search(words.map((w) => w.replace(/[|!^=$'"]/g, '')).filter(Boolean).join(' '));
       const seen = new Set();
-      const out = hits.map((h) => (seen.add(h.item.r), { ...h.item.r, score: h.score }));
+      // A match that only works by forgiving typos ("edge" in "allergen") ranks below every result
+      // that has all the words as typed, the plain matches inside files included.
+      const out = hits.map((h) => (seen.add(h.item.r), { ...h.item.r, score: h.score + (words.every((w) => h.item.all.toLowerCase().includes(w)) ? 0 : TYPO_PENALTY) }));
       for (const r of index) {
         if (seen.has(r) || !r.body) continue;
         const low = r.body.toLowerCase();

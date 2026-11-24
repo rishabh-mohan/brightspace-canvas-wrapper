@@ -1,0 +1,2 @@
+# Third-party libraries stay byte-for-byte as published (add-on stores compare them), so no line-ending conversion.
+extension/vendor/** -text

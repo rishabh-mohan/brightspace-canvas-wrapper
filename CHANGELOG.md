@@ -2,6 +2,9 @@
 
 Newest first. Each entry is short enough to paste into the add-on listing's version notes.
 
+## 1.6.0
+Search: press Ctrl+K (⌘K on a Mac) on any page to search, as well as `s`. Results are ranked with Fuse.js, so small typos still find things and titles come first. With nothing typed, search lists what is due in the next two weeks. New, off until you turn it on: **Search inside files** reads the text of course PDFs, and reads scanned PDFs and images with OCR (Tesseract), all on your own computer. The text is kept so each file is read once.
+
 ## 1.5.24
 Wide Cards: back to how it worked in 1.5.20 (the 1.5.21 to 1.5.23 card changes are undone).
 

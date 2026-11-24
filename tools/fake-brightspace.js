@@ -299,13 +299,38 @@ function handle(pathname, query) {
   if (t === 'grades/final/values/myGradeValue') return json(d.final);
   if (t === 'news/') return json(d.news);
   if (t === 'content/toc') return json(d.toc);
+  // Every made-up Content file is a PDF, so a real (tiny) one, with text that search can find.
   if ((x = t.match(/^content\/topics\/(\d+)\/file$/))) {
-    return { status: 200, type: 'text/html; charset=utf-8', body: `<!doctype html><meta charset="utf-8"><body style="font:16px Georgia,serif;margin:40px;max-width:640px"><h1>Made-up file ${x[1]}</h1><p>This stands in for a PDF or page stored in the course's Content. In the real thing the browser shows the file itself here.</p><ol><li>First point</li><li>Second point</li></ol></body>` };
+    return { status: 200, type: 'application/pdf', body: pdf([`Made-up file ${x[1]} for ${c.name}`, 'This stands in for a PDF stored in the course Content.', `Topic ${x[1]} covers recursion, the call stack and big-O notation.`]) };
   }
   if (t === 'classlist/') return json(d.classlist);
   if (t === 'overview') return json(c.extra ? null : { Description: rich(`<p><strong>${c.name}</strong></p><p>Lectures Monday, Wednesday and Friday. Grading: ${d.categories.map((k) => `${k.Name} ${k.Weight}%`).join(', ')}.</p><p>Late work loses 10% per day. Email the instructor before a deadline if you need an extension.</p>`), HasAttachment: true });
   if (t === 'updates/myUpdates') return json({ OrgUnitId: String(c.id), UserId: '42', UnreadDiscussions: c.id % 3, UnapprovedDiscussions: 0, UnreadAssignmentFeedback: c.id % 2, UnattemptedQuizzes: c.extra ? 0 : 1, UnreadAssignmentSubmissions: 0, UngradedQuizzes: 0, PendingEnrollmentRequests: 0 });
   return json(null);
+}
+
+// A one-page PDF with these lines of text (Helvetica), built by hand: the xref table needs each
+// object's byte offset.
+function pdf(lines) {
+  const esc = (s) => s.replace(/[\\()]/g, (ch) => `\\${ch}`);
+  const stream = `BT /F1 14 Tf 72 720 Td 18 TL ${lines.map((l) => `(${esc(l)}) Tj T*`).join(' ')} ET`;
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let out = '%PDF-1.4\n';
+  const at = objs.map((o, n) => {
+    const here = out.length;
+    out += `${n + 1} 0 obj\n${o}\nendobj\n`;
+    return here;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${at.map((n) => `${String(n).padStart(10, '0')} 00000 n \n`).join('')}`;
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return out;
 }
 
 // A made-up Gradescope, with the same page structure the reader in src/gradescope.js expects.

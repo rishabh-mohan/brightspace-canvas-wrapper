@@ -240,6 +240,7 @@ BSX.ui = (() => {
       if (typeof saved.threeDay === 'boolean') settings.threeDay = saved.threeDay;
       if ([0, 5, 10].includes(saved.taskLimit)) settings.taskLimit = saved.taskLimit;
       if (typeof saved.clock24 === 'boolean') settings.clock24 = saved.clock24;
+      if (typeof saved.fileText === 'boolean') settings.fileText = saved.fileText;
     } catch {}
     applyClock();
   }
@@ -736,6 +737,8 @@ BSX.ui = (() => {
         tip('What this is', 'A Canvas-style view of your Brightspace courses. The only change it makes on Brightspace is handing in an assignment file when you press Submit Assignment.'),
         tip('Doing the work', 'Start Assignment hands in a file from here. Quizzes, discussion posts and text submissions open the real Brightspace page.'),
         h('button', { class: 'trayitem', type: 'button', onclick: () => { openTray(null); shortcutsDialog(); } }, ic('keyboard', 18), ' Keyboard shortcuts (press ?)'),
+        h('button', { class: 'trayitem', type: 'button', onclick: () => { openTray(null); if (BSX.ui.searchDialog) BSX.ui.searchDialog(); } }, ic('search', 18), ' Search all courses (s or Ctrl+K)'),
+        tip('Search', 'Finds modules, files, assignments, quizzes, discussions and announcements, even with small typos. With nothing typed, it lists what is due in the next two weeks. To find words inside PDFs and images too, turn on Search inside files in Account.'),
         tip('Work outside Brightspace', 'Use “+ To Do” for Gradescope, publisher sites or anything else. Those items appear in To Do, the list view and the calendar.'),
         tip('Grades', 'A total marked as an estimate is computed here from graded items. It applies each group\'s dropped-score rules but is not official.'),
         tip('Names and colours', 'The ⋮ button on a course card sets a nickname and colour.'),
@@ -751,6 +754,9 @@ BSX.ui = (() => {
       h('div', { class: 'seg' }, THEMES.map((t) => h('button', { type: 'button', class: settings.theme === t ? 'on' : null, onclick: () => setTheme(t) }, t[0].toUpperCase() + t.slice(1)))),
       h('div', { class: 'traylabel' }, 'Courses shown'),
       h('div', { class: 'seg' }, scope(false, 'Current'), scope(true, 'All')),
+      h('div', { class: 'traylabel' }, 'Search inside files'),
+      h('div', { class: 'seg' }, [false, true].map((on) => h('button', { type: 'button', class: Boolean(settings.fileText) === on ? 'on' : null, onclick: () => { settings.fileText = on; saveSettings(); if (!on && BSX.filetext) BSX.filetext.forget(); openTray('account'); } }, on ? 'Read them' : 'Off'))),
+      h('p', { class: 'muted small', style: 'margin:8px 4px 0' }, 'When on, search (s or Ctrl+K) also finds words inside your courses\u2019 PDFs and images. They are read on this computer, scans with OCR, starting the next time you search; nothing is sent anywhere. Off deletes the text it kept.'),
       h('div', { class: 'traylabel' }, 'Gradescope'),
       h('div', { class: 'seg' }, [false, true].map((on) => h('button', { type: 'button', class: Boolean(settings.gradescope) === on ? 'on' : null, onclick: () => { settings.gradescope = on; saveSettings(); reload(); openTray('account'); } }, on ? 'Read it' : 'Off'))),
       h('p', { class: 'muted small', style: 'margin:8px 4px 0' }, 'When on, courses with a Gradescope link also show your Gradescope assignments, due dates and scores. It reads two Gradescope pages with your own Gradescope sign-in and changes nothing there.'),
@@ -1013,7 +1019,7 @@ BSX.ui = (() => {
     ['g then i', 'Inbox'],
     ['g then g', 'Grades for all courses'],
     ['g then p', 'Groups'],
-    ['s', 'Search all courses'],
+    ['s or Ctrl+K (⌘K)', 'Search all courses, files and due dates'],
     ['/', 'Search this page'],
     ['j / k', 'Next / previous item'],
     ['[ / ]', 'Previous / next module item'],
@@ -1034,6 +1040,12 @@ BSX.ui = (() => {
   const GO = { d: '#/', c: '#/courses', l: '#/calendar', i: '#/inbox', g: '#/grades', p: '#/groups' };
   let pendingG = 0;
   function onKey(ev) {
+    // Ctrl+K (⌘K on a Mac) opens search from anywhere in the wrapper, even while typing.
+    if (frame && (ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey && ev.key.toLowerCase() === 'k' && route().view !== 'off' && BSX.ui.searchDialog) {
+      ev.preventDefault();
+      BSX.ui.searchDialog();
+      return;
+    }
     if (!frame || ev.ctrlKey || ev.metaKey || ev.altKey || route().view === 'off') return;
     const target = ev.composedPath()[0];
     if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)) return;

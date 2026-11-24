@@ -2,7 +2,7 @@
 
 **Brightspace Canvas Wrapper** is an unofficial browser extension that shows your Brightspace courses in a Canvas-style layout. It is not made by or connected to D2L, Instructure, Gradescope or Ed.
 
-Last updated: 16 November 2026.
+Last updated: 23 November 2026.
 
 ## What it reads
 
@@ -12,6 +12,7 @@ If you switch them on, it also reads:
 
 - **Gradescope:** your assignments, due dates and scores, using your own Gradescope sign-in.
 - **Ed Discussion:** your courses, lessons, announcements and scores, using an API token you paste in yourself.
+- **Your course files (Search inside files):** the PDFs and images in your courses' Content, downloaded from Brightspace with your sign-in. Their text is read on your own computer (scanned pages and images with OCR) so search can find words inside them. The files and their text never leave your computer.
 
 ## What it stores
 
@@ -20,7 +21,8 @@ Everything is stored in your own browser, using the browser's extension storage:
 - your settings, pins, nicknames and course colours;
 - your own To Do items and ticked-off tasks;
 - your Ed API token, if you add one;
-- recent Brightspace pages and answers, kept so pages load faster. Signing out of Brightspace clears these.
+- recent Brightspace pages and answers, kept so pages load faster. Signing out of Brightspace clears these;
+- the text read from your course files, if you turn on Search inside files. Turning it off, or signing out of Brightspace, clears it.
 
 ## What it sends, and where
 

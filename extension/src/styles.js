@@ -45,6 +45,10 @@ p { margin: 12px 0; }
 .rail .on, .rail .open { background: var(--rail-on-bg); color: var(--rail-on-fg); }
 .rail .on:hover, .rail .open:hover { background: var(--rail-on-bg); }
 .rail .gap { flex: 1; }
+/* Phones count 100vh as the screen without the browser's toolbars, and the page never scrolls
+   them away, so the foot of the rail (the Brightspace button) sat under them. The rail keeps
+   to the part of the screen that is shown (the same as 100vh on computers). */
+.rail { max-height: 100dvh; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .tray { position: absolute; left: 84px; top: 0; bottom: 0; width: 320px; background: var(--bg); border-right: 1px solid var(--line); box-shadow: 4px 0 14px var(--shadow); padding: 20px 22px; overflow-y: auto; z-index: 2; }
 .trayhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .trayhead h2 { font-size: 24px; font-weight: 700; }
@@ -101,6 +105,7 @@ p { margin: 12px 0; }
 .btn.primary:hover { filter: brightness(.92); }
 .btn.wide { display: flex; width: 100%; margin-bottom: 10px; }
 .btn.icon { padding: 7px 9px; }
+.btn.small { padding: 3px 10px; font-size: 13.5px; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; flex: none; }
 .seg button { border: 0; border-right: 1px solid var(--line); background: var(--bg); padding: 7px 12px; font-size: 14.5px; }
 .seg button:last-child { border-right: 0; }
@@ -160,6 +165,9 @@ select.pick { width: auto; max-width: 320px; }
 .card .name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-weight: 700; font-size: 15.5px; line-height: 1.3; overflow: hidden;
   color: var(--c); color: color-mix(in srgb, var(--c) 70%, var(--fg)); }
 .card .code { display: block; color: var(--muted); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.lastposted { color: var(--muted); font-size: 12.5px; font-weight: 400; }
+.lastposted.stale { color: var(--bad); font-weight: 700; }
+.card .lastposted { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cardics { display: flex; gap: 14px; padding: 12px 14px 12px; }
 .cardic { position: relative; color: var(--muted); padding: 4px; border-radius: 4px; display: inline-flex; }
 .cardic:hover { background: var(--soft2); color: var(--fg); }
@@ -197,6 +205,11 @@ select.pick { width: auto; max-width: 320px; }
 .cnav a { display: block; padding: 5px 10px 5px 12px; border-left: 2px solid transparent; font-size: 15.5px; }
 .cnav a.on { color: var(--fg); border-left-color: var(--fg); }
 .cnav .sep { margin: 16px 0 4px; padding: 0 12px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+/* "See more" / "See less" under the course's own sections; the chevron turns when open. */
+.cnav .navmore { display: flex; align-items: center; gap: 4px; margin-top: 6px; padding: 4px 10px 4px 14px; border: 0; background: none; color: var(--link); font: inherit; font-size: 14px; cursor: pointer; }
+.cnav .navmore:hover { text-decoration: underline; }
+.cnav .navmore .ic { transition: transform .2s var(--ease); }
+.cnav .navmore[aria-expanded="true"] .ic { transform: rotate(180deg); }
 /* Not clipped, so an entry's ⋮ menu can open over what follows; the header rounds itself. */
 .group { margin-bottom: 18px; border: 1px solid var(--line); border-radius: 4px; }
 .group > summary { border-radius: 3px 3px 0 0; }
@@ -341,6 +354,7 @@ a.t:hover { color: var(--link); }
 .gtop .avatar { color: var(--c, var(--muted)); }
 .members { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; }
 .member { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.members .linkbtn { margin-top: 0; padding: 0; font-size: 14px; }
 .avatar.xs { width: 24px; height: 24px; font-size: 11px; color: var(--muted); }
 .post.unread { border-left: 3px solid var(--link); }
 .newdot.inline { display: inline-block; margin-left: 8px; vertical-align: middle; }
@@ -361,6 +375,8 @@ table.grid { border-collapse: collapse; width: 100%; }
 .totalbox.top { display: none; margin-bottom: 16px; }
 input.wi { width: 84px; padding: 3px 6px; font: inherit; text-align: right; border: 1px solid var(--line); border-radius: 4px; color: var(--fg); background: var(--bg); }
 input.wi.changed { border-color: var(--link); background: var(--hi); }
+input.wi:invalid { border-color: var(--bad); }
+select.pick.changed { border-color: var(--link); background: var(--hi); }
 .wilock { color: var(--muted); cursor: help; white-space: nowrap; }
 .grid tr.dropped td.num, .grid tr.dropped td.num input { text-decoration: line-through; color: var(--muted); }
 
@@ -399,6 +415,7 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
 .menuwrap { position: relative; display: inline-flex; }
 .menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 6; min-width: 210px; padding: 6px 0; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 20px var(--shadow); animation: bsx-zoom .14s var(--ease); transform-origin: top right; }
 .menu.toleft { right: auto; left: 0; transform-origin: top left; }
+.menu { width: max-content; max-width: min(320px, calc(100vw - 24px)); }
 .menu button { display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 14px 7px 8px; border: 0; background: none; text-align: left; font-size: 15px; color: var(--fg); }
 .menu button:hover, .menu button:focus-visible { background: var(--primary); color: #fff; outline: none; }
 .menu .mcheck { width: 20px; display: inline-flex; }
@@ -448,18 +465,23 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
   .cnav a { border-left: 0; border-bottom: 2px solid transparent; padding: 4px 9px; }
   .cnav a.on { border-bottom-color: var(--fg); }
   .cnav .sep { width: 100%; margin: 8px 0 0; padding: 0 9px; }
+  .cnav .navmore { margin: 0; padding: 4px 9px; min-height: 36px; }
   .cnav > div:not(.sep) { display: contents; }
   .head, .crumbs { margin: 0 16px; }
   .head h1 { font-size: 24px; }
   .head { flex-wrap: wrap; }
 }
 @media (max-width: 560px) {
-  .rail { width: 48px; }
-  .tray { left: 48px; width: calc(100vw - 48px); }
   .layout { padding: 12px; }
   .head, .crumbs { margin: 0 12px; gap: 8px; }
   .head h1 { flex-basis: 100%; white-space: normal; }
   .head .seg button { padding: 6px 8px; font-size: 13px; }
+  /* Header buttons slim down so Refresh stays on the same row as them. */
+  .head .btn { padding: 7px 10px; }
+  .head > .calnav { display: contents; }
+  /* Calendar: To Do, Today, more and Refresh on one row; the month arrows and Month/Agenda together on the next. */
+  .head:has(> .calnav)::after { content: ""; flex-basis: 100%; order: 1; }
+  .head > .calnav > .btn.icon, .head > .calnav > .seg { order: 2; }
   .crumbs .trail { font-size: 16px; }
   .calnav, .toolbar, .row { flex-wrap: wrap; }
   .dhead { flex-direction: column; align-items: stretch; }
@@ -478,6 +500,46 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
   .rail { width: 60px; }
   .rail a span, .rail button span { display: none; }
   .tray { left: 60px; width: min(320px, calc(100vw - 60px)); }
+  /* Phones: one column of cards even when wide cards are on. */
+  .app[data-wide="on"] .cards { grid-template-columns: 1fr; }
+  /* Tables fit the screen: tighter cells, long words and dates wrap, smaller boxes. */
+  .grid th, .grid td { padding: 8px 5px; }
+  .grid td { font-size: 14.5px; overflow-wrap: anywhere; }
+  .grid td.nowrap { white-space: normal; }
+  .grid.gpa td.num { white-space: normal; }
+  .grid.gpa .tag { margin-left: 0; }
+  /* GPA table: Points (letter points x credits) gives way so the course names stay readable. */
+  .grid.gpa th:nth-child(5), .grid.gpa td:nth-child(5) { display: none; }
+  .grid select.pick { max-width: 150px; padding: 6px 4px; }
+  input.wi { width: 64px; padding: 6px; font-size: 16px; }
+  .rubric th, .rubric td { padding: 6px; overflow-wrap: anywhere; }
+  .rubric .rating { flex-basis: 90px; padding: 6px; }
+  /* 16px text so focusing a field does not zoom the page. */
+  input.txt, select.txt, textarea.txt { font-size: 16px; }
+  /* Tap targets of 36px or more. */
+  .btn, .seg button, .tktabs button, .linkbtn { min-height: 36px; }
+  .iconbtn.xs, .tkact .menuwrap > .iconbtn, .irow > .menuwrap > .iconbtn { width: 36px; height: 36px; }
+  .cardic { padding: 8px; }
+  .cardic .badge { top: -1px; right: -3px; }
+  .pcheck, .tkrow .pcheck { position: relative; width: 26px; height: 26px; }
+  .pcheck::after { content: ""; position: absolute; inset: -9px; }
+  .menu button { min-height: 40px; }
+  .crumbs .trail a { padding: 8px 0; }
+  .todo a.t, .imid a.t, .pmid a.t { padding: 6px 0; margin: -6px 0; }
+  .alsochip { display: inline-block; padding: 4px 10px; }
+  .sw { width: 32px; height: 32px; border-radius: 16px; }
+  /* Search results: the kind on its own line above the title, so the title gets the width. */
+  .gres { flex-wrap: wrap; row-gap: 0; }
+  .gkind { width: 100%; font-size: 11px; }
+  /* Groups and Connected Sites rows wrap instead of pushing past the edge at 360px. */
+  .gtop { flex-wrap: wrap; }
+  .irow > label { display: flex; align-items: center; gap: 4px; max-width: 100%; }
+  .irow > label > select.pick { flex: 1 1 auto; min-width: 0; }
+}
+/* Touch screens have no hover: show the actions that otherwise appear on hover. */
+@media (hover: none) {
+  .todo .iconbtn { visibility: visible; }
+  .irow > .menuwrap > .iconbtn { opacity: 1; }
 }
 `;
 })();

@@ -7,7 +7,10 @@ BSX.client = (() => {
   const MAX_CONCURRENT = 4;
   const MAX_PAGES = 20;
   const cache = new Map();
-  const waiting = [];
+  // Requests waiting for a slot. Checks of an answer already shown from storage go last, so
+  // a request with nothing to show yet never waits behind hundreds of them (deep search).
+  const urgent = [];
+  const later = [];
   let active = 0;
   let versions = null;
 
@@ -18,19 +21,24 @@ BSX.client = (() => {
     }
   }
 
-  function slot() {
+  function slot(low = false) {
     return new Promise((resolve) => {
       const go = () => {
         active++;
         resolve();
       };
       if (active < MAX_CONCURRENT) go();
-      else waiting.push(go);
+      else (low ? later : urgent).push(go);
     });
   }
+  function release() {
+    active--;
+    const next = urgent.shift() || later.shift();
+    if (next) next();
+  }
 
-  async function raw(path) {
-    await slot();
+  async function raw(path, { low = false } = {}) {
+    await slot(low);
     try {
       const res = await fetch(path, { credentials: 'same-origin' });
       if (!res.ok) throw new ApiError(res.status, path);
@@ -39,9 +47,7 @@ BSX.client = (() => {
       if (type != null && !/json/i.test(type)) throw new ApiError(401, path);
       return await res.json();
     } finally {
-      active--;
-      const next = waiting.shift();
-      if (next) next();
+      release();
     }
   }
 
@@ -54,6 +60,7 @@ BSX.client = (() => {
   const KEEP = 7 * 864e5;
   const MAX_ENTRY = 400e3; // characters; very long answers (big classlists) are not kept
   const MAX_TOTAL = 4e6;
+  const RESAVE = 60 * 60 * 1000; // an unchanged answer's date is written again at most this often
   const listeners = new Set();
   let saved = new Map(); // path -> { at, json }
   let bypass = false; // after Refresh, this page always waits for Brightspace
@@ -85,11 +92,18 @@ BSX.client = (() => {
     }, 1000);
   }
 
+  // Returns the answer as JSON, for the caller to compare with the saved copy.
   function remember(path, data) {
     const json = JSON.stringify(data);
-    if (json.length > MAX_ENTRY) saved.delete(path);
-    else saved.set(path, { at: Date.now(), json });
+    const had = saved.get(path);
+    if (json.length > MAX_ENTRY) {
+      if (!saved.delete(path)) return json;
+    } else if (had && had.json === json && Date.now() - had.at < RESAVE) {
+      had.at = Date.now(); // written with the next change; no storage write for an unchanged answer
+      return json;
+    } else saved.set(path, { at: Date.now(), json });
     persist();
+    return json;
   }
 
   // Signed out, or a different person may sign in next: drop everything kept.
@@ -97,6 +111,12 @@ BSX.client = (() => {
     saved = new Map();
     persist();
     if (BSX.filetext) BSX.filetext.forget(); // text read from course files, too
+    if (BSX.whatsnew) BSX.whatsnew.forget(); // and the What's New snapshot held by this page
+    try {
+      // What's New snapshots (whatsnew.js), the due dates handed to reminders (reminders.js) and
+      // the reminders already shown, and what the Edfinity reader kept (edfinity.js)
+      Promise.resolve(store.remove([`bsxSeen:${globalThis.location?.host || ''}`, 'bsxDeadlines', 'bsxNotified', 'bsxNotifyUrls', 'bsxEdfinity'])).catch(() => {});
+    } catch {}
   }
 
   function changed() {
@@ -104,43 +124,54 @@ BSX.client = (() => {
     changeTimer = setTimeout(() => listeners.forEach((fn) => fn()), 300);
   }
 
+  // A tool that is switched off or not permitted (403, 404) stays refused like any answer
+  // until the cache expires or Refresh; other failures (signed out, throttled, network) are
+  // tried again on the next call.
+  const lasting = (e) => e instanceof ApiError && (e.status === 403 || e.status === 404);
+
   // `path` is an API address; `fetcher` (optional) produces the answer some other way, for
   // facts worked out from a page (see keep).
   function get(path, fetcher = raw) {
     const hit = cache.get(path);
     if (hit && Date.now() - hit.at < TTL) return hit.promise;
-    const fresh = fetcher(path);
-    fresh.then(
-      (d) => remember(path, d),
-      (e) => e instanceof ApiError && e.status === 401 && forget()
-    );
     const entry = { at: Date.now(), promise: null };
     entry.promise = (async () => {
       await ready;
       const old = hit || bypass ? null : saved.get(path);
-      if (!old) return fresh;
-      let data;
-      try {
-        data = JSON.parse(old.json);
-      } catch {
-        return fresh;
+      let data = null;
+      if (old) {
+        try {
+          data = JSON.parse(old.json);
+        } catch {
+          data = null;
+        }
       }
+      // With a saved answer to show, the check with Brightspace waits behind requests that have none.
+      const fresh = fetcher(path, { low: data != null });
+      let json = null; // set by the first handler, which runs before the second
+      fresh.then(
+        (d) => (json = remember(path, d)),
+        (e) => e instanceof ApiError && e.status === 401 && forget()
+      );
+      if (data == null) return fresh;
       fresh.then(
         (d) => {
           entry.promise = Promise.resolve(d);
-          if (JSON.stringify(d) !== old.json) changed();
+          if (json !== old.json) changed();
         },
-        () => {
+        (e) => {
           // The saved answer no longer holds; redraw so the page shows the real outcome.
           saved.delete(path);
-          cache.delete(path);
+          persist(); // so the next visit does not show it again
+          if (lasting(e)) entry.promise = fresh;
+          else cache.delete(path);
           changed();
         }
       );
       return data;
     })();
     cache.set(path, entry);
-    entry.promise.catch(() => cache.delete(path));
+    entry.promise.catch((e) => lasting(e) || cache.delete(path));
     return entry.promise;
   }
 
@@ -210,9 +241,7 @@ BSX.client = (() => {
         if (/\/d2l\/login/i.test(res.url || '')) throw new ApiError(401, path);
         return await res.text();
       } finally {
-        active--;
-        const next = waiting.shift();
-        if (next) next();
+        release();
       }
     })();
     pages.set(path, { at: Date.now(), promise });

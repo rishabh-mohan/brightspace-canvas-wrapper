@@ -14,6 +14,18 @@
   // index: [{ title, where, kind, text, body? }]. Returns a searcher to call on each keystroke.
   function make(index) {
     const rows = index.map((r) => ({ r, title: r.title || '', all: `${r.title || ''} ${r.text || ''} ${r.where || ''} ${r.kind || ''}` }));
+    // Lower-cased copies, made once rather than on every keystroke. A row's body is filled in
+    // (or emptied) after the searcher is made, so its copy is redone when the body changes.
+    const lows = new WeakMap(); // r -> { all, head, body, bodyLow }
+    for (const row of rows) lows.set(row.r, { all: row.all.toLowerCase(), head: `${row.r.title} ${row.r.where}`.toLowerCase(), body: null, bodyLow: '' });
+    const low = (r) => {
+      const l = lows.get(r);
+      if (l.body !== (r.body || '')) {
+        l.body = r.body || '';
+        l.bodyLow = l.body.toLowerCase();
+      }
+      return l;
+    };
     const fuse = new Fuse(rows, {
       keys: [{ name: 'title', weight: 2 }, { name: 'all', weight: 1 }],
       includeScore: true,
@@ -31,27 +43,32 @@
       // that has all the words as typed, the plain matches inside files included.
       const out = hits.map((h) => {
         seen.add(h.item.r);
-        const all = h.item.all.toLowerCase();
-        if (words.every((w) => all.includes(w))) return { ...h.item.r, score: h.score };
-        // Typo-only on its name, but every word is in its text as typed: ranks as a text hit.
-        const body = (h.item.r.body || '').toLowerCase();
-        const inText = body && words.every((w) => body.includes(w) || all.includes(w));
-        return { ...h.item.r, score: inText ? Math.min(FILE_SCORE, h.score + TYPO_PENALTY) : h.score + TYPO_PENALTY };
+        const l = low(h.item.r);
+        const { all } = l;
+        let item;
+        if (words.every((w) => all.includes(w))) item = { ...h.item.r, score: h.score };
+        else {
+          // Typo-only on its name, but every word is in its text as typed: ranks as a text hit.
+          const body = l.bodyLow;
+          const inText = body && words.every((w) => body.includes(w) || all.includes(w));
+          item = { ...h.item.r, score: inText ? Math.min(FILE_SCORE, h.score + TYPO_PENALTY) : h.score + TYPO_PENALTY };
+        }
+        // A file whose name matched may also say why from inside it.
+        if (item.body && !item.snippet && words.some((w) => l.bodyLow.includes(w))) item.snippet = snippet(item.body, words, 140, l.bodyLow);
+        return item;
       });
       for (const r of index) {
         if (seen.has(r) || !r.body) continue;
-        const low = r.body.toLowerCase();
-        if (words.every((w) => low.includes(w) || `${r.title} ${r.where}`.toLowerCase().includes(w))) out.push({ ...r, score: FILE_SCORE, snippet: snippet(r.body, words) });
+        const l = low(r);
+        if (words.every((w) => l.bodyLow.includes(w) || l.head.includes(w))) out.push({ ...r, score: FILE_SCORE, snippet: snippet(r.body, words, 140, l.bodyLow) });
       }
-      // A file whose name matched may also say why from inside it.
-      for (const r of out) if (r.body && !r.snippet && words.some((w) => r.body.toLowerCase().includes(w))) r.snippet = snippet(r.body, words);
       return out.sort((a, b) => a.score - b.score).slice(0, limit);
     };
   }
 
   // About `size` characters of `text` around the first word found, with … where cut.
-  function snippet(text, words, size = 140) {
-    const low = text.toLowerCase();
+  // `low` is text.toLowerCase(), when the caller already has it.
+  function snippet(text, words, size = 140, low = text.toLowerCase()) {
     const at = Math.min(...words.map((w) => low.indexOf(w)).filter((n) => n >= 0));
     if (!Number.isFinite(at)) return '';
     let start = Math.max(0, at - Math.floor(size / 3));
@@ -64,7 +81,12 @@
   // Work due from now through `days` ahead, soonest first: what an empty search shows.
   function upcoming(index, now = Date.now(), days = 14) {
     const until = now + days * 864e5;
-    return index.filter((r) => r.due && Date.parse(r.due) >= now && Date.parse(r.due) <= until).sort((a, b) => Date.parse(a.due) - Date.parse(b.due));
+    // Each date is parsed once (the list is redrawn on every key press).
+    return index
+      .map((r) => [r, r.due ? Date.parse(r.due) : NaN])
+      .filter(([, t]) => t >= now && t <= until)
+      .sort((a, b) => a[1] - b[1])
+      .map(([r]) => r);
   }
 
   const api = { make, snippet, upcoming };

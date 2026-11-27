@@ -19,6 +19,11 @@
   // and the syllabus when there is one.
   // A "Pinned" module comes first of all when the student has pinned entries (see pinMenu).
   async function courseModules(course, { withPinned = true } = {}) {
+    // Outside work for text-id pins is asked for now, alongside the modules; the 4 s wait
+    // below still starts only once the modules are in.
+    const outsideWork = withPinned && pinsOf(course.id).some((id) => typeof id === 'string')
+      ? ui.externalWork([course]).then((kept) => [...kept, ...[...(ui.folded.get(course.id)?.values() || [])].flat()]).catch(() => [])
+      : null;
     const list = await data.modules(course.id);
     const items = [{ id: 0, title: 'Course homepage', type: 'Course home', unread: false, locked: false, url: bs.home(course.id), html_url: bs.home(course.id) }];
     // Always listed: the syllabus page shows the school's syllabus tool or the course overview.
@@ -29,9 +34,9 @@
     // that no longer exists simply drops out. Pinned outside work (Ed, Gradescope; its pin is
     // its text id) is looked up on those sites, waiting a few seconds at most.
     const byId = new Map(all.flatMap((m) => m.items.map((i) => [i.id, i])));
-    if (pinsOf(course.id).some((id) => typeof id === 'string')) {
+    if (outsideWork) {
       const outside = await Promise.race([
-        ui.externalWork([course]).then((kept) => [...kept, ...[...(ui.folded.get(course.id)?.values() || [])].flat()]).catch(() => []),
+        outsideWork,
         new Promise((r) => setTimeout(() => r([]), 4000)),
       ]);
       for (const x of outside) byId.set(x.source_id, { id: x.source_id, title: x.name, type: x.source, external: x });
@@ -56,41 +61,128 @@
     const pinned = pinsOf(courseId).includes(i.id);
     return ui.menu(`More for ${i.title}`, [{ label: pinned ? 'Unpin' : 'Pin', onclick: () => setPinned(courseId, i.id, !pinned) }]);
   };
+
+  // ---- module order ------------------------------------------------------------
+  // The student's own order for the course's modules (src/modorder.js), on the Modules page and
+  // course Home. Previous/Next on an item keep Brightspace's order.
+  const orderOf = (courseId) => (settings.moduleOrder && Array.isArray(settings.moduleOrder[courseId]) ? settings.moduleOrder[courseId] : []);
+  // ids: the new order ([] = Brightspace's own). moved: the module to keep in view, if any.
+  async function setModuleOrder(courseId, ids, moved = null) {
+    settings.moduleOrder = settings.moduleOrder || {};
+    if (ids.length) settings.moduleOrder[courseId] = ids;
+    else delete settings.moduleOrder[courseId];
+    ui.saveSettings();
+    await ui.render();
+    if (moved == null) return ui.flash('Modules are back in the course’s order.');
+    // Back on the moved module's ⋮, so it can move again straight away.
+    const btn = ui.appEl()?.querySelector(`details.group[data-module="${CSS.escape(String(moved))}"] > summary .gmenu .iconbtn`);
+    if (btn) {
+      btn.focus({ preventScroll: true });
+      btn.scrollIntoView({ block: 'nearest' });
+    }
+  }
+  // A module's ⋮ menu (in its header): Move up / down / to top / to bottom among the modules
+  // beside it. `list` is Brightspace's order, `shown` the order on the page. Null (no ⋮) when
+  // the module cannot move: Pinned, or the only module at its level.
+  function moduleMenu(courseId, list, shown, m) {
+    const place = BSX.modorder ? BSX.modorder.placeOf(shown, m.id) : null;
+    const move = (where, label) => ({ label, onclick: () => {
+      const ids = BSX.modorder.moveModule(list, orderOf(courseId), m.id, where);
+      if (ids) setModuleOrder(courseId, ids, m.id);
+    } });
+    const items = !place ? [] : [
+      place.at > 0 ? move('up', 'Move up') : null,
+      place.at < place.of - 1 ? move('down', 'Move down') : null,
+      place.at > 0 ? move('top', 'Move to top') : null,
+      place.at < place.of - 1 ? move('bottom', 'Move to bottom') : null,
+    ].filter(Boolean);
+    if (!items.length) return null;
+    const menu = ui.menu(`More for ${m.name}`, items);
+    const icon = menu.querySelector('.ic');
+    if (icon) icon.style.transform = 'none'; // a closed module turns the icons in its header
+    const stop = (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+    };
+    // Clicks stay in the menu, so they don't open or close the module. Inline styles (not a
+    // sheet): the header is bold, and the button should not make it taller.
+    return h('span', { class: 'gmenu', style: 'font-weight:400;margin:-8px -6px -8px 0;display:inline-flex', onclick: stop, onkeydown: (ev) => (ev.key === ' ' || ev.key === 'Enter') && ev.stopPropagation() }, menu);
+  }
   const whatIf = { on: false, courseId: null, overrides: new Map() };
 
   // ---- course navigation -----------------------------------------------------
+  // The wrapper's own sections, then "See more" for the rest: Brightspace's tool groups (Course
+  // Tools ends with Brightspace Home) and the course's external tools. Whether that part is open
+  // is kept in settings.navMore; it opens anyway when the page on screen is one of its links.
   function courseNav(course, current) {
-    const tools = h('div');
-    data.externalTools(course.id)
-      .then((list) => {
-        if (list.length) tools.replaceChildren(h('div', { class: 'sep' }, 'External tools'), ...list.slice(0, 8).map((t) => h('a', { href: courseHref(course.id, 'modules', t.id) }, t.title, ' ', ic('external', 13))));
-      })
-      .catch(() => {});
+    // Is this link the page on screen: a wrapper page, or the Brightspace page in the frame view?
+    const here = (href) => {
+      const hash = location.hash;
+      if (href.startsWith('#')) return hash === href;
+      if (!hash.startsWith('#/open?u=')) return false;
+      try {
+        return decodeURIComponent(hash.slice('#/open?u='.length)) === href;
+      } catch {
+        return false;
+      }
+    };
+    const more = h('div', { id: 'bsx-navmore' });
+    const tools = h('div', { id: 'bsx-navtools' });
+    let open = false;
+    const show = (on) => {
+      open = on;
+      more.hidden = tools.hidden = !on;
+      toggle.setAttribute('aria-expanded', String(on));
+      toggle.replaceChildren(on ? 'See less' : 'See more', ic('down', 14));
+    };
+    const toggle = h('button', { class: 'navmore', type: 'button', 'aria-controls': 'bsx-navmore bsx-navtools', onclick: () => {
+      show(!open);
+      settings.navMore = open;
+      ui.saveSettings();
+    } });
+    // The lists arrive later: "See more" shows only when there is something behind it.
+    const fill = (box, nodes) => {
+      box.replaceChildren(...nodes);
+      if (nodes.some((n) => n.classList.contains('on'))) show(true);
+      toggle.hidden = !more.childElementCount && !tools.childElementCount;
+    };
     // Brightspace's Course Tools and the rest of its navigation bar (Class Progress and so
     // on). These are Brightspace pages; a click opens them inside the wrapper.
-    const more = h('div');
+    // Grouped the way Brightspace's navigation bar groups them; loose links under "Course Tools".
+    // Same-named groups are one group (case aside), shown with Brightspace's spelling.
+    // Brightspace's own course home ends Course Tools (a group of its own, first, if there is none).
+    const groupNodes = (list) => {
+      let groups = new Map();
+      for (const t of list) {
+        const label = t.group || 'Course Tools';
+        const key = label.toLowerCase();
+        if (!groups.has(key)) groups.set(key, { label, items: [] });
+        const g = groups.get(key);
+        if (t.group) g.label = t.group;
+        g.items.push(t);
+      }
+      if (!groups.has('course tools')) groups = new Map([['course tools', { label: 'Course Tools', items: [] }], ...groups]);
+      groups.get('course tools').items.push({ title: 'Brightspace Home', url: bs.home(course.id), tip: 'The original Brightspace course home' });
+      return [...groups.values()].flatMap((g) => [h('div', { class: 'sep' }, g.label), ...g.items.map((t) => h('a', { href: t.url, title: t.tip || `${t.title} (Brightspace)`, class: here(t.url) ? 'on' : null }, t.title))]);
+    };
+    show(Boolean(settings.navMore));
+    fill(more, groupNodes([]));
     data.courseTools(course.id)
+      .then((list) => fill(more, groupNodes(list)))
+      .catch(() => {});
+    data.externalTools(course.id)
       .then((list) => {
-        if (!list.length) return;
-        // Grouped the way Brightspace's navigation bar groups them; loose links under "Course tools".
-        // Same-named groups are one group (case aside), shown with Brightspace's spelling.
-        const groups = new Map();
-        for (const t of list) {
-          const label = t.group || 'Course Tools';
-          const key = label.toLowerCase();
-          if (!groups.has(key)) groups.set(key, { label, items: [] });
-          const g = groups.get(key);
-          if (t.group) g.label = t.group;
-          g.items.push(t);
-        }
-        more.replaceChildren(...[...groups.values()].flatMap((g) => [h('div', { class: 'sep' }, g.label), ...g.items.map((t) => h('a', { href: t.url, title: `${t.title} (Brightspace)` }, t.title))]));
+        const links = list.slice(0, 8).map((t) => {
+          const href = courseHref(course.id, 'modules', t.id);
+          return h('a', { href, class: here(href) ? 'on' : null }, t.title, ' ', ic('external', 13));
+        });
+        fill(tools, links.length ? [h('div', { class: 'sep' }, 'External tools'), ...links] : []);
       })
       .catch(() => {});
     return h('nav', { class: 'cnav', 'aria-label': 'Course navigation' },
       Object.keys(LABEL).map((key) => h('a', { href: courseHref(course.id, key === 'home' ? null : key), class: current === key ? 'on' : null }, LABEL[key])),
+      toggle,
       more,
-      h('div', { class: 'sep' }, 'Brightspace'),
-      h('a', { href: bs.home(course.id) }, 'Original course home'),
       tools);
   }
 
@@ -111,22 +203,25 @@
     }
     const match = (i) => byName.get(`${i.type.toLowerCase()}:${i.title.trim().toLowerCase()}`) || null;
     // Sub-modules are placed inside their parent, so collapsing a module hides everything under it.
+    // Shown in the student's own order when they set one (see moduleMenu).
+    const shown = BSX.modorder ? BSX.modorder.applyModuleOrder(list, orderOf(courseId)) : list;
     const roots = [];
     const stack = [];
-    list.forEach((m, at) => {
-      const hasChildren = list[at + 1] && list[at + 1].depth > m.depth;
-      const el = moduleBox(courseId, m, match, hasChildren);
+    shown.forEach((m, at) => {
+      const hasChildren = shown[at + 1] && shown[at + 1].depth > m.depth;
+      const el = moduleBox(courseId, m, match, hasChildren, moduleMenu(courseId, list, shown, m));
       while (stack.length && stack[stack.length - 1].depth >= m.depth) stack.pop();
       if (stack.length) stack[stack.length - 1].el.append(el);
       else roots.push(el);
       stack.push({ depth: m.depth, el });
     });
+    if (orderOf(courseId).length) roots.push(h('p', { class: 'small' }, h('button', { class: 'linkbtn', type: 'button', onclick: () => setModuleOrder(courseId, []) }, 'Reset module order')));
     return roots;
   }
 
-  function moduleBox(courseId, m, match, hasChildren) {
-    return h('details', { class: 'group', open: true },
-        h('summary', null, ic('down', 16), h('span', { class: 'gname' }, m.name), m.locked ? ui.tag('locked') : null),
+  function moduleBox(courseId, m, match, hasChildren, menu = null) {
+    return h('details', { class: 'group', open: true, 'data-module': String(m.id) },
+        h('summary', null, ic('down', 16), h('span', { class: 'gname' }, m.name), m.locked ? ui.tag('locked') : null, menu),
         !m.items.length && hasChildren ? null : m.items.length
           ? m.items.map((i) => {
               if (i.external) return outsideRow(courseId, i.external);
@@ -162,7 +257,9 @@
     const m = String(name).match(/^(.*?)\s*(?:#|no\.?\s*)?\d+\b/i);
     return m && m[1].trim() ? m[1].trim().replace(/[\s:–-]+$/, '') : null;
   };
-  const byName = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  // One collator each instead of a new one per localeCompare call in a sort.
+  const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare;
+  const byTitle = new Intl.Collator(undefined, { numeric: true }).compare;
   // A group's name in the plural: "Homework" -> "Homeworks", "Quiz" -> "Quizzes",
   // "Activity" -> "Activities"; a name already ending in s is left alone.
   const plural = (word) => {
@@ -215,10 +312,11 @@
       const row = (x) => outsideRow(course.id, x);
       // The site's own order (Ed: its modules, then lessons by index; Gradescope: its table),
       // falling back to due date for anything without one.
+      const dueMs = new Map([...kept, ...folded].map((x) => [x, Date.parse(x.due_at || 8.64e15)]));
       const byOrder = (a, b) => {
         const x = a.order || [Infinity, Infinity];
         const y = b.order || [Infinity, Infinity];
-        return x[0] - y[0] || x[1] - y[1] || Date.parse(a.due_at || 8.64e15) - Date.parse(b.due_at || 8.64e15);
+        return x[0] - y[0] || x[1] - y[1] || dueMs.get(a) - dueMs.get(b);
       };
       const box = (name, kids, count) => h('details', { class: 'group', open: true },
         h('summary', null, ic('down', 16), h('span', { class: 'gname' }, name), h('span', { class: 'count' }, count)), kids);
@@ -410,7 +508,8 @@
     const [everything, groups] = await Promise.all([data.assignments(course.id), kind ? null : data.assignmentGroups(course.id).catch(() => new Map())]);
     const all = everything.filter((a) => !kind || a.kind === kind);
     const now = Date.now();
-    const byDue = (a, b) => Date.parse(a.due_at) - Date.parse(b.due_at);
+    const dueMs = new Map(all.map((a) => [a, Date.parse(a.due_at)])); // parsed once, not per comparison
+    const byDue = (a, b) => dueMs.get(a) - dueMs.get(b);
     const rows = [];
     const make = (a) => {
       const row = workRow(course, a);
@@ -430,9 +529,9 @@
     } else {
       const label = kind ? KIND[kind].group : 'Assignments';
       boxes = [
-        groupBox(`Upcoming ${label}`, all.filter((a) => a.due_at && Date.parse(a.due_at) >= now).sort(byDue).map(make)),
+        groupBox(`Upcoming ${label}`, all.filter((a) => a.due_at && dueMs.get(a) >= now).sort(byDue).map(make)),
         groupBox(`Undated ${label}`, all.filter((a) => !a.due_at).map(make)),
-        groupBox(`Past ${label}`, all.filter((a) => a.due_at && Date.parse(a.due_at) < now).sort(byDue).reverse().map(make)),
+        groupBox(`Past ${label}`, all.filter((a) => a.due_at && dueMs.get(a) < now).sort(byDue).reverse().map(make)),
       ];
     }
 
@@ -451,7 +550,7 @@
       body: [
         h('div', { class: 'toolbar' }, ui.filterBox(`Search ${LABEL[section].toLowerCase()}`, rows, () => {
           // A group with nothing left after filtering is hidden rather than shown empty.
-          for (const box of boxes) if (box) box.hidden = ![...box.querySelectorAll('.irow')].some((el) => !el.hidden);
+          for (const box of boxes) if (box) box.hidden = !box.querySelector('.irow:not([hidden])');
         }), kind ? null : h('div', { class: 'seg' }, pick('date', 'Show by Date'), pick('type', 'Show by Type'))),
         all.length ? boxes : ui.empty(`No ${LABEL[section].toLowerCase()} in this course.`),
         kind ? null : gradescopeGroup(course),
@@ -503,6 +602,18 @@
         groups.push(h('details', { class: 'group', open: true },
           h('summary', null, ic('down', 16), h('span', { class: 'gname' }, 'Ed Discussion'), h('span', { class: 'count' }, rows.length)),
           note ? h('div', { class: 'irow muted small' }, h('span', null, note)) : null,
+          rows));
+      }
+      // Edfinity: the course's assignments with their scores, and a note when they could not be read.
+      const edf = settings.edfinity?.on ? ui.edfinityStatus() : null;
+      if (edf && kept.some((i) => i.source === 'Edfinity')) {
+        const rows = kept.filter((i) => i.source === 'Edfinity').map((i) => h('div', { class: 'irow' },
+          h('span', { class: `iic ${i.submitted ? 'ok' : ''}` }, ic('assignment', 22)),
+          h('div', { class: 'imid' }, ui.itemLink(i), h('div', { class: 'muted small' }, i.due_at ? [h('b', null, 'Due'), ` ${when(i.due_at)}`] : 'No due date')),
+          h('span', { class: `small nowrap ${i.submitted ? 'ok' : i.due_at && Date.parse(i.due_at) < now ? 'bad' : 'muted'}` }, i.grade ? `${i.grade.score} / ${i.grade.points_possible ?? '–'}` : i.status)));
+        groups.push(h('details', { class: 'group', open: true },
+          h('summary', null, ic('down', 16), h('span', { class: 'gname' }, 'Edfinity'), h('span', { class: 'count' }, rows.length)),
+          edf.stale ? h('div', { class: 'irow muted small' }, h('span', null, 'Read some time ago. ', h('a', { href: 'https://edfinity.com/registrations', target: '_blank', rel: 'noopener noreferrer' }, 'Open Edfinity'), ' to bring it up to date, then press Refresh.')) : null,
           rows));
       }
       if (!g) return groups;
@@ -562,6 +673,8 @@
   // (once assessed) the chosen rating highlighted with the points and any comment.
   function rubricTable(rubric, result) {
     const outcome = new Map((result?.criteria || []).map((c) => [c.id, c]));
+    // Group names are shown only when the criteria come from more than one group.
+    const mixedGroups = new Set(rubric.criteria.map((c) => c.group)).size > 1;
     let total = 0;
     let max = 0;
     const rows = rubric.criteria.map((c) => {
@@ -572,7 +685,7 @@
       const got = o ? o.score ?? chosen?.points ?? null : null;
       if (got != null) total += got;
       return h('tr', null,
-        h('th', { scope: 'row' }, c.name, c.group && rubric.criteria.some((x) => x.group !== c.group) ? h('div', { class: 'muted small' }, c.group) : null),
+        h('th', { scope: 'row' }, c.name, c.group && mixedGroups ? h('div', { class: 'muted small' }, c.group) : null),
         h('td', { class: 'ratings' }, c.levels.map((l) => h('div', { class: l === chosen ? 'rating on' : 'rating' },
           rubric.points && l.points != null ? h('div', { class: 'rpts' }, `${num(l.points)} pts`) : null,
           h('div', null, h('b', null, l.name)),
@@ -799,7 +912,9 @@
   // ---- grades ------------------------------------------------------------------
   async function grades(course) {
     const id = course.id;
-    if (whatIf.courseId !== id) Object.assign(whatIf, { on: false, courseId: id, overrides: new Map(), allItems: undefined });
+    if (whatIf.courseId !== id) Object.assign(whatIf, { on: false, courseId: id, overrides: new Map(), allItems: undefined, solver: undefined });
+    // Outside sites are asked at once, alongside the gradebook (requests are shared, not repeated).
+    const outsideWork = settings.gradescope || (settings.ed?.on && settings.ed.token) ? ui.externalWork([course]).catch(() => []) : null;
     const [g, work, courses] = await Promise.all([data.grades(id), data.assignments(id).catch(() => []), data.courses()]);
     // Switch between courses without leaving Grades, as Canvas's course menu does.
     const listed = ui.state.showAll ? courses : ui.focusCourses(courses);
@@ -809,10 +924,10 @@
     const byItem = new Map(work.filter((a) => a.grade_item_id != null).map((a) => [String(a.grade_item_id), a]));
     // Scores Brightspace has not posted but an outside copy has (Gradescope, folded into the
     // Brightspace assignment): used in their place, scaled to the item's points, and tagged.
-    // Waits at most a few seconds for the outside sites.
+    // Waits at most a few seconds (counted from here) for the outside sites.
     const outside = new Map();
-    if (settings.gradescope || (settings.ed?.on && settings.ed.token)) {
-      await Promise.race([ui.externalWork([course]).catch(() => []), new Promise((r) => setTimeout(r, 4000))]);
+    if (outsideWork) {
+      await Promise.race([outsideWork, new Promise((r) => setTimeout(r, 4000))]);
       const bag = ui.folded.get(id);
       for (const group of g.groups) {
         for (const i of group.items) {
@@ -837,15 +952,20 @@
     const inputs = () => new Map([...base, ...(whatIf.on ? whatIf.overrides : [])]);
     // In a course that counts an empty grade as 0, the total does too, unless the student
     // ticks "based only on graded assignments".
-    // What-If always counts a blank grade as 0, so drop rules treat it like any other score.
-    const allItems = (whatIf.on || (whatIf.allItems ?? g.null_is_zero)) && canEstimate;
+    // What-If works as in Canvas: a blank grade stays out of the total until a score is typed
+    // into it (that option decides, not What-If). In a category with a drop rule, blanks are
+    // dropped first, as Brightspace does.
+    const allItems = BSX.gradetools.countsBlanks({ option: whatIf.allItems, nullIsZero: g.null_is_zero, canEstimate });
     const totalBox = h('div', { class: 'totalbox' });
     // The same total above the table, shown instead of the sidebar's on narrow screens.
     const totalTop = h('div', { class: 'totalbox top' });
+    let drawSolver = null; // set once the "What do I need?" panel is built; follows What-If
     const blank = g.null_is_zero ? '0' : '–';
     const scoreText = (v, i) => (v && v.score != null ? num(v.score) : i && outside.has(i.id) ? num(outside.get(i.id).score) : blank);
     function drawTotal() {
-      const hyp = (whatIf.on && whatIf.overrides.size) || allItems ? data.estimate(g, inputs(), { allItems }) : null;
+      // One tally gives the total, the drops and the groups on each What-If keystroke.
+      const res = data.results(g, inputs(), { allItems });
+      const hyp = (whatIf.on && whatIf.overrides.size) || allItems ? res.estimate : null;
       const pair = (t) => (points ? h('div', { class: 'muted small' }, `${num(t.score)} / ${num(t.points_possible)} points`) : null);
       let kids;
       if (hyp) {
@@ -861,20 +981,20 @@
       // Brightspace can apply calculations it does not show students (formulas, caps, attendance
       // rules), so an estimate here can be slightly off.
       if (!g.final && (hyp || g.estimate)) kids.push(h('div', { class: 'muted small tnote' }, 'Brightspace may apply calculations it doesn’t show students, so this can be slightly off. Your instructor’s gradebook and syllabus come first.'));
-      totalBox.replaceChildren(...kids.filter(Boolean));
-      totalTop.replaceChildren(...kids.filter(Boolean).map((n) => n.cloneNode(true)));
-      markDropped();
-      drawGroups();
+      kids = kids.filter(Boolean);
+      totalBox.replaceChildren(...kids);
+      totalTop.replaceChildren(...kids.map((n) => n.cloneNode(true)));
+      markDropped(res);
+      drawGroups(res);
+      if (drawSolver) drawSolver();
     }
     // Scores a category's drop rule leaves out are struck through and tagged, as Canvas does.
     // Worked out again on every What-If change, since a new score can change what is dropped.
-    const rowById = new Map();
-    function markDropped() {
-      const { dropped, marked } = data.dropInfo(g, inputs(), { allItems });
-      for (const [itemId, tr] of rowById) {
+    const rowById = new Map(); // item id -> { tr, tag: its .droptag }
+    function markDropped({ dropped, marked }) {
+      for (const [itemId, { tr, tag }] of rowById) {
         const on = dropped.has(itemId);
         tr.classList.toggle('dropped', on);
-        const tag = tr.querySelector('.droptag');
         tag.hidden = !on;
         tag.title = marked.has(itemId) ? 'Dropped by Brightspace' : 'Dropped by this group’s rule (worked out here)';
       }
@@ -882,8 +1002,8 @@
 
     // Category rows follow What-If: kept points and the category's grade as the total uses it.
     const groupCells = [];
-    function drawGroups() {
-      const results = whatIf.on && canEstimate ? data.groupResults(g, inputs(), { allItems }) : null;
+    function drawGroups(res) {
+      const results = whatIf.on && canEstimate ? res.groups : null;
       for (const { group, cells, actual } of groupCells) {
         const r = results && results.get(group);
         const texts = r && r.computed ? [num(r.points), num(r.points_possible), pct(r.score, r.possible)] : actual;
@@ -909,10 +1029,15 @@
         const v = i.value;
         const a = byItem.get(String(i.id));
         const possible = v ? v.points_possible : i.points_possible;
-        const pctCell = h('td', { class: 'num' }, v && v.score != null ? pct(v.score, v.points_possible) : outside.has(i.id) && possible > 0 ? pct(outside.get(i.id).score, possible) : (g.null_is_zero || (whatIf.on && data.estimable(g, i))) && possible > 0 ? '0%' : '');
+        const editable = whatIf.on && data.estimable(g, i);
+        const pctCell = h('td', { class: 'num' }, v && v.score != null ? pct(v.score, v.points_possible) : outside.has(i.id) && possible > 0 ? pct(outside.get(i.id).score, possible) : g.null_is_zero && possible > 0 ? '0%' : '');
         let scoreCell;
-        if (whatIf.on && data.estimable(g, i)) {
-          const input = h('input', { class: 'wi', type: 'number', min: '0', step: 'any', value: v && v.score != null ? String(v.score) : outside.has(i.id) ? String(+outside.get(i.id).score.toFixed(2)) : '0', 'aria-label': `What-If score for ${i.name}` });
+        if (editable) {
+          // Blank until typed in, as in Canvas; a score typed earlier survives a redraw.
+          const pctText = pctCell.textContent;
+          const typedBefore = whatIf.overrides.get(i.id);
+          const input = h('input', { class: typedBefore != null ? 'wi changed' : 'wi', type: 'number', min: '0', step: 'any', value: typedBefore != null ? String(typedBefore) : v && v.score != null ? String(v.score) : outside.has(i.id) ? String(+outside.get(i.id).score.toFixed(2)) : '', placeholder: allItems ? '0' : '–', 'aria-label': `What-If score for ${i.name}` });
+          if (typedBefore != null) pctCell.textContent = pct(typedBefore, possible);
           input.addEventListener('input', () => {
             const typed = input.value === '' ? null : Number(input.value);
             const valid = typed != null && Number.isFinite(typed);
@@ -920,7 +1045,7 @@
             if (changed) whatIf.overrides.set(i.id, typed);
             else whatIf.overrides.delete(i.id);
             input.classList.toggle('changed', changed);
-            pctCell.textContent = valid ? pct(typed, possible) : '';
+            pctCell.textContent = valid ? pct(typed, possible) : pctText;
             drawTotal();
           });
           scoreCell = h('td', { class: 'num' }, input);
@@ -932,21 +1057,22 @@
           const ungraded = !v || v.score == null;
           scoreCell = h('td', { class: 'num' }, h('span', { title: ungraded ? (g.null_is_zero ? 'Not graded yet; this course counts it as 0' : 'Not graded yet') : v.displayed || null }, scoreText(v, i)));
         }
-        flat.push({ i, a, el: null });
-        rows.push(flat[flat.length - 1].el = h('tr', null,
-          h('td', null, a ? h('a', { class: 't', href: itemHref(id, a) }, i.name) : h('span', { class: 't dark' }, i.name), i.bonus ? ui.tag('bonus') : null, i.excluded ? ui.tag('not counted') : null, a ? stateTag(id, a) : null, outside.has(i.id) ? h('span', { title: `Brightspace has not posted this score yet; this one is from ${outside.get(i.id).source}` }, ui.tag(`from ${outside.get(i.id).source}`)) : null, h('span', { class: 'droptag', hidden: true, title: 'Left out by this group’s drop rule' }, ui.tag('dropped')), v && v.comment ? h('div', { class: 'note' }, v.comment) : null),
+        const dropTag = h('span', { class: 'droptag', hidden: true, title: 'Left out by this group’s drop rule' }, ui.tag('dropped'));
+        const tr = h('tr', null,
+          h('td', null, a ? h('a', { class: 't', href: itemHref(id, a) }, i.name) : h('span', { class: 't dark' }, i.name), i.bonus ? ui.tag('bonus') : null, i.excluded ? ui.tag('not counted') : null, a ? stateTag(id, a) : null, outside.has(i.id) ? h('span', { title: `Brightspace has not posted this score yet; this one is from ${outside.get(i.id).source}` }, ui.tag(`from ${outside.get(i.id).source}`)) : null, dropTag, v && v.comment ? h('div', { class: 'note' }, v.comment) : null),
           h('td', { class: 'muted small nowrap' }, a && a.due_at ? when(a.due_at) : ''),
           scoreCell,
           h('td', { class: 'num' }, num(possible)),
-          pctCell));
-        rowById.set(i.id, flat[flat.length - 1].el);
+          pctCell);
+        flat.push({ i, a, el: tr, due: a && a.due_at ? Date.parse(a.due_at) : Infinity });
+        rows.push(tr);
+        rowById.set(i.id, { tr, tag: dropTag });
       }
     }
     drawTotal();
     // Arrange by group (with subtotals), or as one flat list by due date or title.
-    const dueOf = (x) => (x.a && x.a.due_at ? Date.parse(x.a.due_at) : Infinity);
-    const ordered = settings.gradeSort === 'due' ? flat.sort((x, y) => dueOf(x) - dueOf(y)).map((x) => x.el)
-      : settings.gradeSort === 'title' ? flat.sort((x, y) => x.i.name.localeCompare(y.i.name, undefined, { numeric: true })).map((x) => x.el)
+    const ordered = settings.gradeSort === 'due' ? flat.sort((x, y) => x.due - y.due).map((x) => x.el)
+      : settings.gradeSort === 'title' ? flat.sort((x, y) => byTitle(x.i.name, y.i.name)).map((x) => x.el)
       : rows;
     const arrange = h('select', { class: 'txt pick', 'aria-label': 'Arrange by' }, [['group', 'Arrange by Assignment Group'], ['due', 'Arrange by Due Date'], ['title', 'Arrange by Title']].map(([k, label]) => h('option', { value: k, selected: (settings.gradeSort || 'group') === k }, label)));
     arrange.addEventListener('change', () => {
@@ -961,11 +1087,72 @@
     const weights = weighted && g.groups.some((x) => x.name && x.weight != null)
       ? ui.sideSection('Assignments are weighted by group', h('table', { class: 'grid tight' }, h('thead', null, h('tr', null, h('th', null, 'Group'), h('th', { class: 'num' }, 'Weight'))), h('tbody', null, g.groups.filter((x) => x.name).map((x) => h('tr', null, h('td', null, x.name), h('td', { class: 'num' }, x.weight != null ? `${num(x.weight)}%` : ''))))))
       : null;
+    // "What do I need?": the score needed on remaining work for a target grade, solved over the
+    // same engine and inputs as the total (outside scores, What-If scores, graded-only), so it
+    // always matches the What-If total. The course's grade scheme is asked for only here.
+    const GT = BSX.gradetools;
+    const pool = canEstimate ? GT.solverTargets(g, { estimable: data.estimable, filled: base }) : null;
+    const solver = pool && pool.choices.length
+      ? ui.lazy(data.gradeScheme(id, g.scheme_id).catch(() => null), (scheme) => {
+        const scale = GT.gradeScale(scheme);
+        const st = whatIf.solver || (whatIf.solver = {});
+        const goals = scale.ranges.filter((r) => r.start > 0);
+        const now = data.estimate(g, inputs(), { allItems });
+        if (!st.goal || (st.goal !== 'custom' && !goals.some((r) => r.symbol === st.goal))) st.goal = GT.nextGoal(now ? (now.score / now.points_possible) * 100 : NaN, goals)?.symbol || 'custom';
+        if (!pool.choices.some((c) => c.key === st.target)) st.target = GT.defaultChoice(pool.choices).key;
+        const goalPick = h('select', { class: 'txt', 'aria-label': 'Target grade' }, goals.map((r) => h('option', { value: r.symbol, selected: st.goal === r.symbol }, `${r.symbol} (${num(r.start)}%)`)), h('option', { value: 'custom', selected: st.goal === 'custom' }, 'Custom percent…'));
+        const custom = h('input', { class: 'txt', type: 'number', min: '0', step: 'any', value: st.custom ?? '', placeholder: 'Percent, e.g. 85', 'aria-label': 'Target percent', hidden: st.goal !== 'custom', style: 'margin-top:6px' });
+        const targetPick = h('select', { class: 'txt', 'aria-label': 'Remaining work' }, pool.choices.map((c) => h('option', { value: c.key, selected: st.target === c.key }, c.label)));
+        const out = h('div', { 'aria-live': 'polite' });
+        drawSolver = () => {
+          const choice = pool.choices.find((c) => c.key === st.target) || pool.choices[0];
+          const range = goals.find((r) => r.symbol === st.goal);
+          const goal = range ? range.start : Number(st.custom);
+          if (!range && (st.custom == null || st.custom === '' || !Number.isFinite(goal) || goal <= 0)) return out.replaceChildren(h('p', { class: 'muted small' }, 'Type the percent you want.'));
+          const goalText = range ? `${range.symbol} (${num(range.start)}%)` : `${num(goal)}%`;
+          // A What-If score on the one item asked about is set aside; in a set of items, the ones
+          // with What-If scores keep them and the rest are solved for.
+          const wi = whatIf.on ? whatIf.overrides : new Map();
+          const ids = choice.ids.length > 1 ? choice.ids.filter((x) => !wi.has(x)) : choice.ids;
+          if (!ids.length) return out.replaceChildren(h('p', { class: 'muted small' }, 'Each of these has a What-If score. Clear one to work this out.'));
+          const targets = ids.map((x) => pool.byId.get(x));
+          const res = GT.solve({ estimate: (m) => data.estimate(g, m, { allItems }), targets, goal, base: inputs() });
+          const what = ids.length === choice.ids.length ? choice.what : ids.length === 1 ? targets[0].name : `the ${ids.length} items without a What-If score`;
+          const d = GT.describeSolve(res, { goalText, what, targets });
+          const notes = [
+            allItems ? 'Other ungraded work counts as 0 (“based only on graded assignments” is off).' : 'Other ungraded work is left out (“based only on graded assignments” is on).',
+            [...wi.keys()].some((x) => !ids.includes(x)) ? 'Your What-If scores are used.' : null,
+            choice.ids.length === 1 && wi.has(choice.ids[0]) ? 'Your What-If score for it is set aside here.' : null,
+          ];
+          out.replaceChildren(
+            h('div', { class: `banner solve ${d.tone}`, style: d.tone === 'ok' ? 'border-left-color:var(--ok)' : d.tone === 'no' ? 'border-left-color:var(--bad)' : null }, h('strong', null, d.head), d.lines.map((l) => h('div', { class: 'small' }, l))),
+            ...notes.filter(Boolean).map((n) => h('p', { class: 'muted small' }, n)));
+        };
+        goalPick.addEventListener('change', () => {
+          st.goal = goalPick.value;
+          custom.hidden = st.goal !== 'custom';
+          drawSolver();
+          if (!custom.hidden) custom.focus();
+        });
+        custom.addEventListener('input', () => { st.custom = custom.value; drawSolver(); });
+        targetPick.addEventListener('change', () => { st.target = targetPick.value; drawSolver(); });
+        drawSolver();
+        return ui.sideSection('What do I need?', [
+          h('label', { class: 'small', style: 'display:block;margin:6px 0' }, 'To get', goalPick),
+          custom,
+          h('label', { class: 'small', style: 'display:block;margin:6px 0' }, 'Score needed on', targetPick),
+          out,
+          h('p', { class: 'muted small' }, scale.note),
+        ]);
+      }, '')
+      : null;
+    const posted = GT.postedAgo(g.last_graded);
     return {
       body: [
         h('div', { class: 'dhead' }, h('h1', null, 'Grades'), h('div', { class: 'row' }, arrange, picker)),
+        posted ? h('p', { class: posted.stale ? 'lastposted stale' : 'lastposted', title: posted.title }, posted.text) : null,
         totalTop,
-        whatIf.on ? h('div', { class: 'banner' }, weighted ? 'What-If scores: type a score to see the effect. In a weighted gradebook only graded items can be changed.' : 'What-If scores: type a score to see the effect, including for work that is not graded yet.') : null,
+        whatIf.on ? h('div', { class: 'banner' }, weighted ? 'What-If scores: type a score to see the effect, including for work that is not graded yet. Blank grades stay out of the total until you type one. Items Brightspace gives no weight are locked; point at the lock to see why.' : 'What-If scores: type a score to see the effect, including for work that is not graded yet. Blank grades stay out of the total until you type one.') : null,
         table,
         gradescopeTable(course),
         h('p', { class: 'small' }, h('a', { href: bs.grades(id) }, 'Open Grades in Brightspace')),
@@ -974,11 +1161,12 @@
         totalBox,
         canEstimate ? ui.button(whatIf.on ? 'Revert to Actual Scores' : 'Show What-If Scores', () => { whatIf.on = !whatIf.on; whatIf.overrides = new Map(); ui.render(); }, 'wide') : null,
         canEstimate
-          ? h('label', { class: 'calrow', style: anyExcluded ? null : 'margin-bottom:22px' }, h('input', { type: 'checkbox', checked: !allItems, disabled: whatIf.on, title: whatIf.on ? 'What-If counts blank grades as 0' : null, onchange: (ev) => { whatIf.allItems = !ev.target.checked; ui.render(); } }), 'Calculate based only on graded assignments')
+          ? h('label', { class: 'calrow', style: anyExcluded ? null : 'margin-bottom:22px' }, h('input', { type: 'checkbox', checked: !allItems, onchange: (ev) => { whatIf.allItems = !ev.target.checked; ui.render(); } }), 'Calculate based only on graded assignments')
           : null,
         canEstimate && anyExcluded
           ? h('label', { class: 'calrow', style: 'margin-bottom:22px', title: 'Brightspace leaves these out of its own total; some courses count them anyway' }, h('input', { type: 'checkbox', checked: g.count_excluded, onchange: (ev) => { settings.countExcluded = ev.target.checked; ui.saveSettings(); ui.render(); } }), 'Count items marked “not counted”')
           : null,
+        solver,
         weights,
         ui.lazy(data.externalTools(id), (tools) => tools.length ? ui.sideSection('Graded elsewhere', [h('p', { class: 'muted small' }, 'Some work in this course is graded in an external tool and may not appear here.'), tools.map((t) => h('a', { class: 'sidelink', href: courseHref(id, 'modules', t.id) }, t.title, ' ', ic('external', 13)))]) : null, ''),
       ],
@@ -1005,7 +1193,7 @@
     const rows = list.map((f) => [h('tr', null, h('td', null, ic('file', 18), ' ', h('a', { href: courseHref(course.id, 'modules', f.id) }, f.title)), h('td', { class: 'muted' }, f.module), h('td', { class: 'muted small nowrap' }, f.updated_at ? ui.fmt.short.format(new Date(f.updated_at)) : '')), `${f.title} ${f.module}`]);
     return {
       body: [
-        h('div', { class: 'toolbar' }, ui.filterBox('Search files', rows)),
+        h('div', { class: 'toolbar' }, ui.filterBox('Search files', rows), BSX.zip ? BSX.zip.courseButton(course) : null),
         h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Module'), h('th', null, 'Date Modified'))), h('tbody', null, rows.map((x) => x[0]))),
       ],
     };
@@ -1014,13 +1202,13 @@
   async function syllabus(course) {
     const [s, work, fileList, tool] = await Promise.all([data.syllabus(course.id).catch(() => null), data.assignments(course.id).catch(() => []), data.files(course.id).catch(() => []), data.syllabusLink(course.id).catch(() => null)]);
     const docs = fileList.filter((f) => /syllabus|schedule/i.test(f.title));
-    const dated = work.filter((a) => a.due_at).sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at));
+    const dated = work.filter((a) => a.due_at).map((a) => [Date.parse(a.due_at), a]).sort((x, y) => x[0] - y[0]).map(([, a]) => a);
     const launch = tool ? ui.safeHref(tool.url) : null;
     const overview = s && (s.html || s.text) ? prose(s.html, s.text) : null;
     return {
       body: [
         h('div', { class: 'dhead' }, h('h1', null, 'Course Syllabus'), launch ? h('a', { class: 'btn', href: launch, target: '_blank', rel: 'noopener' }, 'Open in a new tab ', ic('external', 14)) : null),
-        // The school's syllabus tool (Simple Syllabus at Purdue), shown in place.
+        // The school's syllabus tool (for example Simple Syllabus), shown in place.
         launch ? h('iframe', { class: 'viewer', src: launch, title: tool.title || 'Syllabus', referrerpolicy: 'same-origin' }) : null,
         overview ? [launch ? h('h2', { class: 'sect' }, 'Course overview') : null, overview] : launch ? null : h('p', { class: 'muted' }, 'This course has no syllabus tool or overview text in Brightspace.'),
         docs.length ? [h('h2', { class: 'sect' }, 'Syllabus files'), h('ul', { class: 'filelist' }, docs.map((f) => h('li', null, ic('file', 16), ' ', h('a', { href: courseHref(course.id, 'modules', f.id) }, f.title))))] : null,

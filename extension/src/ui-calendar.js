@@ -25,7 +25,8 @@
     const outside = (await ui.externalWork(shown).catch(() => []))
       .filter((i) => i.due_at && Date.parse(i.due_at) >= gridStart.getTime() && Date.parse(i.due_at) <= gridEnd.getTime())
       .map((i) => ({ external: i, title: i.name, course_id: i.course_id, start_at: i.due_at, all_day: false }));
-    const events = [...fetched, ...mine, ...outside].sort((a, b) => Date.parse(a.start_at) - Date.parse(b.start_at));
+    // Each start parsed once, rather than in every comparison.
+    const events = [...fetched, ...mine, ...outside].map((e) => [Date.parse(e.start_at), e]).sort((a, b) => a[0] - b[0]).map(([, e]) => e);
 
     const byDay = new Map();
     for (const e of events) {
@@ -68,29 +69,43 @@
     }
 
     const link = (d) => `#/calendar/${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const pick = (key, text) => h('button', { type: 'button', class: mode === key ? 'on' : null, onclick: () => { mode = key; ui.render(); } }, text);
+    // Month and Agenda show the same events, so switching redraws just the calendar and these
+    // buttons, without fetching everything again for a whole new page.
+    const pick = (key, text) => h('button', { type: 'button', class: mode === key ? 'on' : null, onclick: (ev) => {
+      mode = key;
+      const old = [body].flat();
+      if (!old[0]?.isConnected) return ui.render();
+      for (const b of ev.currentTarget.parentNode.children) b.classList.toggle('on', b === ev.currentTarget);
+      body = [buildBody()].flat();
+      old[0].before(...body);
+      for (const n of old) n.remove();
+    } }, text);
     const actions = h('div', { class: 'calnav' },
       h('button', { class: 'btn', type: 'button', onclick: () => ui.todoDialog(null, listed) }, ic('plus', 16), 'To Do'),
       h('a', { class: 'btn', href: '#/calendar' }, 'Today'),
       h('a', { class: 'btn icon', href: link(new Date(year, month - 1, 1)), 'aria-label': 'Previous month' }, ic('left', 16)),
       h('a', { class: 'btn icon', href: link(new Date(year, month + 1, 1)), 'aria-label': 'Next month' }, ic('right', 16)),
-      h('div', { class: 'seg' }, pick('month', 'Month'), pick('agenda', 'Agenda')));
+      h('div', { class: 'seg' }, pick('month', 'Month'), pick('agenda', 'Agenda')),
+      ui.icsButton ? ui.icsButton(listed) : null);
 
-    let body;
-    if (mode === 'agenda') {
-      const days = [...byDay.entries()].filter(([, list]) => list.some((e) => new Date(e.start_at).getMonth() === month));
-      body = days.length
-        ? days.map(([k, list]) => h('section', { class: k === ui.dayKey(today) ? 'pday today' : 'pday' }, h('h2', null, ui.fmt.day.format(new Date(list[0].start_at))), list.map((e) => h('div', { class: 'agrow' }, eventEl(e, true)))))
-        : ui.empty('Nothing on the calendar this month.');
-    } else {
+    const todayKey = ui.dayKey(today);
+    const buildBody = () => {
+      if (mode === 'agenda') {
+        const days = [...byDay.entries()].filter(([, list]) => list.some((e) => new Date(e.start_at).getMonth() === month));
+        return days.length
+          ? days.map(([k, list]) => h('section', { class: k === todayKey ? 'pday today' : 'pday' }, h('h2', null, ui.fmt.day.format(new Date(list[0].start_at))), list.map((e) => h('div', { class: 'agrow' }, eventEl(e, true)))))
+          : ui.empty('Nothing on the calendar this month.');
+      }
       const cells = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((n) => h('div', { class: 'dow' }, n));
       for (let i = 0; i < 42; i++) {
         const d = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
-        const cls = ['day', d.getMonth() !== month ? 'other' : '', ui.dayKey(d) === ui.dayKey(today) ? 'today' : ''].filter(Boolean).join(' ');
-        cells.push(h('div', { class: cls }, h('div', { class: 'dnum' }, d.getDate()), (byDay.get(ui.dayKey(d)) || []).map((e) => eventEl(e, false))));
+        const k = ui.dayKey(d);
+        const cls = ['day', d.getMonth() !== month ? 'other' : '', k === todayKey ? 'today' : ''].filter(Boolean).join(' ');
+        cells.push(h('div', { class: cls }, h('div', { class: 'dnum' }, d.getDate()), (byDay.get(k) || []).map((e) => eventEl(e, false))));
       }
-      body = h('div', { class: 'cal' }, cells);
-    }
+      return h('div', { class: 'cal' }, cells);
+    };
+    let body = buildBody();
 
     const toggle = (c) => {
       const box = h('input', { type: 'checkbox', checked: !hidden.has(c.id) });

@@ -94,6 +94,23 @@ const assert = require('assert');
   assert.strictEqual(g.groups[0].value.score, 12);
   assert.strictEqual(g.groups[1].name, null);
   assert.strictEqual(g.groups[1].items[0].value, null);
+  // A refused answer (the final grade, 404 here) is kept like any other until the cache expires.
+  const beforeAgain = calls.length;
+  await data.grades(10);
+  assert.strictEqual(calls.length, beforeAgain, 'refused answers are not asked for again');
+  // The newest real grade's date: category totals (type 9) and empty rows don't count, and
+  // lastGraded reuses the grade values already read.
+  assert.strictEqual(g.last_graded, null, 'no dates given');
+  assert.strictEqual(await data.lastGraded(10), null);
+  assert.strictEqual(calls.length, beforeAgain, 'lastGraded asks for nothing new');
+  assert.strictEqual(data.newestGraded([
+    { GradeObjectType: 1, PointsNumerator: 5, LastModified: '2026-10-01T10:00:00Z' },
+    { GradeObjectType: 1, PointsNumerator: 7, LastModified: '2026-10-05T10:00:00Z' },
+    { GradeObjectType: 9, PointsNumerator: 12, LastModified: '2026-10-09T10:00:00Z' },
+    { GradeObjectType: 1, PointsNumerator: null, DisplayedGrade: '', LastModified: '2026-10-08T10:00:00Z' }]), '2026-10-05T10:00:00Z');
+  // The grade scheme id comes from the setup (none given here); courseTotals rows carry it too.
+  assert.strictEqual(g.scheme_id, null);
+  assert.strictEqual(data.knownScheme(10, null), null);
 
   // What-If: HW1 8 -> 10, and a score for the ungraded Final (points gradebook).
   const hyp = data.estimate(g, new Map([[100, 10], [102, 90]]));
@@ -163,6 +180,14 @@ const assert = require('assert');
   // Changing the dropped item itself brings it back, and the lowest score in play is dropped instead.
   const swapped = data.dropInfo(marked, new Map([[2, 10]]));
   assert.deepStrictEqual([Array.from(swapped.dropped), Array.from(swapped.marked)], [[1], []]);
+  // results() gives estimate(), dropInfo() and groupResults() from one tally.
+  for (const [book, ov] of [[marked, new Map([[2, 10]])], [wdrop, new Map([[1, 10]])], [wdrop, new Map()]]) {
+    const r = data.results(book, ov, { allItems: true });
+    assert.deepStrictEqual(r.estimate, data.estimate(book, ov, { allItems: true }));
+    const di = data.dropInfo(book, ov, { allItems: true });
+    assert.deepStrictEqual([Array.from(r.dropped), Array.from(r.marked)], [Array.from(di.dropped), Array.from(di.marked)]);
+    assert.deepStrictEqual([...r.groups.values()], [...data.groupResults(book, ov, { allItems: true }).values()]);
+  }
 
   // Brightspace drops with no lowest-N rule (attendance zeros marked "Dropped!"): editing another
   // score must not bring the zeros back as 0s.
@@ -443,5 +468,14 @@ const assert = require('assert');
   assert.strictEqual(redraws, 1, 'one redraw once the real answer arrived');
   assert.strictEqual((await ctx2.BSX.data.me()).name, 'A');
   assert.ok(written && written[savedKey].entries['/d2l/api/lp/1.64/users/whoami'].json.includes('"A"'), 'real answer saved for next time');
+  assert.ok(written[savedKey].entries['/d2l/api/versions/'], 'an unchanged answer stays saved');
+  // Signing out drops the saved answers, the What's New snapshots, the reminder hand-off and
+  // what the Edfinity reader kept.
+  let removed = null;
+  ctx2.chrome.storage.local.remove = async (keys) => (removed = keys);
+  ctx2.BSX.client.forget();
+  assert.deepStrictEqual([...removed], ['bsxSeen:x.brightspace.com', 'bsxDeadlines', 'bsxNotified', 'bsxNotifyUrls', 'bsxEdfinity']);
+  await new Promise((r) => setTimeout(r, 1100));
+  assert.deepStrictEqual(Object.keys(written[savedKey].entries), [], 'saved answers cleared');
   console.log('data tests ok,', calls.length, 'requests');
 })().catch((e) => { console.error('DATA TESTS FAILED', e); process.exit(1); });

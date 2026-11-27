@@ -89,6 +89,15 @@ BSX.data = (() => {
       graded_at: v.LastModified || null,
     };
 
+  // When the newest real grade item (types 1-4, not a category total or calculated row) was
+  // graded: an ISO date, or null. From grade values already read for Grades and Recent Feedback.
+  const newestGraded = (values) =>
+    (values || []).reduce((m, v) => {
+      const real = (v.GradeObjectType == null || v.GradeObjectType <= 4) && (v.PointsNumerator != null || v.DisplayedGrade);
+      return real && v.LastModified && (!m || Date.parse(v.LastModified) > Date.parse(m)) ? v.LastModified : m;
+    }, null);
+  const lastGraded = async (ou) => newestGraded(await gradeValues(ou));
+
   // ---- assignments, quizzes, discussions -----------------------------------
   // Dropbox SubmissionType: 0 file, 1 text, 2 on paper, 3 observed in person, 4 file or text.
   // SubmissionsRule: 2 keep all, 3 overwrite, 4 only one.
@@ -312,7 +321,7 @@ BSX.data = (() => {
     return { known: true, attempts_used: finished.length, in_progress: mine.length - finished.length };
   }
 
-  // Where the attempts list is refused to students (as at Purdue), Brightspace's own quiz
+  // Where the attempts list is refused to students (as at some schools), Brightspace's own quiz
   // summary page still states the attempts allowed, completed and remaining. Read that
   // page's text; opening it does not start an attempt.
   function parseQuizSummary(html) {
@@ -350,8 +359,11 @@ BSX.data = (() => {
     return parseQuizSummary(html);
   }
 
-  async function quiz(ou, quizId) {
-    const [qs, values, attempts] = await Promise.all([quizList(ou), gradeValues(ou), quizAttempts(ou, quizId).catch(() => ({ known: false, attempts_used: 0 }))]);
+  // `attempts: false` skips the attempt count, which costs two live requests (the attempts list,
+  // then Brightspace's summary page) that are never kept; deep search does not need it.
+  async function quiz(ou, quizId, { attempts: withAttempts = true } = {}) {
+    const unknown = { known: false, attempts_used: 0 };
+    const [qs, values, attempts] = await Promise.all([quizList(ou), gradeValues(ou), withAttempts ? quizAttempts(ou, quizId).catch(() => unknown) : unknown]);
     const q = qs.find((x) => sameId(x.QuizId, quizId));
     if (!q) return null;
     const v = values.find((x) => sameId(x.GradeObjectIdentifier, q.GradeItemId));
@@ -389,9 +401,10 @@ BSX.data = (() => {
 
   // One discussion topic with its posts.
   async function discussion(ou, topicId) {
+    const whoami = client.lp('users/whoami').catch(() => null); // asked alongside the topic list
     const t = (await topicList(ou)).find((x) => sameId(x.TopicId, topicId));
     if (!t) return null;
-    const [raw, who] = await Promise.all([topicPosts(ou, t.ForumId, t.TopicId), client.lp('users/whoami').catch(() => null)]);
+    const [raw, who] = await Promise.all([topicPosts(ou, t.ForumId, t.TopicId), whoami]);
     const posts = raw
       .filter((p) => !p.IsDeleted)
       .map((p) => ({
@@ -615,7 +628,8 @@ BSX.data = (() => {
       groups.set(c.Id, g);
     }
     // null_is_zero: the course counts an empty grade as 0 (Brightspace's "treat ungraded as 0").
-    const result = { system: setup?.GradingSystem || null, null_is_zero: Boolean(setup?.IsNullGradeZero), final: toValue(final) || null, estimate: null, groups: [...groups.values()] };
+    // scheme_id: the course's grade scheme, for gradeScheme(). last_graded: see newestGraded.
+    const result = { system: setup?.GradingSystem || null, null_is_zero: Boolean(setup?.IsNullGradeZero), final: toValue(final) || null, estimate: null, groups: [...groups.values()], scheme_id: setup?.DefaultGradeSchemeId ?? null, last_graded: newestGraded(values) };
     result.estimate = estimate(result);
     return result;
   }
@@ -692,7 +706,17 @@ BSX.data = (() => {
       // A weighted category counts for its whole weight: its grade (kept score over kept share)
       // times the weight, as Brightspace works it out, however many of its items are graded.
       const add = (gs, gp, computed, points, pointsPossible) => {
-        if (!(gp > 0)) return;
+        if (!(gp > 0)) {
+          // Only bonus items: as Brightspace counts them, what they earn goes on top of the total
+          // and adds nothing to what is possible: their points (Points), or their weight for an
+          // item outside any category (Weighted). How a weighted category of only bonus items
+          // applies its weight is not known here, so such a category is still left out.
+          if (gs > 0 && (g.system === 'Points' || !group.name)) {
+            score += gs;
+            perGroup.set(group, { score: gs, possible: 0, points, points_possible: pointsPossible, computed });
+          }
+          return;
+        }
         const norm = g.system === 'Weighted' && group.name && group.weight > 0 ? group.weight / gp : 1;
         score += gs * norm;
         possible += gp * norm;
@@ -791,6 +815,13 @@ BSX.data = (() => {
   // points, points_possible, computed }).
   const groupResults = (g, overrides = new Map(), opts = {}) => tally(g, overrides, opts).groups;
 
+  // estimate(), dropInfo() and groupResults() from one tally, for a What-If redraw that needs
+  // all three: { estimate, dropped, marked, groups }.
+  function results(g, overrides = new Map(), opts = {}) {
+    const t = tally(g, overrides, opts);
+    return { estimate: t.possible > 0 ? { score: t.score, points_possible: t.possible } : null, dropped: t.dropped, marked: t.marked, groups: t.groups };
+  }
+
   // A category's drop rule in words, e.g. "lowest 2 dropped".
   const dropRule = (group) => [group.drop_lowest ? `lowest ${group.drop_lowest} dropped` : null, group.drop_highest ? `highest ${group.drop_highest} dropped` : null].filter(Boolean).join(', ');
 
@@ -799,11 +830,29 @@ BSX.data = (() => {
     return Promise.all(
       courseList.map((c) =>
         grades(c.id)
-          .then((g) => ({ course_id: c.id, final: g.final, estimate: g.estimate }))
-          .catch(() => ({ course_id: c.id, final: null, estimate: null }))
+          .then((g) => ({ course_id: c.id, final: g.final, estimate: g.estimate, last_graded: g.last_graded, scheme_id: g.scheme_id }))
+          .catch(() => ({ course_id: c.id, final: null, estimate: null, last_graded: null }))
       )
     );
   }
+
+  // A course's grade scheme (letter cut-offs), when students may read it: { name, ranges:
+  // [{ symbol, start }] } with the highest start first, or null. Asked only when wanted (the
+  // final-grade solver), not with grades(), so it adds no request to an ordinary page.
+  const schemesSeen = new Map(); // `${ou}/${id}` -> the answer, for knownScheme
+  async function gradeScheme(ou, id) {
+    if (id == null) return null;
+    const s = await soft(client.le(`${ou}/grades/schemes/${id}`), null).catch(() => null);
+    const ranges = (s && Array.isArray(s.Ranges) ? s.Ranges : [])
+      .filter((r) => r && r.Symbol != null && String(r.Symbol).trim() && Number.isFinite(Number(r.PercentStart)))
+      .map((r) => ({ symbol: String(r.Symbol).trim(), start: Number(r.PercentStart) }))
+      .sort((a, b) => b.start - a.start);
+    const out = ranges.length >= 2 ? { name: s.Name || '', ranges } : null;
+    schemesSeen.set(`${ou}/${id}`, out);
+    return out;
+  }
+  // A scheme gradeScheme() has already read on this page (null or undefined otherwise); never asks.
+  const knownScheme = (ou, id) => (id == null ? null : schemesSeen.get(`${ou}/${id}`) ?? null);
 
   // ---- announcements -------------------------------------------------------
   async function announcements(ou) {
@@ -937,7 +986,7 @@ BSX.data = (() => {
     return out;
   }
 
-  // The course's syllabus tool (Purdue uses Simple Syllabus): a Content link or tool named
+  // The course's syllabus tool (for example Simple Syllabus): a Content link or tool named
   // "syllabus" first, then the course navigation bar.
   async function syllabusLink(ou) {
     const items = (await modules(ou)).flatMap((m) => m.items).filter((i) => /syllabus/i.test(i.title) && (i.type === 'External tool' || i.type === 'Link'));
@@ -1056,7 +1105,7 @@ BSX.data = (() => {
     courses, orgId, me, updates,
     assignments, assignmentGroups, assignment, submission, canSubmit, submit, quiz, quizAttempts, parseQuizSummary, discussions, discussion, post,
     todo, planner, tasks, overdue, recentFeedback,
-    grades, estimate, dropped, dropInfo, groupResults, dropRule, estimable, whyNot, courseTotals,
+    grades, estimate, dropped, dropInfo, groupResults, results, dropRule, estimable, whyNot, courseTotals, gradeScheme, knownScheme, lastGraded, newestGraded,
     announcements, recentAnnouncements,
     modules, externalTools, files, syllabus, syllabusLink, notificationsLink, homeLinks, courseTools, people, groups,
     calendar,

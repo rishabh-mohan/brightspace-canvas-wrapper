@@ -12,6 +12,9 @@
   // ---- sidebar shared by the dashboard and course home ----------------------
   const titleOf = (i, courses) => ui.itemLink(i, courses);
   const tint = (id) => (id == null ? 'var(--muted)' : colorOf(id));
+  // Sorted by the date in field `key` (newest first with `desc`), each date parsed once rather
+  // than in every comparison.
+  const byDate = (list, key, desc = false) => list.map((x) => [Date.parse(x[key]), x]).sort((a, b) => (desc ? b[0] - a[0] : a[0] - b[0])).map(([, x]) => x);
 
   function todoRow(i, courseLabel, late, courses) {
     const points = i.points_possible != null ? `${num(i.points_possible)} points · ` : '';
@@ -85,7 +88,38 @@
     return h('div', { class: 'edit' },
       h('label', null, 'Nickname', nick),
       h('label', null, 'Colour', h('div', { class: 'swatches' }, swatches)),
-      h('div', { class: 'row' }, ui.button('Apply', save, 'primary'), ui.button('Reset', () => done(null)), ui.button('Cancel', () => { editing = null; ui.render(); })));
+      h('div', { class: 'row' }, ui.button('Apply', save, 'primary'), ui.button('Reset', () => done(null)), ui.button('Cancel', () => editCard(null))));
+  }
+
+  // Opening or closing a card's editor redraws just the cards involved (nothing else on the
+  // page changes), instead of the whole Dashboard with its sidebar.
+  const cardEls = new Map(); // course id -> [course, its card element]
+  function editCard(id) {
+    const was = editing;
+    editing = id;
+    for (const k of new Set([was, id])) {
+      const got = k == null ? null : cardEls.get(k);
+      if (got && got[1].isConnected) got[1].replaceWith(card(got[0]));
+      else if (k != null) return ui.render();
+    }
+  }
+
+  // When the course's newest grade was posted, as a quiet line under the code (red once it is
+  // stale). It reads the myGradeValues the Recent Feedback sidebar already asks for (cached), so
+  // it adds no request and fills in after the card has drawn.
+  function lastPosted(c) {
+    const G = BSX.gradetools;
+    if (!G || !G.postedAgo || !data.lastGraded) return null;
+    const line = h('span', { class: 'lastposted', hidden: true });
+    data.lastGraded(c.id).then((iso) => {
+      const p = G.postedAgo(iso);
+      if (!p) return;
+      line.textContent = p.text.replace('Last grade posted', 'Last grade');
+      line.title = p.title;
+      line.classList.toggle('stale', p.stale);
+      line.hidden = false;
+    }).catch(() => {});
+    return line;
   }
 
   function card(c) {
@@ -107,17 +141,19 @@
     const body = editing === c.id
       ? cardEditor(c)
       : [
-          h('a', { class: 'text', href: courseHref(c.id), title: name === c.name ? name : `${name} (${c.name})` }, h('span', { class: 'name', style: `--c:${colorOf(c.id)}` }, name), h('span', { class: 'code' }, c.course_code)),
+          h('a', { class: 'text', href: courseHref(c.id), title: name === c.name ? name : `${name} (${c.name})` }, h('span', { class: 'name', style: `--c:${colorOf(c.id)}` }, name), h('span', { class: 'code' }, c.course_code, BSX.whatsnew ? BSX.whatsnew.cardBadge(c) : null), lastPosted(c)),
           h('div', { class: 'cardics' },
             action('announcements', 'announcement', 'Announcements'),
             action('assignments', 'assignment', 'Assignments', (u) => u.feedback),
             action('discussions', 'discussion', 'Discussions', (u) => u.discussions),
             action('files', 'file', 'Files')),
         ];
-    return h('div', { class: 'card' },
+    const el = h('div', { class: 'card' },
       h('a', { class: 'hero', href: courseHref(c.id), style: `background:${colorOf(c.id)}`, 'aria-label': name }, img),
-      h('button', { class: 'more', type: 'button', title: 'Nickname and colour', 'aria-label': `Nickname and colour for ${name}`, onclick: () => { editing = editing === c.id ? null : c.id; ui.render(); } }, ic('dots', 20)),
+      h('button', { class: 'more', type: 'button', title: 'Nickname and colour', 'aria-label': `Nickname and colour for ${name}`, onclick: () => editCard(editing === c.id ? null : c.id) }, ic('dots', 20)),
       body);
+    cardEls.set(c.id, [c, el]);
+    return el;
   }
 
   // ---- list view (planner) ---------------------------------------------------
@@ -129,7 +165,7 @@
     const to = start.getTime() + 28 * ui.DAY;
     const outside = ui.externalWork(courses).then((list) => list.filter((i) => i.due_at && Date.parse(i.due_at) >= from && Date.parse(i.due_at) <= to)).catch(() => []);
     return ui.lazy(Promise.all([data.planner(courses, from, to), outside]), ([fetched, ext]) => {
-      const items = [...fetched, ...ext, ...ui.personalItems(from, to, null)].sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at));
+      const items = byDate([...fetched, ...ext, ...ui.personalItems(from, to, null)], 'due_at');
       if (!items.length) return ui.empty('Nothing due in the last week or the next four.');
       const days = new Map();
       for (const i of items) {
@@ -176,21 +212,30 @@
   }
 
   // ---- recent activity -------------------------------------------------------
-  function activityView(courses) {
+  // `fresh` (the Dashboard's): What's New on top, and the stream leaves out what it lists.
+  function activityView(courses, { fresh = false } = {}) {
     const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
     const since = Date.now() - 21 * ui.DAY;
-    return ui.lazy(Promise.all([data.recentAnnouncements(courses, 21), data.recentFeedback(courses, 21), ui.outsideAnnouncements(courses)]), ([news, feedback, eds]) => {
-      const rows = [
-        ...news.map((a) => ({ at: a.posted_at, icon: 'announcement', title: a.title, href: courseHref(a.course_id, 'announcements', a.id), course: a.course_id, kind: 'Announcement', text: ui.clip(ui.plainOf(a.message_html, a.message), 160) })),
+    const W = fresh ? BSX.whatsnew : null;
+    // The stream waits for What's New at most 1.5 s; rows it lists later are taken out then.
+    const above = W ? W.load(courses).then((r) => W.listed(r.items)).catch(() => new Set()) : null;
+    const quick = above ? Promise.race([above, new Promise((res) => setTimeout(() => res(null), 1500))]) : new Set();
+    const stream = ui.lazy(Promise.all([data.recentAnnouncements(courses, 21), data.recentFeedback(courses, 21), ui.outsideAnnouncements(courses), quick]), ([news, feedback, eds, got]) => {
+      const listed = got || new Set();
+      const rows = byDate([
+        ...news.filter((a) => !listed.has(`news:${a.course_id}:${a.id}`)).map((a) => ({ at: a.posted_at, icon: 'announcement', title: a.title, href: courseHref(a.course_id, 'announcements', a.id), course: a.course_id, kind: 'Announcement', wn: `news:${a.course_id}:${a.id}`, text: ui.clip(ui.plainOf(a.message_html, a.message), 160) })),
         ...eds.filter((a) => a.posted_at && Date.parse(a.posted_at) >= since).map((a) => ({ at: a.posted_at, icon: 'announcement', title: a.title, href: a.html_url, external: true, course: a.course_id, kind: 'Ed announcement', text: ui.clip(a.message, 160) })),
-        ...feedback.map((f) => ({ at: f.grade.graded_at, icon: 'check', title: f.title, href: courseHref(f.course_id, 'grades'), course: f.course_id, kind: 'Grade', text: `${num(f.grade.score)} out of ${num(f.grade.points_possible)}${f.grade.comment ? ` · ${ui.clip(f.grade.comment, 100)}` : ''}` })),
-      ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-      if (!rows.length) return ui.empty('No recent announcements or grades.');
-      return h('div', { class: 'stream' }, rows.map((r) => h('div', { class: 'srow' },
+        ...feedback.filter((f) => !listed.has(`grade:${f.course_id}:${f.id}`)).map((f) => ({ at: f.grade.graded_at, icon: 'check', title: f.title, href: courseHref(f.course_id, 'grades'), course: f.course_id, kind: 'Grade', wn: `grade:${f.course_id}:${f.id}`, text: `${num(f.grade.score)} out of ${num(f.grade.points_possible)}${f.grade.comment ? ` · ${ui.clip(f.grade.comment, 100)}` : ''}` })),
+      ], 'at', true);
+      if (!rows.length) return ui.empty(listed.size ? 'No other recent announcements or grades.' : 'No recent announcements or grades.');
+      const box = h('div', { class: 'stream' }, rows.map((r) => h('div', { class: 'srow', 'data-wn': W ? r.wn : null },
         h('span', { class: 'todoic', style: `color:${colorOf(r.course)}` }, ic(r.icon, 22)),
         h('div', { class: 'pmid' }, h('div', { class: 'ctx', style: `--c:${colorOf(r.course)}` }, `${r.kind} · ${names.get(r.course) || ''}`), r.external ? h('a', { class: 't', href: r.href, target: '_blank', rel: 'noopener noreferrer' }, r.title, ' ', ic('external', 12)) : h('a', { class: 't', href: r.href }, r.title), r.text ? h('div', { class: 'muted small' }, r.text) : null),
         h('div', { class: 'muted small nowrap' }, when(r.at)))));
+      if (above && !got) above.then((late) => box.querySelectorAll('[data-wn]').forEach((el) => late.has(el.dataset.wn) && el.remove()));
+      return box;
     });
+    return W ? [W.section(courses), stream] : stream;
   }
 
   ui.activityView = activityView; // also a course's own Recent Activity
@@ -273,7 +318,13 @@
     const label = settings.threeDay
       ? taskView.week === 0 ? 'Next 3 days' : `${ui.fmt.short.format(start)} – ${ui.fmt.short.format(new Date(end - 1))}`
       : taskView.week === 0 ? 'This week' : taskView.week === -1 ? 'Last week' : taskView.week === 1 ? 'Next week' : `${ui.fmt.short.format(start)} – ${ui.fmt.short.format(new Date(end - 1))}`;
-    const shift = (d) => () => { taskView.week += d; taskView.all = false; ui.render(); };
+    // A different week needs only this panel drawn again, not the whole Dashboard.
+    const shift = (d) => () => {
+      taskView.week += d;
+      taskView.all = false;
+      if (section.isConnected) section.replaceWith(tasksPanel(courses));
+      else ui.render();
+    };
     const head = h('div', { class: 'tkhead' },
       h('button', { class: 'iconbtn xs', type: 'button', 'aria-label': `Previous ${unit === 'week' ? 'week' : '3 days'}`, onclick: shift(-1) }, ic('left', 16)),
       h('span', { class: 'tkweek' }, label),
@@ -284,13 +335,14 @@
     const mine = ui.personalItems(start.getTime(), end.getTime(), null).map((t) => ({ ...t, base: false, done: ui.isDone(t) }));
     const outside = ui.externalWork(courses).then((items) => items.filter((i) => i.due_at && Date.parse(i.due_at) >= start && Date.parse(i.due_at) < end).map((i) => ({ ...i, base: Boolean(i.submitted || i.grade), done: Boolean(i.submitted || i.grade) || ui.isDone(i) }))).catch(() => []);
     const all = Promise.all([data.tasks(courses, start.getTime(), end.getTime() - 1), outside]).then(([work, ext]) =>
-      [...work.map((a) => ({ ...a, base: a.done, done: a.done || ui.isDone(a) })), ...ext, ...mine].filter((i) => !ui.isDismissed(i)).sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at)));
+      byDate([...work.map((a) => ({ ...a, base: a.done, done: a.done || ui.isDone(a) })), ...ext, ...mine].filter((i) => !ui.isDismissed(i)), 'due_at'));
 
     // Ticking a task or switching tabs repaints this panel only, from the week's data
     // already loaded, so the rest of the page is left alone. The rings move from their last
     // value instead of refilling from empty.
     let items = [];
     let lastRings = [];
+    const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
     const panel = h('div');
     const repaint = () => panel.replaceChildren(...[paint(items)].flat(Infinity).filter(Boolean));
     const body = ui.lazy(all, (list) => {
@@ -308,7 +360,6 @@
         c.total++;
         if (i.done) c.done++;
       }
-      const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
       const done = items.filter((i) => i.done).length;
       // Every task of the week done: confetti, once per week (remembered in preferences).
       const weekKey = ui.dayKey(start);
@@ -363,7 +414,8 @@
       null,
       ...[[0, 'Show All Tasks'], [10, 'Show 10 Tasks'], [5, 'Show 5 Tasks']].map(([n, text]) => ({ label: text, on: (settings.taskLimit || 0) === n, onclick: () => { settings.taskLimit = n; taskView.all = false; ui.saveSettings(); ui.render(); } })),
     ]);
-    return ui.sideSection(['Tasks', h('span', { class: 'tkact' }, add, options)], [head, body]);
+    const section = ui.sideSection(['Tasks', h('span', { class: 'tkact' }, add, options)], [head, body]);
+    return section;
   }
 
   // ---- pages ---------------------------------------------------------------
@@ -376,7 +428,7 @@
     const pick = (key, label) => ({ label, on: mode === key, onclick: () => { settings.dash = key; listSeen = false; ui.saveSettings(); ui.render(); } });
     const overlay = settings.overlay !== false;
     const actions = [
-      h('button', { class: 'btn', type: 'button', title: 'Search all courses (s or Ctrl+K)', onclick: () => ui.searchDialog() }, ic('search', 16), 'Search'),
+      h('button', { class: 'btn', type: 'button', title: 'Search all courses (s)', onclick: () => ui.searchDialog() }, ic('search', 16), 'Search'),
       h('button', { class: 'btn', type: 'button', onclick: () => ui.todoDialog(null, visible) }, ic('plus', 16), 'To Do'),
       ui.menu('Dashboard Options', [
         { label: 'Tasks Panel', on: Boolean(settings.tasks), onclick: () => { settings.tasks = !settings.tasks; ui.saveSettings(); ui.render(); } },
@@ -387,6 +439,9 @@
         mode === 'cards' ? { label: 'Color Overlay', on: overlay, onclick: () => { settings.overlay = !overlay; ui.saveSettings(); ui.render(); } } : undefined,
         // Brightspace course images are wide banners; wide cards show them uncropped.
         mode === 'cards' ? { label: 'Wide Cards', on: Boolean(settings.wideCards), onclick: () => { settings.wideCards = !settings.wideCards; ui.saveSettings(); ui.render(); } } : undefined,
+        // A whole course's files as one .zip (src/zip.js), picked from the courses shown.
+        typeof BSX.zip?.courseDialog === 'function' ? null : undefined,
+        typeof BSX.zip?.courseDialog === 'function' ? { label: 'Download course as .zip…', onclick: () => BSX.zip.courseDialog(visible) } : undefined,
       ].filter((x) => x !== undefined)),
     ];
     const toggle = focus.length < courses.length
@@ -395,10 +450,13 @@
 
     let body;
     if (mode === 'list') body = listView(visible);
-    else if (mode === 'activity') body = activityView(visible);
+    else if (mode === 'activity') body = activityView(visible, { fresh: true });
     else body = visible.length ? h('div', { class: 'cards' }, visible.map(card)) : ui.empty('No current courses found.');
     // With the Tasks panel on, it takes the To Do list's place at the top of the sidebar.
-    const side = mode === 'list' ? null : settings.tasks ? [tasksPanel(visible), ...ui.todoSide(visible).slice(1)] : ui.todoSide(visible);
+    // Card view adds What's New after To Do (Recent Activity shows it in full instead).
+    const fresh = mode === 'cards' && BSX.whatsnew ? BSX.whatsnew.side(visible) : null;
+    const [todo, ...rest] = mode === 'list' ? [] : ui.todoSide(visible);
+    const side = mode === 'list' ? null : [settings.tasks ? tasksPanel(visible) : todo, fresh, ...rest];
     return { title: 'Dashboard', actions, body: [body, toggle], side };
   };
 
@@ -432,65 +490,198 @@
   // Short labels for module entry kinds; Brightspace's internal ones ("ContentService") read as "Content".
   const KIND_LABEL = { 'Module overview': 'Module', 'External tool': 'Tool', File: 'File', Link: 'Link', Assignment: 'Assignment', Quiz: 'Quiz', Discussion: 'Discussion', 'Course home': 'Course', Syllabus: 'Syllabus' };
   const kindLabel = (type) => KIND_LABEL[type] || 'Content';
-  async function searchIndex() {
-    const courses = ui.focusCourses(await data.courses());
-    const per = await Promise.all(courses.map(async (c) => {
+  // A few requests at a time, for the deep search's one-per-item reads.
+  async function pool(jobs, size) {
+    const out = new Array(jobs.length);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(size, jobs.length) }, async () => {
+      while (next < jobs.length) {
+        const n = next++;
+        out[n] = await jobs[n]().catch(() => null);
+      }
+    }));
+    return out;
+  }
+  const plain = (html, text) => ui.plainOf(html || '', text || '').replace(/\s+/g, ' ').trim();
+  // Labelled text a result can also be found by, for a deep search: [['Instructions', …], …].
+  const detailOf = (parts) => parts.filter(([, t]) => t);
+
+  // Deep search (Shift+S) also reads, per course: assignment instructions and feedback, quiz
+  // descriptions, discussion descriptions and every post, module text, the syllabus, and the
+  // class list. These are one request per assignment, quiz or discussion, through the same cache
+  // as the pages, so a later deep search is mostly instant.
+  async function deepIndex(c, work, course) {
+    const asg = work.filter((a) => a.kind === 'assignment');
+    const qz = work.filter((a) => a.kind === 'quiz');
+    const ds = work.filter((a) => a.kind === 'discussion');
+    const [details, quizzes, topics, syllabus, people] = await Promise.all([
+      pool(asg.map((a) => () => data.assignment(c.id, a.source_id)), 4),
+      pool(qz.map((a) => () => data.quiz(c.id, a.source_id, { attempts: false })), 4),
+      pool(ds.map((a) => () => data.discussion(c.id, a.source_id)), 4),
+      data.syllabus(c.id).catch(() => null),
+      data.people(c.id).catch(() => []),
+    ]);
+    const extra = new Map(); // work item id -> its detail text
+    details.forEach((d, n) => d && extra.set(asg[n].id, detailOf([['Instructions', plain(d.description_html, d.description)], ['Feedback', d.feedback && plain(d.feedback.comment_html, d.feedback.comment)], ...(d.submissions || []).map((s) => ['Your comment', s.comment])])));
+    quizzes.forEach((q, n) => q && extra.set(qz[n].id, detailOf([['Description', plain(q.description_html, q.description)], ['Instructions', plain(q.instructions_html, q.instructions)]])));
+    const posts = [];
+    topics.forEach((t, n) => {
+      if (!t) return;
+      extra.set(ds[n].id, detailOf([['Description', plain(t.description_html, t.description)]]));
+      for (const p of t.posts || []) {
+        posts.push({ title: p.subject || `Re: ${t.name}`, kind: 'Post', where: `${course} · ${t.name} · ${p.mine ? 'you' : p.author}${p.posted_at ? ` · ${when(p.posted_at)}` : ''}`, course: c.id, href: itemHref(c.id, ds[n]), text: `${p.subject} ${t.name} ${p.author}`, detail: detailOf([['Post', plain(p.message_html, p.message)]]) });
+      }
+    });
+    return {
+      extra,
+      more: [
+        ...posts,
+        ...(syllabus && (syllabus.text || syllabus.html) ? [{ title: 'Syllabus', kind: 'Syllabus', where: course, course: c.id, href: courseHref(c.id, 'syllabus'), text: `syllabus ${course}`, detail: detailOf([['Syllabus', plain(syllabus.html, syllabus.text)]]) }] : []),
+        ...people.map((p) => ({ title: p.name, kind: 'Person', where: `${course}${p.role ? ` · ${p.role}` : ''}`, course: c.id, href: courseHref(c.id, 'people'), text: `${p.name} ${p.role}` })),
+      ],
+    };
+  }
+
+  async function searchIndex(deep) {
+    // A deep search covers every course, past terms included.
+    const all = await data.courses();
+    const courses = deep ? all : ui.focusCourses(all);
+    const per = await pool(courses.map((c) => async () => {
       const [mods, work, news] = await Promise.all([data.modules(c.id).catch(() => []), data.assignments(c.id).catch(() => []), data.announcements(c.id).catch(() => [])]);
       const course = nameOf(c);
+      const { extra, more } = deep ? await deepIndex(c, work, course) : { extra: new Map(), more: [] };
       // A module entry that is the same assignment, quiz or discussion as one in the work
       // list is listed once, as the work item (it has the due date).
       const workKeys = new Set(work.map((a) => `${a.kind}:${a.name.trim().toLowerCase()}`));
       const dup = (i) => workKeys.has(`${String(i.type).toLowerCase()}:${String(i.title).trim().toLowerCase()}`);
       return [
-        ...mods.flatMap((m) => m.items.filter((i) => !dup(i)).map((i) => ({ title: i.title, kind: kindLabel(i.type), where: `${course} · ${m.name}`, course: c.id, href: LINKED.has(i.type) ? courseHref(c.id, 'modules', i.id) : i.html_url, text: `${i.title} ${m.name}`,
+        ...mods.flatMap((m) => m.items.filter((i) => !dup(i)).map((i) => ({ title: i.title, kind: kindLabel(i.type), where: `${course} · ${m.name}`, course: c.id, href: LINKED.has(i.type) ? courseHref(c.id, 'modules', i.id) : i.html_url, text: `${i.title} ${m.name}`, detail: deep && i.type === 'Module overview' ? detailOf([['Module', plain(i.description_html, i.description)]]) : null,
           ...(i.type === 'File' && BSX.filetext && BSX.filetext.kindOf(i) ? { file: { course: c.id, item: i }, body: BSX.filetext.textOf(c.id, i) || '' } : {}) }))),
-        ...work.map((a) => ({ title: a.name, kind: { assignment: 'Assignment', quiz: 'Quiz', discussion: 'Discussion' }[a.kind], where: `${course}${a.due_at ? ` · due ${when(a.due_at)}` : ''}`, course: c.id, href: itemHref(c.id, a), text: `${a.name} ${a.forum || ''}`, due: a.due_at || null })),
+        ...work.map((a) => ({ title: a.name, kind: { assignment: 'Assignment', quiz: 'Quiz', discussion: 'Discussion' }[a.kind], where: `${course}${a.due_at ? ` · due ${when(a.due_at)}` : ''}`, course: c.id, href: itemHref(c.id, a), text: `${a.name} ${a.forum || ''}`, detail: extra.get(a.id) || null, due: a.due_at || null })),
         ...news.map((n) => ({ title: n.title, kind: 'Announcement', where: `${course}${n.posted_at ? ` · ${when(n.posted_at)}` : ''}`, course: c.id, href: courseHref(c.id, 'announcements', n.id), text: `${n.title} ${ui.plainOf(n.message_html, n.message)}` })),
+        ...more,
       ];
-    }));
+    }), deep ? 3 : courses.length);
     const outside = await ui.externalWork(courses).catch(() => []);
     const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
-    return [...per.flat(), ...outside.map((x) => ({ title: x.name, kind: x.source, where: `${names.get(x.course_id) || ''}${x.due_at ? ` · due ${when(x.due_at)}` : ''}`, course: x.course_id, href: x.html_url, external: true, text: `${x.name} ${x.group || ''}`, due: x.due_at || null }))];
+    return [...per.filter(Boolean).flat(), ...outside.map((x) => ({ title: x.name, kind: x.source, where: `${names.get(x.course_id) || ''}${x.due_at ? ` · due ${when(x.due_at)}` : ''}`, course: x.course_id, href: x.html_url, external: true, text: `${x.name} ${x.group || ''}`, due: x.due_at || null }))];
   }
 
-  // The search dialog (s, or Ctrl/⌘+K): type to search (every word must match, typos allowed),
-  // arrows and Enter to open. Empty, it lists what is due in the next two weeks.
+  // Where in a result's deeper text (instructions, feedback, a post) a search word
+  // turned up, when it is not in the title: the label of that part, and the words around it.
+  // `r.detail` is a list of [label, text] parts, such as [['Instructions', …], ['Feedback', …]].
+  // Lower-cased detail texts, kept per `r.detail` list (shared by the copies each search returns),
+  // so a syllabus or a long post is not lower-cased again on every keystroke.
+  const detailLows = new WeakMap();
+  function detailHit(r, words) {
+    if (!r.detail || !r.detail.length) return null;
+    const seen = `${r.title} ${r.where}`.toLowerCase();
+    let lows = detailLows.get(r.detail);
+    if (!lows) detailLows.set(r.detail, (lows = r.detail.map(([, t]) => t.toLowerCase())));
+    for (const w of words.filter((x) => !seen.includes(x))) {
+      for (const [n, [label, text]] of r.detail.entries()) {
+        const at = lows[n].indexOf(w);
+        if (at < 0) continue;
+        const start = Math.max(0, at - 50);
+        const end = at + w.length + 50;
+        return `${label}: ${start ? '…' : ''}${text.slice(start, end).trim()}${end < text.length ? '…' : ''}`;
+      }
+    }
+    return null;
+  }
+  const detailText = (r) => (r.detail ? r.detail.map(([, t]) => t).join(' ') : '');
+
+  // The search dialog (s or Shift+S): one search. It lists the current courses at
+  // once (modules, files, assignments, quizzes, discussions, announcements), and
+  // meanwhile reads the rest (instructions, feedback, posts, syllabi, people and past courses); when that arrives the results refine in place. Ranking
+  // is src/search.js: every word must match, typos allowed. The long text (instructions, posts)
+  // is matched plainly, below good title matches, with a labelled snippet. Empty, it lists what is
+  // due in the next two weeks. Arrows and Enter open a result.
+  const FULL_KEEP = 15 * 60e3; // the full list is kept this long, so searching again is instant
+  let full = null; // { at, promise }
+  function fullIndex() {
+    if (!full || Date.now() - full.at > FULL_KEEP) {
+      const promise = searchIndex(true).then((items) => {
+        for (const r of items) if (r.detail && !r.file) r.body = detailText(r);
+        return items;
+      });
+      full = { at: Date.now(), promise };
+      promise.catch(() => (full = null));
+    }
+    return full.promise;
+  }
+
   ui.searchDialog = () => {
     const app = ui.appEl();
     if (!app || app.querySelector('.modal')) return;
-    const input = h('input', { class: 'txt', type: 'search', placeholder: 'Search modules, assignments, files, announcements…', 'aria-label': 'Search all courses' });
-    const foot = h('div', { class: 'gfoot muted small' });
+    const input = h('input', { class: 'txt', type: 'search', placeholder: 'Search courses, files, instructions, posts…', 'aria-label': 'Search' });
+    const status = h('span');
+    const filesLine = h('span');
+    const foot = h('div', { class: 'gfoot muted small' }, status, filesLine);
     const list = h('div', { class: 'gsearch', role: 'listbox', 'aria-label': 'Results' }, h('div', { class: 'muted small pad' }, 'Loading your courses…'));
-    const close = () => overlay.remove();
+    const close = () => { clearTimeout(pending); overlay.remove(); };
     const overlay = h('div', { class: 'modal', onclick: (ev) => ev.target === overlay && close() },
-      h('div', { class: 'dialog wide', role: 'dialog', 'aria-label': 'Search all courses' },
-        h('div', { class: 'trayhead' }, h('h2', null, 'Search all courses'), h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Close', onclick: close }, ic('close'))),
+      h('div', { class: 'dialog wide', role: 'dialog', 'aria-label': 'Search' },
+        h('div', { class: 'trayhead' }, h('h2', null, 'Search'), h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Close', onclick: close }, ic('close'))),
         input, list, foot));
     let index = null;
     let search = null;
+    let complete = false; // the full list is in
     let shown = [];
+    let rows = []; // the result links drawn for `shown`
     let at = 0;
+    let pending = 0; // a draw waiting for typing to pause
+    let cost = 0; // how long the last draw took, in ms
     const open = (r) => {
       close();
       if (r.external) window.open(r.href, '_blank', 'noopener,noreferrer');
       else location.href = r.href;
     };
     const draw = () => {
+      clearTimeout(pending);
+      pending = 0;
       if (!index) return;
+      const started = performance.now();
       const query = input.value.trim();
-      shown = query ? search(query) : BSX.search.upcoming(index);
+      const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+      shown = query ? search(query, 200) : BSX.search.upcoming(index);
       at = Math.min(at, Math.max(0, shown.length - 1));
-      const head = query ? null : h('div', { class: 'muted small pad' }, `${shown.length ? 'Due in the next two weeks.' : 'Nothing due in the next two weeks.'} Type to search ${index.length} items across your courses.`);
-      list.replaceChildren(...[head, ...(shown.length
-        ? shown.map((r, n) => h('a', { class: n === at ? 'gres on' : 'gres', href: r.href, role: 'option', 'aria-selected': String(n === at), target: r.external ? '_blank' : null, rel: r.external ? 'noopener noreferrer' : null, style: `--c:${colorOf(r.course)}`, onclick: (ev) => { ev.preventDefault(); open(r); } },
-            h('span', { class: 'gkind' }, r.kind),
-            h('span', { class: 'imid' }, h('span', { class: 't' }, r.title, r.external ? [' ', ic('external', 12)] : null), h('span', { class: 'ctx' }, r.where), r.snippet ? h('span', { class: 'gsnip' }, r.snippet) : null)))
-        : query ? [h('div', { class: 'muted small pad' }, 'Nothing matches.')] : [])].filter(Boolean));
+      const head = query ? null : h('div', { class: 'muted small pad' }, `${shown.length ? 'Due in the next two weeks.' : 'Nothing due in the next two weeks.'} Type to search ${index.length} items.`);
+      rows = shown.map((r, n) => h('a', { class: n === at ? 'gres on' : 'gres', href: r.href, role: 'option', 'aria-selected': String(n === at), target: r.external ? '_blank' : null, rel: r.external ? 'noopener noreferrer' : null, style: `--c:${colorOf(r.course)}`, onclick: (ev) => { ev.preventDefault(); open(r); } },
+        h('span', { class: 'gkind' }, r.kind),
+        h('span', { class: 'imid' }, h('span', { class: 't' }, r.title, r.external ? [' ', ic('external', 12)] : null), h('span', { class: 'ctx' }, r.where), r.detail ? h('span', { class: 'muted small' }, detailHit(r, words)) : r.snippet ? h('span', { class: 'gsnip' }, r.snippet) : null)));
+      list.replaceChildren(...[head, ...(rows.length
+        ? rows
+        : query ? [h('div', { class: 'muted small pad' }, complete ? 'Nothing matches.' : 'Nothing yet; still searching…')] : [])].filter(Boolean));
       list.querySelector('.gres.on')?.scrollIntoView({ block: 'nearest' });
+      cost = performance.now() - started;
+    };
+    // A big index (a deep search with file text) can take a tenth of a second or more to search,
+    // so while typing it is searched once typing pauses briefly; a small one is still searched
+    // on every key. Arrows and Enter draw any waiting search first.
+    const drawSoon = () => {
+      if (cost < 30) return draw();
+      clearTimeout(pending);
+      pending = setTimeout(draw, 120);
+    };
+    const flush = () => pending && draw();
+    // Arrows move the highlight among the results already drawn, without searching again.
+    const move = (n) => {
+      rows[at]?.classList.remove('on');
+      rows[at]?.setAttribute('aria-selected', 'false');
+      at = n;
+      rows[at]?.classList.add('on');
+      rows[at]?.setAttribute('aria-selected', 'true');
+      rows[at]?.scrollIntoView({ block: 'nearest' });
+    };
+    const use = (items) => {
+      index = items;
+      search = BSX.search.make(items);
+      draw();
     };
     // Text inside PDFs and images: off until the student asks, since the first run downloads and
     // reads every file (scans with OCR). Read text is kept, so later runs only read new files.
-    const files = () => index.filter((r) => r.file);
+    const files = () => (index || []).filter((r) => r.file);
     const turn = (on) => {
       settings.fileText = on;
       ui.saveSettings();
@@ -501,44 +692,66 @@
       }
       readFiles();
     };
+    let reading = false;
     const readFiles = async () => {
       if (!BSX.filetext || !index) return;
       const rows = files();
       if (!settings.fileText) {
-        foot.replaceChildren(...(rows.length ? [`${rows.length} PDF${rows.length === 1 ? '' : 's'} and images are not searched inside. `, h('button', { class: 'linkbtn', type: 'button', onclick: () => turn(true) }, 'Search inside files')] : []));
+        filesLine.replaceChildren(...(rows.length ? [`${rows.length} PDF${rows.length === 1 ? '' : 's'} and images are not searched inside. `, h('button', { class: 'linkbtn', type: 'button', onclick: () => turn(true) }, 'Search inside files')] : []));
         return;
       }
+      if (reading) return;
+      reading = true;
       const stop = h('button', { class: 'linkbtn', type: 'button', onclick: () => turn(false) }, 'Stop searching inside files');
-      const byItem = new Map(rows.map((r) => [r.file.item, r]));
       try {
         await BSX.filetext.index(rows.map((r) => r.file), {
+          // The list may have been replaced by the full one meanwhile: fill in whichever is shown.
           onEach: (course, item, text) => {
-            const r = byItem.get(item);
-            if (r) r.body = text;
-            if (input.value.trim()) draw();
+            for (const r of files()) if (r.file.course === course && r.file.item.id === item.id) r.body = text;
+            if (input.value.trim()) drawSoon();
           },
           onProgress: (n, total) => {
             if (!settings.fileText) return;
-            foot.replaceChildren(n < total ? `Reading files on this computer: ${n + 1} of ${total} (scanned pages take longer). ` : `Searching inside ${rows.length} file${rows.length === 1 ? '' : 's'}. `, stop);
+            filesLine.replaceChildren(n < total ? `Reading files on this computer: ${n + 1} of ${total} (scanned pages take longer). ` : `Searching inside ${rows.length} file${rows.length === 1 ? '' : 's'}. `, stop);
           },
         });
       } catch (e) {
-        foot.replaceChildren(`Could not read files: ${e.message || e} `, stop);
+        filesLine.replaceChildren(`Could not read files: ${e.message || e} `, stop);
+      } finally {
+        reading = false;
       }
     };
-    input.addEventListener('input', () => { at = 0; draw(); });
+    input.addEventListener('input', () => { at = 0; drawSoon(); });
     overlay.addEventListener('keydown', (ev) => {
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp' || ev.key === 'Enter') flush();
       if (ev.key === 'Escape') { ev.stopPropagation(); close(); }
-      else if (ev.key === 'ArrowDown' && shown.length) { ev.preventDefault(); at = (at + 1) % shown.length; draw(); }
-      else if (ev.key === 'ArrowUp' && shown.length) { ev.preventDefault(); at = (at - 1 + shown.length) % shown.length; draw(); }
+      else if (ev.key === 'ArrowDown' && shown.length) { ev.preventDefault(); move((at + 1) % shown.length); }
+      else if (ev.key === 'ArrowUp' && shown.length) { ev.preventDefault(); move((at - 1 + shown.length) % shown.length); }
       else if (ev.key === 'Enter' && shown[at]) { ev.preventDefault(); open(shown[at]); }
     });
     app.append(overlay);
     input.focus();
-    searchIndex().then((items) => { index = items; search = BSX.search.make(items); draw(); readFiles(); }).catch((e) => list.replaceChildren(h('div', { class: 'muted small pad' }, `Search is unavailable. ${e.message || e}`)));
+    // Quick list first, then the full one (or the full one at once, when it was read recently).
+    status.textContent = 'Also searching instructions, feedback, posts, syllabi, people and past courses… ';
+    const whole = fullIndex();
+    searchIndex(false).then((items) => {
+      if (complete) return;
+      use(items);
+      readFiles();
+    }).catch((e) => !complete && list.replaceChildren(h('div', { class: 'muted small pad' }, `Search is unavailable. ${e.message || e}`)));
+    whole.then((items) => {
+      complete = true;
+      status.textContent = '';
+      use(items);
+      readFiles();
+    }).catch(() => {
+      complete = true;
+      status.textContent = 'Could not read everything (instructions, posts and the like); showing what loaded. ';
+      draw();
+    });
   };
 
-  // ---- Connected sites: Gradescope and Ed Discussion -------------------------
+  // ---- Connected sites: Gradescope, Ed Discussion and Edfinity ---------------
   // Switches, the Ed token, which Brightspace course each Ed course belongs to, and every
   // place the same assignment shows up twice (folded into one, or kept apart).
   ui.views.connections = async () => {
@@ -547,7 +760,7 @@
     const ed = settings.ed;
     const save = () => { ui.saveSettings(); if (BSX.ed) BSX.ed.clear(); if (BSX.gradescope) BSX.gradescope.clear(); ui.render(); };
     const onoff = (on, set) => h('div', { class: 'seg' }, [false, true].map((v) => h('button', { type: 'button', class: Boolean(on) === v ? 'on' : null, onclick: () => { set(v); save(); } }, v ? 'On' : 'Off')));
-    const grant = (site) => h('button', { class: 'btn', type: 'button', onclick: () => (globalThis.browser || globalThis.chrome)?.runtime?.sendMessage({ type: 'bsx-grant', site }) }, `Allow ${site === 'ed' ? 'edstem.org' : 'gradescope.com'} access`);
+    const grant = (site) => h('button', { class: 'btn', type: 'button', onclick: () => (globalThis.browser || globalThis.chrome)?.runtime?.sendMessage({ type: 'bsx-grant', site }) }, `Allow ${site === 'ed' ? 'edstem.org' : site === 'edfinity' ? 'edfinity.com' : 'gradescope.com'} access`);
 
     // Ed: token and region.
     const token = h('input', { class: 'txt', type: 'password', autocomplete: 'off', placeholder: ed.token ? 'Saved (paste a new one to replace it)' : 'Paste your Ed API token', 'aria-label': 'Ed API token' });
@@ -582,9 +795,39 @@
         })
       : null;
 
+    // Edfinity: what was read and when, and which Brightspace course each Edfinity course is
+    // shown under. Edfinity is read live when the browser lets the extension use the Edfinity
+    // sign-in, and otherwise while the student has Edfinity open.
+    const edf = settings.edfinity;
+    const edfOpen = h('a', { href: 'https://edfinity.com/registrations', target: '_blank', rel: 'noopener noreferrer' }, 'Open Edfinity ', ic('external', 12));
+    const edfPart = edf.on && BSX.edfinity
+      ? ui.lazy(BSX.edfinity.forCourses(visible, { map: edf.map, withTool: [] }), (r) => {
+          if (r.state === 'no_permission') return h('p', null, 'Your browser has not allowed this extension on edfinity.com yet. ', grant('edfinity'), ' then press Refresh.');
+          if (r.state !== 'ok') return h('p', { class: 'muted' }, r.state === 'signed_out' ? 'You are not signed in to Edfinity in this browser. ' : 'Nothing has been read from Edfinity yet. ', edfOpen, ' (from your course or directly) and sign in, then press Refresh.');
+          const synced = r.synced_at ? `Last read ${when(new Date(r.synced_at).toISOString())}.` : 'No assignments read yet.';
+          const auto = BSX.edfinity.pair(r.courses, visible, {});
+          return [
+            h('p', { class: r.stale ? 'bad small' : 'muted small' }, synced, r.stale ? [' ', edfOpen, ' to bring it up to date.'] : null),
+            h('table', { class: 'grid' },
+              h('thead', null, h('tr', null, h('th', null, 'Edfinity course'), h('th', null, 'Shown under'), h('th', { class: 'num' }, 'Items'))),
+              h('tbody', null, r.courses.map((e) => {
+                const mine = auto.get(String(e.id));
+                const has = Object.prototype.hasOwnProperty.call(edf.map, e.id);
+                const pick = h('select', { class: 'txt pick', 'aria-label': `Brightspace course for ${e.name}` },
+                  h('option', { value: 'auto', selected: !has }, mine ? `Automatic: ${nameOf(mine)}` : 'Automatic: no match'),
+                  visible.map((c) => h('option', { value: String(c.id), selected: has && Number(edf.map[e.id]) === c.id }, nameOf(c))),
+                  h('option', { value: '0', selected: has && Number(edf.map[e.id]) === 0 }, 'Don’t show'));
+                pick.addEventListener('change', () => { if (pick.value === 'auto') delete edf.map[e.id]; else edf.map[e.id] = Number(pick.value); ui.saveSettings(); BSX.edfinity.clear(); ui.render(); });
+                const count = r.items.filter((i) => i.source_id.startsWith(`edf-${e.id}-`)).length;
+                return h('tr', null, h('td', null, h('div', { class: 't' }, e.name || 'Edfinity course')), h('td', null, pick), h('td', { class: 'num' }, String(count)));
+              }))),
+          ];
+        })
+      : null;
+
     // Overlaps, course by course: folded copies with "Keep separate", and every outside item
     // with a "Same as" choice.
-    const overlaps = (settings.gradescope || (ed.on && ed.token))
+    const overlaps = (settings.gradescope || (ed.on && ed.token) || edf.on)
       ? ui.lazy(Promise.all(visible.map(async (c) => {
           const kept = await ui.externalWork([c]).catch(() => []);
           const work = await data.assignments(c.id).catch(() => []);
@@ -610,7 +853,7 @@
           });
           return blocks.length ? blocks : h('p', { class: 'muted' }, 'No outside work found for your current courses.');
         })
-      : h('p', { class: 'muted' }, 'Turn on Gradescope or Ed above to see outside work here.');
+      : h('p', { class: 'muted' }, 'Turn on Gradescope, Ed or Edfinity above to see outside work here.');
 
     return {
       title: 'Connected Sites',
@@ -640,8 +883,13 @@
             } }, 'Check Ed') : null),
           h('p', { class: 'muted small' }, 'Make a token on Ed’s API Tokens page (linked above; it is not listed in Ed’s settings menu). Ed only lets you create one once two-factor authentication is turned on for your Ed account. The token is kept in this browser only and sent only to edstem.org.')),
         edPart,
+        h('h2', { class: 'sect' }, 'Edfinity'),
+        h('div', { class: 'row', style: 'align-items:center' },
+          h('div', { class: 'seg' }, [false, true].map((v) => h('button', { type: 'button', class: Boolean(edf.on) === v ? 'on' : null, onclick: () => ui.setEdfinity(v) }, v ? 'On' : 'Off'))),
+          h('span', { class: 'muted small' }, 'Reads your Edfinity assignments, due dates and scores with your own Edfinity sign-in. Off deletes what it kept.')),
+        edfPart,
         h('h2', { class: 'sect' }, 'Same assignment in more than one place'),
-        h('p', { class: 'muted small' }, 'Matching names due within a day and a half are shown as one, keeping Brightspace’s copy first, then Gradescope’s, then Ed’s. Change any match here.'),
+        h('p', { class: 'muted small' }, 'Matching names due within a day and a half are shown as one, keeping Brightspace’s copy first, then Gradescope’s, then Ed’s, then Edfinity’s. Change any match here.'),
         overlaps,
       ],
     };
@@ -659,7 +907,15 @@
         ? ui.lazy(data.people(c.id), (people) => {
             const names = new Map(people.map((p) => [String(p.id), p.name]));
             const shown = g.member_ids.map((id) => names.get(id)).filter(Boolean);
-            return shown.length ? h('div', { class: 'members' }, shown.map((n) => h('span', { class: 'member' }, h('span', { class: 'avatar xs' }, n.slice(0, 1).toUpperCase()), n))) : null;
+            if (!shown.length) return null;
+            const LIMIT = 20;
+            const chip = (n) => h('span', { class: 'member' }, h('span', { class: 'avatar xs' }, n.slice(0, 1).toUpperCase()), n);
+            const box = h('div', { class: 'members' }, shown.slice(0, LIMIT).map(chip));
+            if (shown.length > LIMIT) {
+              const more = h('button', { class: 'linkbtn', type: 'button', onclick: () => { more.remove(); box.append(...shown.slice(LIMIT).map(chip)); } }, `See ${shown.length - LIMIT} more`);
+              box.append(more);
+            }
+            return box;
           }, '')
         : null;
       return h('div', { class: 'gcard', style: c ? `--c:${colorOf(c.id)}` : null },
@@ -716,13 +972,20 @@
       if (t?.estimate) return [h('strong', null, pct(t.estimate.score, t.estimate.points_possible)), ui.tag('estimate')];
       return [h('span', { class: 'muted' }, 'Not released')];
     };
+    // "Last grade posted N days ago" under the course name (red once stale), from the grades
+    // courseTotals already loaded.
+    const posted = (t) => {
+      const p = BSX.gradetools && BSX.gradetools.postedAgo ? BSX.gradetools.postedAgo(t?.last_graded) : null;
+      return p ? h('div', { class: p.stale ? 'lastposted stale' : 'lastposted', title: p.title, style: 'margin-left:14px' }, p.text) : null;
+    };
     return {
       title: 'Courses I’m Taking',
       body: [
         h('table', { class: 'grid' },
           h('thead', null, h('tr', null, h('th', null, 'Course'), h('th', { class: 'num' }, 'Grade'))),
-          h('tbody', null, visible.map((c) => h('tr', null, h('td', null, h('span', { class: 'dot', style: `background:${colorOf(c.id)}` }), ' ', h('a', { href: courseHref(c.id, 'grades') }, nameOf(c))), h('td', { class: 'num' }, cell(byId.get(c.id))))))),
-        h('p', { class: 'muted small' }, 'Estimates are computed from graded items, ignore dropped-score rules and are not official.'),
+          h('tbody', null, visible.map((c) => h('tr', null, h('td', null, h('span', { class: 'dot', style: `background:${colorOf(c.id)}` }), ' ', h('a', { href: courseHref(c.id, 'grades') }, nameOf(c)), posted(byId.get(c.id))), h('td', { class: 'num' }, cell(byId.get(c.id))))))),
+        h('p', { class: 'muted small' }, 'Estimates are computed from graded items, follow the course’s dropped-score rules and are not official.'),
+        BSX.gpa && BSX.gpa.panel ? BSX.gpa.panel(visible, totals) : null,
       ],
     };
   };

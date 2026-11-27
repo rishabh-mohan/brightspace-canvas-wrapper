@@ -1,4 +1,6 @@
 const api = globalThis.browser || globalThis.chrome;
+// Reminders (notifications). Firefox loads it from the manifest's scripts list; Chrome's service worker here.
+if (typeof importScripts === 'function') importScripts('reminders-bg.js');
 
 // Toolbar button: run the access probe in the current tab.
 api.action.onClicked.addListener((tab) => {
@@ -21,7 +23,7 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // where one click asks for gradescope.com (a permission request needs a click on an
   // extension page, not on Brightspace).
   if (msg && msg.type === 'bsx-grant' && sender.id === api.runtime.id) {
-    api.tabs.create({ url: api.runtime.getURL(`grant.html${msg.site === 'ed' ? '?site=ed' : ''}`) });
+    api.tabs.create({ url: api.runtime.getURL(`grant.html${['ed', 'notify', 'edfinity'].includes(msg.site) ? `?site=${msg.site}` : ''}`) });
     return undefined;
   }
   // Ed Discussion (edstem.org) for the optional Ed reader. Ed signs requests with a personal
@@ -46,6 +48,25 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (res.status === 401 || res.status === 403) return sendResponse({ error: 'bad_token' });
       if (!res.ok) return sendResponse({ error: `Ed returned ${res.status}` });
       sendResponse({ json: await res.json() });
+    })().catch((e) => sendResponse({ error: String(e) }));
+    return true;
+  }
+  // Edfinity (edfinity.com) for the optional Edfinity reader (src/edfinity.js): GET only, with
+  // the student's own Edfinity session, and only these JSON routes: the course list, one
+  // course, and a course's assignments. op 'check' only says whether access is allowed.
+  if (msg && msg.type === 'bsx-edfinity' && sender.id === api.runtime.id) {
+    const path = String(msg.path || '');
+    if (msg.op !== 'check' && !/^\/registrations(\?[\w=&]*)?$|^\/registrations\/[0-9a-f]{24}(\/assignments)?$/.test(path)) {
+      sendResponse({ error: 'Not allowed.' });
+      return undefined;
+    }
+    (async () => {
+      const ok = api.permissions && api.permissions.contains ? await api.permissions.contains({ origins: ['https://edfinity.com/*'] }) : true;
+      if (!ok) return sendResponse({ error: 'permission' });
+      if (msg.op === 'check') return sendResponse({ ok: true });
+      const res = await fetch(`https://edfinity.com${path}`, { credentials: 'include', redirect: 'follow', headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+      const json = /json/i.test(res.headers.get('content-type') || '') ? await res.json().catch(() => null) : null;
+      sendResponse({ status: res.status, url: res.url, json });
     })().catch((e) => sendResponse({ error: String(e) }));
     return true;
   }

@@ -94,6 +94,8 @@ function build(c) {
     const graded = values.filter((v) => k.Grades.some((g) => String(g.Id) === v.GradeObjectIdentifier));
     if (graded.length) values.push(value(k.Id, k.Name, graded.reduce((s, v) => s + v.PointsNumerator, 0), graded.reduce((s, v) => s + v.PointsDenominator, 0), null, 9));
   }
+  // PHYS has posted no grade for over two weeks, for a stale "last grade posted".
+  if (c.id === 105) for (const v of values) v.LastModified = at(-17 - (Number(v.GradeObjectIdentifier) % 5), 14, 5);
   const real = values.filter((v) => v.GradeObjectType === 1);
   const final = c.final ? { ...value(c.id * 1000 + 999, 'Final Calculated Grade', real.reduce((s, v) => s + v.PointsNumerator, 0), real.reduce((s, v) => s + v.PointsDenominator, 0), null, 7), GradeObjectTypeName: null } : null;
 
@@ -294,7 +296,13 @@ function handle(pathname, query) {
   if ((x = t.match(/^discussions\/forums\/(\d+)\/topics\/(\d+)\/posts\/$/))) return json(d.posts);
   if (t === 'grades/') return json(d.items);
   if (t === 'grades/categories/') return json(d.categories);
-  if (t === 'grades/setup/') return json({ GradingSystem: c.system, IsNullGradeZero: false, DefaultGradeSchemeId: 1 });
+  if (t === 'grades/setup/') return json({ GradingSystem: c.system, IsNullGradeZero: false, DefaultGradeSchemeId: c.id === 103 ? 7 : 1 });
+  // STAT has its own letter scheme students may read; the others' (the org's percentage
+  // scheme) is refused, as many schools do, so the common cut-offs are used.
+  if ((x = t.match(/^grades\/schemes\/(\d+)$/))) {
+    if (c.id !== 103 || x[1] !== '7') return { status: 403, type: 'application/problem+json', body: '{"title":"Forbidden"}' };
+    return json({ Id: 7, Name: 'STAT 350 letter grades', ShortName: 'Letters', Ranges: [['A', 90], ['B+', 87], ['B', 80], ['C+', 77], ['C', 70], ['D', 60], ['F', 0]].map(([Symbol, PercentStart]) => ({ PercentStart, Symbol, AssignedValue: null, Colour: '#000000' })) });
+  }
   if (t === 'grades/values/myGradeValues/') return json(d.values);
   if (t === 'grades/final/values/myGradeValue') return json(d.final);
   if (t === 'news/') return json(d.news);
@@ -400,4 +408,29 @@ function ed(path) {
   return null;
 }
 
-module.exports = { handle, gradescope, quizSummary, submit, ed };
+// A made-up Edfinity (shapes follow fixtures/edfinity/): GET /registrations (My Courses) and
+// /registrations/{id}/assignments. STAT 350 matches Brightspace course 103; its "Homework 6"
+// duplicates Brightspace's, so the overlap is exercised.
+function edfinity(path) {
+  const REG = 'aaaaaaaaaaaaaaaaaaaaaa01';
+  const due = (days) => at(days);
+  if (path === '/registrations') {
+    return { page: 1, total: 1, pageSize: 25, params: { sort: 'name', status: 'active' }, models: [
+      { id: REG, student_id: 'aaaaaaaaaaaaaaaaaaaaaa02', section: { id: 'aaaaaaaaaaaaaaaaaaaaaa03' }, active: true, readonly: { section_name: 'STAT 350 FALL 2026 (In-person) -- Lee', accessible: true, dropped: false, closed: false, expired: false, started: true } },
+    ] };
+  }
+  if (path === `/registrations/${REG}/assignments`) {
+    const hw6 = DATA.get(103).folders.find((f) => f.Name === 'Homework 6');
+    const entry = (n, name, d, assessment) => ({ id: `aaaaaaaaaaaaaaaaaaaab${String(n).padStart(3, '0')}`, name, live: false, sort_order: n, assignment_due_date: d, due_date: d, assignment_available_date: due(-30), available_date: due(-30), late_work_date: null, early_work_date: null, release_method: 'release_on_due_date', readonly: { accessible: true, available: true, released: false, excused: false }, ...(assessment ? { assessment } : {}) });
+    const graded = (score, points) => ({ due_date: null, readonly: { state: 'closed' }, scored_session: { status: 'completed', points, score, environment: { show_scores: true } }, grade: { status: 'completed', excused: false, show_scores: true, override_score: null, score, num_submitted: 3, pct_complete: 100, points } });
+    return [
+      entry(0, 'Homework Assignment 1', due(-9), graded(9, 10)),
+      entry(1, 'Homework Assignment 2', due(2), { due_date: null, readonly: { state: 'underway' }, grade: { status: 'not started', excused: false, show_scores: true, score: 0, num_submitted: 0, pct_complete: 0, points: 12 } }),
+      entry(2, 'Computer Assignment 3', due(5), null),
+      entry(3, 'Homework 6', hw6 ? hw6.DueDate : due(10), null),
+    ];
+  }
+  return null;
+}
+
+module.exports = { handle, gradescope, quizSummary, submit, ed, edfinity };

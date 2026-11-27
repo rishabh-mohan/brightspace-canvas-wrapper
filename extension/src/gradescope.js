@@ -13,6 +13,7 @@ BSX.gradescope = (() => {
   const ORIGIN = 'https://www.gradescope.com';
   const TTL = 5 * 60 * 1000;
   const cache = new Map();
+  const accountCourses = new WeakMap(); // /account answer -> its courses
   const runtime = (globalThis.browser || globalThis.chrome)?.runtime;
 
   function page(path) {
@@ -118,7 +119,9 @@ BSX.gradescope = (() => {
   async function readCourse(course) {
     const account = await page('/account');
     if (signedOut(account)) return { state: 'signed_out', items: [] };
-    const gs = match(course, parseCourses(account.html));
+    // Every course reads the same account page: it is parsed once per fetch.
+    if (!accountCourses.has(account)) accountCourses.set(account, parseCourses(account.html));
+    const gs = match(course, accountCourses.get(account));
     if (!gs) return { state: 'no_match', items: [] };
     const res = await page(`/courses/${gs.id}`);
     if (signedOut(res)) return { state: 'signed_out', items: [] };

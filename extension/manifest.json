@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Brightspace Canvas Wrapper",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "A Canvas-style view of Brightspace, with file submission: dashboard, calendar, and per-course home, modules, assignments, quizzes, discussions, grades, announcements, files, syllabus and people.",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "alarms"],
+  "optional_permissions": ["notifications"],
   "host_permissions": ["https://*.brightspace.com/*", "https://www.gradescope.com/*"],
-  "optional_host_permissions": ["https://*.edstem.org/*"],
+  "optional_host_permissions": ["https://*.edstem.org/*", "https://edfinity.com/*"],
   "content_scripts": [
     {
       "matches": ["https://*.brightspace.com/d2l/*"],
@@ -15,24 +16,38 @@
         "src/data.js",
         "src/gradescope.js",
         "src/ed.js",
+        "src/edfinity.js",
+        "src/gradetools.js",
+        "src/gpa.js",
         "vendor/fuse.min.js",
         "src/search.js",
         "src/filetext.js",
+        "src/zip.js",
+        "src/whatsnew.js",
         "src/styles.js",
         "src/icons.js",
         "src/ui-core.js",
         "vendor/confetti.browser.js",
         "src/ui-dashboard.js",
         "src/ui-course.js",
+        "src/modorder.js",
+        "src/ics.js",
+        "src/reminders.js",
         "src/ui-calendar.js"
       ],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["https://edfinity.com/*"],
+      "js": ["src/edfinity.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [{ "resources": ["fonts/*.woff2", "ocr/*", "vendor/pdfjs/*", "vendor/tesseract/*"], "matches": ["https://*.brightspace.com/*"] }],
   "content_security_policy": { "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" },
   "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "96": "icons/icon-96.png", "128": "icons/icon-128.png" },
   "action": { "default_title": "Run Brightspace access probe", "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" } },
-  "background": { "scripts": ["background.js"], "service_worker": "background.js" },
+  "background": { "scripts": ["background.js", "reminders-bg.js"], "service_worker": "background.js" },
   "browser_specific_settings": { "gecko": { "id": "brightspace-canvas-wrapper@rishabh-mohan", "strict_min_version": "140.0", "data_collection_permissions": { "required": ["none"] } }, "gecko_android": { "strict_min_version": "142.0" } }
 }

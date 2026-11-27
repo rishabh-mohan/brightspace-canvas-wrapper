@@ -192,7 +192,27 @@ BSX.ui = (() => {
   }
   // Rich text as a block: sanitised HTML when there is some, else the plain text.
   const prose = (htmlText, plain) => (htmlText || plain ? h('div', { class: 'prose' }, htmlText ? cleanHtml(htmlText) : plain) : null);
-  const plainOf = (htmlText, plain) => (plain || (htmlText ? cleanHtml(htmlText).textContent : '')).replace(/\s+/g, ' ').trim();
+  // The text cleanHtml would show, without building its elements (search reads many of these).
+  function textOfHtml(html) {
+    let out = '';
+    const walk = (src) => {
+      for (const n of src.childNodes) {
+        if (n.nodeType === 3) out += n.nodeValue;
+        if (n.nodeType !== 1) continue;
+        const tag = n.tagName.toUpperCase();
+        if (DROP.has(tag)) continue;
+        if (tag === 'IMG') {
+          if (!webHref(n.getAttribute('src') || '')) {
+            const alt = n.getAttribute('alt') || '';
+            out += alt ? `[image: ${alt}]` : '[image]';
+          }
+        } else walk(n);
+      }
+    };
+    walk(new DOMParser().parseFromString(html, 'text/html').body);
+    return out;
+  }
+  const plainOf = (htmlText, plain) => (plain || (htmlText ? textOfHtml(htmlText) : '')).replace(/\s+/g, ' ').trim();
   const clip = (text, n) => (text.length > n ? `${text.slice(0, n).trimEnd()}…` : text);
 
   // ---- formatting ----------------------------------------------------------
@@ -210,8 +230,9 @@ BSX.ui = (() => {
   const store = (globalThis.browser || globalThis.chrome)?.storage?.local;
   // todos: the student's own planner items. done / dismissed: keys of items ticked off or hidden.
   // ed: the Ed Discussion reader (on, token, region, map of Ed course -> Brightspace course).
+  // edfinity: the Edfinity reader (on, map of Edfinity course id -> Brightspace course id, 0 = hide).
   // links: outside items the student folded into another item, or kept 'separate'.
-  const settings = { theme: 'auto', courses: {}, dash: 'cards', navOpen: true, calHidden: [], asgBy: 'date', todos: [], done: {}, dismissed: {}, ed: { on: false, token: '', region: 'us', map: {} }, links: {} };
+  const settings = { theme: 'auto', courses: {}, dash: 'cards', navOpen: true, navMore: false, calHidden: [], asgBy: 'date', todos: [], done: {}, dismissed: {}, ed: { on: false, token: '', region: 'us', map: {} }, edfinity: { on: false, map: {} }, links: {} };
   async function loadSettings() {
     try {
       const saved = (await store.get('bsx'))?.bsx;
@@ -220,6 +241,7 @@ BSX.ui = (() => {
       if (saved.courses && typeof saved.courses === 'object') settings.courses = { ...saved.courses };
       if (['cards', 'list', 'activity'].includes(saved.dash)) settings.dash = saved.dash;
       if (typeof saved.navOpen === 'boolean') settings.navOpen = saved.navOpen;
+      if (typeof saved.navMore === 'boolean') settings.navMore = saved.navMore;
       if (Array.isArray(saved.calHidden)) settings.calHidden = saved.calHidden.map(Number);
       if (['date', 'type'].includes(saved.asgBy)) settings.asgBy = saved.asgBy;
       if (Array.isArray(saved.todos)) settings.todos = saved.todos.filter((t) => t && typeof t.title === 'string' && t.id != null);
@@ -234,13 +256,18 @@ BSX.ui = (() => {
       if (typeof saved.countExcluded === 'boolean') settings.countExcluded = saved.countExcluded;
       if (saved.confetti && typeof saved.confetti === 'object') settings.confetti = { ...saved.confetti };
       if (saved.pins && typeof saved.pins === 'object') settings.pins = Object.fromEntries(Object.entries(saved.pins).filter(([, v]) => Array.isArray(v)));
+      // moduleOrder: the student's own order of each course's modules (ui-course.js), as module ids.
+      if (saved.moduleOrder && typeof saved.moduleOrder === 'object') settings.moduleOrder = Object.fromEntries(Object.entries(saved.moduleOrder).filter(([, v]) => Array.isArray(v) && v.length).map(([k, v]) => [k, v.filter((id) => typeof id === 'number' || typeof id === 'string')]));
       if (typeof saved.tasks === 'boolean') settings.tasks = saved.tasks;
       if (saved.ed && typeof saved.ed === 'object') settings.ed = { on: Boolean(saved.ed.on), token: typeof saved.ed.token === 'string' ? saved.ed.token : '', region: ['us', 'au', 'eu', 'ca'].includes(saved.ed.region) ? saved.ed.region : 'us', map: saved.ed.map && typeof saved.ed.map === 'object' ? { ...saved.ed.map } : {} };
+      if (saved.edfinity && typeof saved.edfinity === 'object') settings.edfinity = { on: Boolean(saved.edfinity.on), map: saved.edfinity.map && typeof saved.edfinity.map === 'object' ? { ...saved.edfinity.map } : {} };
       if (saved.links && typeof saved.links === 'object') settings.links = { ...saved.links };
       if (typeof saved.threeDay === 'boolean') settings.threeDay = saved.threeDay;
       if ([0, 5, 10].includes(saved.taskLimit)) settings.taskLimit = saved.taskLimit;
       if (typeof saved.clock24 === 'boolean') settings.clock24 = saved.clock24;
       if (typeof saved.fileText === 'boolean') settings.fileText = saved.fileText;
+      // gpa: the GPA calculator's typed credit hours per course and prior GPA (cleaned by BSX.gpa.clean).
+      if (saved.gpa && typeof saved.gpa === 'object' && BSX.gpa && BSX.gpa.clean) settings.gpa = BSX.gpa.clean(saved.gpa);
     } catch {}
     applyClock();
   }
@@ -291,15 +318,17 @@ BSX.ui = (() => {
   }
 
   // Work from outside Brightspace for the given courses: Gradescope (courses with a
-  // Gradescope link in Content) and Ed Discussion, each only when switched on.
+  // Gradescope link in Content), Ed Discussion and Edfinity, each only when switched on.
   //
   // The same assignment often appears in two or three places. An outside item is folded
   // into another when the student said so (settings.links: its key -> the other item's id,
   // or 'separate' to keep it apart), or else when the names match and the due dates are
-  // within a day and a half. Brightspace's copy wins, then Gradescope's, then Ed's. Folded
-  // items are not listed again; alsoOn() returns them for the item they were folded into.
+  // within a day and a half. Brightspace's copy wins, then Gradescope's, then Ed's, then
+  // Edfinity's. Folded items are not listed again; alsoOn() returns them for the item they
+  // were folded into.
   const folded = new Map(); // course id -> Map(target key -> [outside items])
   let edState = { state: 'off', courses: [] };
+  let edfinityState = { state: 'off', courses: [] };
   const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   // A name reduced to the kind of work and its number: "HW 4", "Homework 4" and "Homework
   // Assignment #4" all give "homework 4". Common short forms are spelt out first.
@@ -335,7 +364,21 @@ BSX.ui = (() => {
   }
   const targetKey = (item) => (item.kind === 'external' ? keyOf(item) : item.id);
 
-  async function externalWork(courses) {
+  // Calls for the same courses while one is still running share it: a list asks once per row
+  // (alsoChips), and each call would otherwise read and fold every outside page again.
+  const workRuns = new Map();
+  function externalWork(courses) {
+    const key = JSON.stringify([courses.map((c) => c.id), settings.gradescope, settings.ed, settings.edfinity]);
+    let run = workRuns.get(key);
+    if (!run) {
+      run = foldExternalWork(courses);
+      workRuns.set(key, run);
+      const done = () => workRuns.get(key) === run && workRuns.delete(key);
+      run.then(done, done);
+    }
+    return run;
+  }
+  async function foldExternalWork(courses) {
     const parts = [];
     if (settings.gradescope && BSX.gradescope) {
       const has = await Promise.all(courses.map((c) => data.externalTools(c.id).then((tools) => tools.some((t) => /gradescope/i.test(t.title))).catch(() => false)));
@@ -347,10 +390,19 @@ BSX.ui = (() => {
         return r.items;
       }));
     }
+    if (settings.edfinity?.on && BSX.edfinity) {
+      // Courses with an Edfinity link in Content help match an Edfinity course with no course number.
+      const has = await Promise.all(courses.map((c) => data.externalTools(c.id).then((tools) => tools.some((t) => /edfinity/i.test(`${t.title} ${t.html_url || ''}`))).catch(() => false)));
+      parts.push(BSX.edfinity.forCourses(courses, { map: settings.edfinity.map || {}, withTool: courses.filter((c, n) => has[n]).map((c) => c.id) }).then((r) => {
+        edfinityState = r;
+        return r.items;
+      }));
+    }
+    for (const c of courses) folded.set(c.id, new Map()); // also when every reader is off
     if (!parts.length) return [];
     const outside = (await Promise.all(parts.map((p) => p.catch(() => [])))).flat();
-    const rank = { Gradescope: 0, Ed: 1 };
-    outside.sort((a, b) => (rank[a.source] ?? 2) - (rank[b.source] ?? 2));
+    const rank = { Gradescope: 0, Ed: 1, Edfinity: 2 };
+    outside.sort((a, b) => (rank[a.source] ?? 3) - (rank[b.source] ?? 3));
     const ids = [...new Set(outside.map((x) => x.course_id))];
     const work = new Map(await Promise.all(ids.map((id) => data.assignments(id).then((l) => [id, l]).catch(() => [id, []]))));
     for (const c of courses) folded.set(c.id, new Map());
@@ -523,14 +575,16 @@ BSX.ui = (() => {
   // A text box that filters rows as the user types. `rows` is a list of [element, text].
   function filterBox(placeholder, rows, onCount) {
     const input = h('input', { class: 'txt search', type: 'search', placeholder, 'aria-label': placeholder });
+    let lower = null; // each row's text in lower case, made on the first keystroke rather than on every one
     input.addEventListener('input', () => {
       const q = input.value.trim().toLowerCase();
+      if (!lower || lower.length !== rows.length) lower = rows.map(([, text]) => text.toLowerCase());
       let shown = 0;
-      for (const [el, text] of rows) {
-        const hit = !q || text.toLowerCase().includes(q);
+      rows.forEach(([el], i) => {
+        const hit = !q || lower[i].includes(q);
         el.hidden = !hit;
         if (hit) shown++;
-      }
+      });
       if (onCount) onCount(shown);
     });
     return input;
@@ -600,8 +654,24 @@ BSX.ui = (() => {
   const reload = () => {
     client.clear();
     if (BSX.gradescope) BSX.gradescope.clear();
+    if (BSX.edfinity) BSX.edfinity.clear();
+    workRuns.clear(); // a run begun before Refresh would hand back the old answers
     render();
   };
+  // The Edfinity reader on or off. On asks for edfinity.com access (on an extension page) when
+  // the browser has not allowed it yet; off deletes everything the reader kept.
+  async function setEdfinity(on) {
+    settings.edfinity.on = on;
+    saveSettings();
+    if (!on && BSX.edfinity) BSX.edfinity.forget();
+    if (!on) edfinityState = { state: 'off', courses: [] };
+    if (on) {
+      const runtime = (globalThis.browser || globalThis.chrome)?.runtime;
+      const res = await Promise.resolve(runtime?.sendMessage({ type: 'bsx-edfinity', op: 'check' })).catch(() => null);
+      if (res && res.error === 'permission') runtime.sendMessage({ type: 'bsx-grant', site: 'edfinity' });
+    }
+    reload();
+  }
   // Show a Brightspace page as it is, without the wrapper: a page loaded once without it.
   // Plain Brightspace from here on in this tab (see offMode), starting at page u.
   function openRaw(u) {
@@ -737,8 +807,8 @@ BSX.ui = (() => {
         tip('What this is', 'A Canvas-style view of your Brightspace courses. The only change it makes on Brightspace is handing in an assignment file when you press Submit Assignment.'),
         tip('Doing the work', 'Start Assignment hands in a file from here. Quizzes, discussion posts and text submissions open the real Brightspace page.'),
         h('button', { class: 'trayitem', type: 'button', onclick: () => { openTray(null); shortcutsDialog(); } }, ic('keyboard', 18), ' Keyboard shortcuts (press ?)'),
-        h('button', { class: 'trayitem', type: 'button', onclick: () => { openTray(null); if (BSX.ui.searchDialog) BSX.ui.searchDialog(); } }, ic('search', 18), ' Search all courses (s or Ctrl+K)'),
-        tip('Search', 'Finds modules, files, assignments, quizzes, discussions and announcements, even with small typos. With nothing typed, it lists what is due in the next two weeks. To find words inside PDFs and images too, turn on Search inside files in Account.'),
+        h('button', { class: 'trayitem', type: 'button', onclick: () => { openTray(null); if (BSX.ui.searchDialog) BSX.ui.searchDialog(); } }, ic('search', 18), ' Search (s)'),
+        tip('Search', 'Finds modules, files, assignments, quizzes, discussions and announcements at once, even with small typos, then also instructions, feedback, posts, syllabi, people and past courses a moment later. With nothing typed, it lists what is due in the next two weeks. To find words inside PDFs and images too, turn on Search inside files in Account.'),
         tip('Work outside Brightspace', 'Use “+ To Do” for Gradescope, publisher sites or anything else. Those items appear in To Do, the list view and the calendar.'),
         tip('Grades', 'A total marked as an estimate is computed here from graded items. It applies each group\'s dropped-score rules but is not official.'),
         tip('Names and colours', 'The ⋮ button on a course card sets a nickname and colour.'),
@@ -756,13 +826,18 @@ BSX.ui = (() => {
       h('div', { class: 'seg' }, scope(false, 'Current'), scope(true, 'All')),
       h('div', { class: 'traylabel' }, 'Search inside files'),
       h('div', { class: 'seg' }, [false, true].map((on) => h('button', { type: 'button', class: Boolean(settings.fileText) === on ? 'on' : null, onclick: () => { settings.fileText = on; saveSettings(); if (!on && BSX.filetext) BSX.filetext.forget(); openTray('account'); } }, on ? 'Read them' : 'Off'))),
-      h('p', { class: 'muted small', style: 'margin:8px 4px 0' }, 'When on, search (s or Ctrl+K) also finds words inside your courses\u2019 PDFs and images. They are read on this computer, scans with OCR, starting the next time you search; nothing is sent anywhere. Off deletes the text it kept.'),
+      h('p', { class: 'muted small', style: 'margin:8px 4px 0' }, 'When on, search (s) also finds words inside your courses\u2019 PDFs and images. They are read on this computer, scans with OCR, starting the next time you search; nothing is sent anywhere. Off deletes the text it kept.'),
       h('div', { class: 'traylabel' }, 'Gradescope'),
       h('div', { class: 'seg' }, [false, true].map((on) => h('button', { type: 'button', class: Boolean(settings.gradescope) === on ? 'on' : null, onclick: () => { settings.gradescope = on; saveSettings(); reload(); openTray('account'); } }, on ? 'Read it' : 'Off'))),
       h('p', { class: 'muted small', style: 'margin:8px 4px 0' }, 'When on, courses with a Gradescope link also show your Gradescope assignments, due dates and scores. It reads two Gradescope pages with your own Gradescope sign-in and changes nothing there.'),
       h('div', { class: 'traylabel' }, 'Ed Discussion'),
       h('div', { class: 'seg' }, [false, true].map((on) => h('button', { type: 'button', class: Boolean(settings.ed.on) === on ? 'on' : null, onclick: () => { settings.ed.on = on; saveSettings(); if (on && !settings.ed.token) { openTray(null); location.hash = '#/connections'; return; } reload(); openTray('account'); } }, on ? 'Read it' : 'Off'))),
       h('a', { class: 'trayitem', href: '#/connections' }, 'Connected sites: Ed token, course matching, overlaps'),
+      h('div', { class: 'traylabel' }, 'Edfinity'),
+      h('div', { class: 'seg' }, [false, true].map((on) => h('button', { type: 'button', class: Boolean(settings.edfinity.on) === on ? 'on' : null, onclick: () => setEdfinity(on).then(() => openTray('account')) }, on ? 'Read it' : 'Off'))),
+      h('p', { class: 'muted small', style: 'margin:8px 4px 0' }, 'When on, your Edfinity assignments, due dates and scores show with their course. It reads them with your own Edfinity sign-in, from edfinity.com only, and changes nothing there. Off deletes what it kept.'),
+      // Sections added by other files (calendar export, reminders): each hook returns a node or a list.
+      ...(BSX.ui.accountHooks || []).flatMap((f) => [f()].flat().filter(Boolean)),
       h('div', { class: 'traylabel' }, 'Pages'),
       h('a', { class: 'trayitem', href: '#/grades' }, 'Grades for all courses'),
       h('a', { class: 'trayitem', href: '#/courses' }, 'All Courses'),
@@ -805,6 +880,7 @@ BSX.ui = (() => {
     for (const type of ['wheel', 'touchmove', 'keydown']) main.addEventListener(type, () => (keepScroll = null), { passive: true });
     frame = { app, rail, tray, main };
     mount.replaceChildren(app);
+    wantFonts();
     // First paint: the shape of a page in grey while Brightspace answers.
     main.replaceChildren(h('div', { class: 'head' }, h('i', { class: 'skelbar title' })), h('div', { class: 'layout' }, h('div', { class: 'content skel big', 'aria-busy': 'true' }, h('span', { class: 'sr' }, 'Loading…'), h('i'), h('i'), h('i'), h('i', { class: 'short' }), h('i'), h('i', { class: 'short' }))));
   }
@@ -833,6 +909,16 @@ BSX.ui = (() => {
         }
         if (nav) setNav(navOpen());
         toggle.setAttribute('aria-expanded', String(Boolean(nav) && navOpen()));
+        // Scrolled down (on a phone the menu sits above the page), the menu would open out of
+        // sight, so the page scrolls back up to it.
+        if (nav && navOpen() && nav.getBoundingClientRect().top < head.getBoundingClientRect().bottom) {
+          nav.style.scrollMarginTop = `${head.offsetHeight + 8}px`;
+          // While the menu grows, scroll anchoring would push the page back down past it.
+          const scroller = nav.closest('.main') || document.scrollingElement;
+          scroller.style.overflowAnchor = 'none';
+          setTimeout(() => { scroller.style.overflowAnchor = ''; }, 600);
+          nav.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        }
       } }, ic('menu', 24));
       const trail = page.crumbs.map((c, i) => [i ? h('span', { class: 'sep' }, ic('right', 14)) : null, c.href && i < page.crumbs.length - 1 ? h('a', { href: c.href }, c.label) : h('span', { class: 'here' }, c.label)]);
       head = h('div', { class: 'crumbs' }, toggle, h('div', { class: 'trail' }, trail), page.actions, refresh);
@@ -939,6 +1025,12 @@ BSX.ui = (() => {
       } catch {}
     }));
   }
+  let fontsWanted = false;
+  const wantFonts = () => {
+    if (fontsWanted) return;
+    fontsWanted = true;
+    loadFonts();
+  };
 
   // ---- flash messages (Canvas's alerts at the top of the page) -------------
   function flash(text, kind = 'ok') {
@@ -975,6 +1067,13 @@ BSX.ui = (() => {
         pop.classList.toggle('toleft', r.right - 230 < railRight + 8);
       }
       pop.hidden = !open;
+      if (open) {
+        // Keep the whole menu on screen: on a phone, Refresh can sit to the right of the button.
+        pop.style.translate = '';
+        const m = pop.getBoundingClientRect();
+        const over = (pop.classList.contains('toleft') ? m.left + pop.offsetWidth : m.right) - (innerWidth - 8);
+        if (over > 0) pop.style.translate = `${-over}px 0`;
+      }
       btn.setAttribute('aria-expanded', String(open));
       if (open) {
         document.addEventListener('click', away, true);
@@ -1019,7 +1118,7 @@ BSX.ui = (() => {
     ['g then i', 'Inbox'],
     ['g then g', 'Grades for all courses'],
     ['g then p', 'Groups'],
-    ['s or Ctrl+K (⌘K)', 'Search all courses, files and due dates'],
+    ['s', 'Search all courses'],
     ['/', 'Search this page'],
     ['j / k', 'Next / previous item'],
     ['[ / ]', 'Previous / next module item'],
@@ -1040,12 +1139,6 @@ BSX.ui = (() => {
   const GO = { d: '#/', c: '#/courses', l: '#/calendar', i: '#/inbox', g: '#/grades', p: '#/groups' };
   let pendingG = 0;
   function onKey(ev) {
-    // Ctrl+K (⌘K on a Mac) opens search from anywhere in the wrapper, even while typing.
-    if (frame && (ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey && ev.key.toLowerCase() === 'k' && route().view !== 'off' && BSX.ui.searchDialog) {
-      ev.preventDefault();
-      BSX.ui.searchDialog();
-      return;
-    }
     if (!frame || ev.ctrlKey || ev.metaKey || ev.altKey || route().view === 'off') return;
     const target = ev.composedPath()[0];
     if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)) return;
@@ -1060,6 +1153,7 @@ BSX.ui = (() => {
     if (k === 'g') pendingG = Date.now();
     else if (k === '?') shortcutsDialog();
     else if (k === 's' && BSX.ui.searchDialog) BSX.ui.searchDialog();
+    else if (k === 'S' && BSX.ui.searchDialog) BSX.ui.searchDialog(); // the old Deep search key
     else if (k === 'r') reload();
     else if (k === '/') {
       const box = frame.main.querySelector('input.search');
@@ -1103,9 +1197,14 @@ BSX.ui = (() => {
     window.addEventListener('hashchange', render);
     window.addEventListener('keydown', onKey);
     root.addEventListener('click', interceptLinks);
-    loadFonts();
-    window.addEventListener('hashchange', updateBadge);
-    loadSettings().then(() => setTimeout(updateBadge, 3000));
+    if (route().view !== 'off') wantFonts(); // else when the wrapper is first shown (buildFrame)
+    // Counting new grades and announcements reads every course: after a move between pages,
+    // wait until the page has had its turn, and count once for a burst of moves.
+    let badgeTimer = 0;
+    window.addEventListener('hashchange', () => {
+      clearTimeout(badgeTimer);
+      badgeTimer = setTimeout(updateBadge, route().view === 'dashboard' ? 0 : 2000);
+    });
     // Pages draw first from the answers saved on the last visit; when Brightspace's real
     // answers differ, redraw in place, unless the student is typing or has a dialog open.
     client.onChange(() => {
@@ -1113,13 +1212,16 @@ BSX.ui = (() => {
       // A framed Brightspace page is not redrawn: that would reload it and lose its state.
       if (!busy && !root.querySelector('.modal, .wi.changed') && !['off', 'open'].includes(route().view)) render();
     });
-    loadSettings().then(render);
+    // Preferences are read once (extension storage) for both of these.
+    const ready = loadSettings();
+    ready.then(render);
+    ready.then(() => setTimeout(updateBadge, 3000));
   }
 
   return {
     h, ic, safeHref, cleanHtml, prose, plainOf, clip, num, pct, fmt, applyClock, when, dayKey, bytes, DAY, COLORS,
     settings, saveSettings, colorOf, nameOf, focusCourses, state,
-    keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork, alsoOn, alsoChips, setLink, sameWork, workKey, outsideAnnouncements, edStatus: () => edState, folded,
+    keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork, alsoOn, alsoChips, setLink, sameWork, workKey, outsideAnnouncements, edStatus: () => edState, edfinityStatus: () => edfinityState, setEdfinity, folded,
     courseHref, itemHref, wrapHref, bs, PLURAL,
     empty, tag, button, linkButton, lazy, sideSection, filterBox, flash, menu,
     // The wrapper's own top element, for dialogs and effects placed over everything.

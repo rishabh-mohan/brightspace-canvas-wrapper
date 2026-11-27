@@ -49,6 +49,15 @@ assert.ok(both[0].score <= 0.45, String(both[0].score));
 assert.ok(both[0].snippet.includes('Edge cases'), both[0].snippet);
 // Extended-search operators typed by accident do not break the search.
 assert.doesNotThrow(() => search('!quiz | "2'));
+// Text read after the searcher was made (or dropped again) is searched as it is now.
+const later = [{ title: 'Scan.png', where: 'CS 18000', kind: 'File', text: 'Scan.png', body: '' }];
+const laterSearch = S.make(later);
+assert.deepStrictEqual(laterSearch('Dijkstra').map((r) => r.title), []);
+later[0].body = 'Notes on DIJKSTRA shortest paths.';
+assert.deepStrictEqual(laterSearch('dijkstra').map((r) => r.title), ['Scan.png']);
+assert.ok(laterSearch('dijkstra')[0].snippet.includes('DIJKSTRA'));
+later[0].body = '';
+assert.deepStrictEqual(laterSearch('dijkstra').map((r) => r.title), []);
 
 // Snippets: cut around the first match, with … where text was left out.
 const long = `${'a '.repeat(200)}the needle is here${' b'.repeat(200)}`;

@@ -1,0 +1,14 @@
+
+//<![CDATA[
+
+  window._E = {
+    currentUser: {
+      id: 'f0e1d2c3b4a5000000000001',
+      login: 'student@example.edu',
+      type: 'student'
+    },
+    embedded: false
+  }
+
+    _E.assessment = JSON.parse('{\"id\":\"f0e1d2c3b4a5000000000009\",\"sessions\":[],\"user\":{\"id\":\"f0e1d2c3b4a5000000000002\",\"full_name\":\"Sam Student\",\"initials\":\"SS\"},\"readonly\":{\"display_type\":\"assignment\",\"score_precision\":0,\"launchable\":true,\"time_limit\":null,\"timed\":null,\"suspended\":null,\"locked\":false,\"due\":false,\"available\":true,\"released\":false,\"late\":false,\"early\":false,\"state\":\"unstarted\",\"preview\":false,\"practice\":false,\"unlimited_practice\":false,\"type\":\"assignment\",\"num_sessions\":0,\"name\":\"Computer Assignment #5: Simple Linear Regression\",\"assignment_id\":\"f0e1d2c3b4a5000000000010\",\"title\":\"Sam Student\",\"status\":\"not started\",\"max_submissions\":1,\"excused_reason\":null,\"created_at\":null,\"updated_at\":null,\"original_max_submissions\":1,\"overridden_max_submissions\":null,\"owned\":true,\"excused\":null,\"oh_enabled\":true,\"abilities\":[],\"has_unused_sessions\":true,\"allows_multiple_sessions\":false,\"live_llm_feedback\":false,\"live_llm_grading\":false,\"additional_info_label\":\"Resources\"},\"assignment\":{\"id\":\"f0e1d2c3b4a5000000000010\",\"available_date\":\"2026-11-07T23:00:00.000-06:00\",\"due_date\":\"2026-12-06T22:59:59.000-06:00\",\"late_work_date\":\"2026-12-08T22:59:59.000-06:00\",\"name\":\"Computer Assignment #5: Simple Linear Regression\",\"prerequisite_release_date\":null,\"uses_remediation\":false,\"oh_enabled\":true,\"allow_late_work\":true,\"remediation_mastery_threshold_percent\":80,\"release_method\":\"release_on_due_date\",\"display_type\":\"assignment\",\"allow_early_work\":false,\"early_work_date\":null,\"full_credit_date\":\"2026-12-06T22:59:59.000-06:00\",\"scoring_method\":\"score_best_submission\",\"requires_respondus\":false,\"ltia_lms_launch_only\":false,\"section_oh_enabled\":true,\"assignment_prerequisites\":[],\"section\":{\"id\":\"f0e1d2c3b4a5000000000003\",\"name\":\"STAT 350 FALL 2026 (In-person) -- Lee\",\"default_assignment_available_time\":\"00:00\",\"default_assignment_due_time\":\"23:59\"},\"readonly\":{\"late_work_credit_pct\":80,\"early_work_credit_pct\":0,\"abilities\":[\"read\"]},\"manual_problem_scores\":[],\"displayed_release_date\":\"2026-12-08T22:59:59.000-06:00\"},\"registration\":{\"id\":\"f0e1d2c3b4a5000000000001\",\"name\":\"STAT 350 FALL 2026 (In-person) -- Lee\"},\"available_date\":\"2026-11-07T23:00:00.000-06:00\",\"due_date\":\"2026-12-06T22:59:59.000-06:00\",\"late_work_date\":\"2026-12-08T22:59:59.000-06:00\",\"early_work_date\":null,\"full_credit_date\":\"2026-12-06T22:59:59.000-06:00\",\"override_availability\":false,\"section_id\":\"f0e1d2c3b4a5000000000003\",\"extra_time_awarded\":0,\"waive_prerequisites\":false}');
+//]]>

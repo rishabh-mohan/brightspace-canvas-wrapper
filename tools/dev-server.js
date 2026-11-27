@@ -6,7 +6,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { handle, gradescope, quizSummary, submit, ed } = require('./fake-brightspace');
+const { handle, gradescope, quizSummary, submit, ed, edfinity } = require('./fake-brightspace');
 const statuses = []; // what pages reported back about themselves (see the page script below)
 
 const ext = path.join(__dirname, '..', 'extension');
@@ -28,8 +28,8 @@ function page(real) {
   const q = new URLSearchParams(location.search);
   if (q.get('bsxframe')) window.BSX_DEV_FRAME = true; // phone-width preview, see /__phone
   localStorage.setItem('XSRF.Token', 'dev-xsrf'); // Brightspace keeps its anti-forgery token here
-  const preset = { theme: q.get('bsxtheme'), dash: q.get('bsxdash'), gradescope: q.get('bsxgs') ? true : null, wideCards: q.get('bsxwide') ? true : null, tasks: q.get('bsxtasks') ? true : null, ed: q.get('bsxed') ? { on: true, token: 'dev-token', region: 'us', map: {} } : null };
-  const any = preset.theme || preset.dash || preset.gradescope || preset.wideCards || preset.tasks || preset.ed;
+  const preset = { theme: q.get('bsxtheme'), dash: q.get('bsxdash'), gradescope: q.get('bsxgs') ? true : null, wideCards: q.get('bsxwide') ? true : null, tasks: q.get('bsxtasks') ? true : null, ed: q.get('bsxed') ? { on: true, token: 'dev-token', region: 'us', map: {} } : null, edfinity: q.get('bsxedf') ? { on: true, map: {} } : null };
+  const any = preset.theme || preset.dash || preset.gradescope || preset.wideCards || preset.tasks || preset.ed || preset.edfinity;
   const read = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   // When the real extension is loaded (tools/dev-extension.js) it has its own storage and
   // background script; these stand-ins are only for the plain page.
@@ -45,6 +45,12 @@ function page(real) {
         if (q.get('bsxedperm') === '0') return { error: 'permission' };
         const r = await fetch('/__ed' + msg.path);
         return r.ok ? { json: await r.json() } : { error: 'Ed returned ' + r.status };
+      }
+      if (msg.type === 'bsx-edfinity') { // ?bsxedfperm=0: access not allowed yet; ?bsxedfout=1: signed out
+        if (q.get('bsxedfperm') === '0') return { error: 'permission' };
+        if (msg.op === 'check') return { ok: true };
+        const r = q.get('bsxedfout') ? { ok: false } : await fetch('/__edfinity' + msg.path);
+        return r.ok ? { status: 200, url: 'https://edfinity.com' + msg.path, json: await r.json() } : { status: 200, url: 'https://edfinity.com/users/sign_in', json: null };
       }
       if (msg.type !== 'bsx-gradescope') return null;
       if (q.get('bsxgsperm') === '0') return { error: 'permission' }; // as Firefox before access is allowed
@@ -124,6 +130,10 @@ http
     }
     if (url.pathname.startsWith('/__ed/')) {
       const body = ed(url.pathname.slice('/__ed'.length));
+      return body ? send(200, 'application/json', JSON.stringify(body)) : send(404, 'text/plain', 'Not found');
+    }
+    if (url.pathname.startsWith('/__edfinity/')) {
+      const body = edfinity(url.pathname.slice('/__edfinity'.length));
       return body ? send(200, 'application/json', JSON.stringify(body)) : send(404, 'text/plain', 'Not found');
     }
     if (url.pathname.startsWith('/__gradescope/')) {

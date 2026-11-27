@@ -31,25 +31,35 @@ BSX.filetext = (() => {
     } catch {}
   })();
   let saveTimer = null;
-  function persist() {
+  let saveAt = 0;
+  function write() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      const out = {};
-      let total = 0;
-      for (const [k, e] of [...saved.entries()].sort((a, b) => b[1].at - a[1].at)) {
-        if ((total += e.text.length) > MAX_TOTAL) break;
-        out[k] = e;
-      }
-      try {
-        store.set({ [KEY]: out });
-      } catch {}
-    }, 1000);
+    saveTimer = null;
+    const out = {};
+    let total = 0;
+    for (const [k, e] of [...saved.entries()].sort((a, b) => b[1].at - a[1].at)) {
+      if ((total += e.text.length) > MAX_TOTAL) break;
+      out[k] = e;
+    }
+    try {
+      store.set({ [KEY]: out });
+    } catch {}
   }
+  // Writes all kept text (up to MAX_TOTAL characters) in one go, so while files are being read
+  // a write happens at most every `delay` ms instead of after each file.
+  function persist(delay = 1000) {
+    if (saveTimer && saveAt <= Date.now() + delay) return; // a write due sooner saves this change too
+    clearTimeout(saveTimer);
+    saveAt = Date.now() + delay;
+    saveTimer = setTimeout(write, delay);
+  }
+  // Leaving the page: write what is waiting now, so text read in the last few seconds is kept.
+  addEventListener('pagehide', () => saveTimer && write());
   function remember(course, item, entry) {
     const prefix = `${course}:${item.id}:`;
     for (const k of saved.keys()) if (k.startsWith(prefix)) saved.delete(k); // older versions of the file
     saved.set(keyOf(course, item), { at: Date.now(), ...entry });
-    persist();
+    persist(10e3);
   }
 
   // ---- the reader frame ----------------------------------------------------------
@@ -123,20 +133,37 @@ BSX.filetext = (() => {
     if (running) await running.catch(() => {}); // one indexing run at a time
     running = (async () => {
       let n = 0;
-      for (const { course, item } of todo) {
-        onProgress(n++, todo.length, item);
-        if (saved.has(keyOf(course, item))) continue; // read meanwhile by another run
-        const { kind, mime } = kindOf(item);
-        let entry;
-        try {
-          const r = await read(await download(item.file_url), kind, mime);
-          entry = { text: r.text.slice(0, MAX_CHARS), ocr: r.ocr };
-        } catch (e) {
-          if (/signed out/i.test(e.message)) throw e;
-          entry = { text: '', failed: String(e.message || e).slice(0, 200) };
+      // The next file downloads while this one is read (OCR is slow), so the two overlap.
+      let ahead = null; // { item, bytes: Promise }
+      const fetchAhead = (i) => {
+        const next = todo[i];
+        if (!next || saved.has(keyOf(next.course, next.item))) return null;
+        const bytes = download(next.item.file_url);
+        bytes.catch(() => {}); // handled when its turn comes (or dropped if the run stops)
+        return { item: next.item, bytes };
+      };
+      try {
+        for (const [i, { course, item }] of todo.entries()) {
+          onProgress(n++, todo.length, item);
+          const pending = ahead && ahead.item === item ? ahead.bytes : null;
+          ahead = null;
+          if (saved.has(keyOf(course, item))) continue; // read meanwhile by another run
+          const { kind, mime } = kindOf(item);
+          let entry;
+          try {
+            const bytes = pending || download(item.file_url);
+            ahead = fetchAhead(i + 1);
+            const r = await read(await bytes, kind, mime);
+            entry = { text: r.text.slice(0, MAX_CHARS), ocr: r.ocr };
+          } catch (e) {
+            if (/signed out/i.test(e.message)) throw e;
+            entry = { text: '', failed: String(e.message || e).slice(0, 200) };
+          }
+          remember(course, item, entry);
+          onEach(course, item, entry.text);
         }
-        remember(course, item, entry);
-        onEach(course, item, entry.text);
+      } finally {
+        if (todo.length) persist(); // save what was read soon after the run, not up to 10 s later
       }
       onProgress(todo.length, todo.length, null);
     })();

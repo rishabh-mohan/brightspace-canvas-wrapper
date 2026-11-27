@@ -14,7 +14,7 @@
   "submitted": "/d2l/home?bsxdo=click:.dhead%20.btn.primary|file:.submitbox%20input=my-work.pdf|type:.submitbox%20textarea=Done|click:.submitbox%20.btn.primary#/courses/101/assignments/10104",
   "quizsummary": "/d2l/home#/courses/102/quizzes/10251",
   "dashmenu": "/d2l/home?bsxclick=.head%20.menuwrap%20.iconbtn#/",
-  "flash": "/d2l/home?bsxdo=click:.head%20.btn|type:.dialog%20input=Read%20chapter%206|click:.dialog%20.btn.primary#/",
+  "flash": "/d2l/home?bsxdo=click:.head%20.btn%2B.btn|type:.dialog%20input=Read%20chapter%206|click:.dialog%20.btn.primary#/",
   "pinmenu": "/d2l/home?bsxclick=.content%20details.group:nth-of-type(3)%20.irow%20.menuwrap%20.iconbtn#/courses/101/modules",
   "pinned": "/d2l/home?bsxdo=click:.content%20details.group:nth-of-type(3)%20.irow%20.menuwrap%20.iconbtn|click:.content%20details.group:nth-of-type(3)%20.irow%20.menu%20button#/courses/101/modules",
   "navclosed":"/d2l/home?bsxclick=.crumbs%20.iconbtn#/courses/101/assignments",
@@ -27,6 +27,10 @@
   "edlist": "/d2l/home?bsxgs=1&bsxed=1#/courses/101/assignments",
   "edfolded": "/d2l/home?bsxgs=1&bsxed=1#/courses/101/assignments/10105",
   "edperm": "/d2l/home?bsxed=1&bsxedperm=0#/connections",
+  "edfdash": "/d2l/home?bsxedf=1&bsxtasks=1#/",
+  "edfconnections": "/d2l/home?bsxedf=1#/connections",
+  "edfcourse": "/d2l/home?bsxedf=1#/courses/103/assignments",
+  "edfperm": "/d2l/home?bsxedf=1&bsxedfperm=0#/connections",
   "tasks":"/d2l/home?bsxtasks=1#/",
   "taskmenu": "/d2l/home?bsxtasks=1&bsxclick=.head%20.menuwrap%20.iconbtn#/",
   "embedded":"/d2l/le/calendar/101",
@@ -71,8 +75,12 @@
   "dialog": "/d2l/home?bsxclick=.head%20.btn#/",
   "whatif": "/d2l/lms/grades/my_grades/main.d2l?ou=101&bsxclick=.right%20.btn",
   "search": "/d2l/home?bsxdo=type:input.search%3Dquiz#/courses/101/assignments",
-  "addtodo": "/d2l/home?bsxdo=click:.head%20.btn|type:.dialog%20input%5Btype%3Dtext%5D%3DGradescope%20HW%206|click:.dialog%20.btn.primary#/",
-  "tick": "/d2l/home?bsxdash=list&bsxdo=click:.prow:not(.isdone)%20.pcheck#/"
+  "addtodo": "/d2l/home?bsxdo=click:.head%20.btn%2B.btn|type:.dialog%20input%5Btype%3Dtext%5D%3DGradescope%20HW%206|click:.dialog%20.btn.primary#/",
+  "tick": "/d2l/home?bsxdash=list&bsxdo=click:.prow:not(.isdone)%20.pcheck#/",
+  "modmenu": "/d2l/home?bsxclick=.content%20details.group:nth-of-type(3)%20%3E%20summary%20.gmenu%20.iconbtn#/courses/101/modules",
+  "zipcourse": "/d2l/home?bsxdo=click:.head%20.menuwrap%20.iconbtn|click:.head%20.menu%20button:last-child#/",
+  "zipfiles": "/d2l/home#/courses/101/files",
+  "whatsnew": "/d2l/home?bsxdash=cards#/"
 }
 
 

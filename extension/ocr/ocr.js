@@ -53,6 +53,7 @@ async function pdfText(bytes) {
       // 'print' draws without waiting for animation frames, which browsers pause in a hidden frame.
       await page.render({ canvasContext: canvas.getContext('2d'), viewport, intent: 'print' }).promise;
       read.push(await ocr(canvas));
+      canvas.width = canvas.height = 0; // frees the page image now rather than at the next GC
       page.cleanup();
     }
     return { text: tidy(read.join('\n')), pages: doc.numPages, ocr: true, partial: doc.numPages > MAX_OCR_PAGES };
@@ -68,7 +69,9 @@ async function imageText(bytes, type) {
   canvas.height = bitmap.height;
   canvas.getContext('2d').drawImage(bitmap, 0, 0);
   bitmap.close();
-  return { text: tidy(await ocr(canvas)), pages: 1, ocr: true };
+  const text = tidy(await ocr(canvas));
+  canvas.width = canvas.height = 0;
+  return { text, pages: 1, ocr: true };
 }
 
 // One file at a time: OCR is heavy, and the page around waits for each answer anyway.

@@ -541,5 +541,18 @@ button.event { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; te
   .todo .iconbtn { visibility: visible; }
   .irow > .menuwrap > .iconbtn { opacity: 1; }
 }
+/* Printing: the wrapper is fixed to the screen, so without this every printed page showed the same
+   first screenful. On paper it flows like a normal page, in the light theme, without the rail, menus
+   and buttons. (ui-core.js hides the Brightspace page underneath while printing.) */
+@media print {
+  .app { position: static; width: auto; max-width: none; height: auto; overflow: visible; display: block; }
+  .app[data-theme] { --bg: #fff; --fg: #2d3b45; --muted: #6b7780; --link: #0374b5; --line: #c7cdd1; --line2: #e8eaec;
+    --soft: #f5f5f5; --soft2: #e8eaec; --bad: #c2271f; --ok: #0b874b; --hi: #e5f2f8; --primary: #0374b5; color-scheme: light; }
+  .main { overflow: visible; }
+  .head, .crumbs { position: static; }
+  .rail, .tray, .modal, .menuwrap, .iconbtn, .cnav, .head .btn, .pager { display: none !important; }
+  .app *, .app *::before, .app *::after { animation: none !important; transition: none !important; }
+  details.group, .card, .todo { break-inside: avoid; }
+}
 `;
 })();

@@ -950,6 +950,19 @@ BSX.ui = (() => {
     if (on) window.scrollTo(0, 0);
   }
 
+  // Printing: show only the wrapper, and let the page grow past one screen (styles.js lays it out
+  // for paper). The wrapper sits outside <body>, so hiding <body> hides just the Brightspace page.
+  addEventListener('beforeprint', () => {
+    if (!frame) return;
+    lockPage(false);
+    if (document.body) document.body.style.setProperty('display', 'none', 'important');
+  });
+  addEventListener('afterprint', () => {
+    if (!frame) return;
+    if (document.body) document.body.style.removeProperty('display');
+    lockPage(true);
+  });
+
   async function render() {
     const id = ++renderId;
     const r = route();

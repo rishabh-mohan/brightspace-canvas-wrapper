@@ -55,6 +55,15 @@ p { margin: 12px 0; }
 .trayitem { display: flex; gap: 10px; align-items: baseline; width: 100%; padding: 8px 4px; border: 0; background: none; text-align: left; color: var(--link); border-bottom: 1px solid var(--line2); }
 .trayitem:hover { text-decoration: underline; }
 .trayitem.all { border-bottom: 0; margin-top: 6px; }
+/* the Alerts tray (src/notices.js): its count on the rail button, and one row per entry */
+.rail [data-tray] { position: relative; }
+.railbadge { position: absolute; top: 5px; left: 50%; margin-left: 4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--primary); color: #fff; font-size: 11.5px; line-height: 18px; font-weight: 700; text-align: center; }
+.nitem { display: flex; gap: 10px; align-items: flex-start; padding: 9px 4px; border-bottom: 1px solid var(--line2); color: var(--fg); }
+.nitem:hover { background: var(--soft); text-decoration: none; }
+.nitem .t { display: block; font-size: 15px; line-height: 1.3; font-weight: 400; }
+.nitem .ctx { display: block; }
+.nitem.unread .t { font-weight: 700; }
+.nitem .newdot { margin-top: 5px; }
 .tname { display: block; font-weight: 700; }
 .tcode { display: block; }
 .tip { padding: 9px 4px; border-bottom: 1px solid var(--line2); }
@@ -171,6 +180,8 @@ select.pick { width: auto; max-width: 320px; }
 .cardics { display: flex; gap: 14px; padding: 12px 14px 12px; }
 .cardic { position: relative; color: var(--muted); padding: 4px; border-radius: 4px; display: inline-flex; }
 .cardic:hover { background: var(--soft2); color: var(--fg); }
+button.cardic { border: 0; background: transparent; font: inherit; cursor: pointer; margin-left: auto; }
+button.cardic:disabled { opacity: .5; cursor: progress; }
 .badge { position: absolute; top: -5px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--primary); color: #fff; font-size: 11.5px; line-height: 18px; text-align: center; font-weight: 700; }
 .card .edit { padding: 12px 14px 14px; display: grid; gap: 10px; }
 .card .edit label { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
@@ -346,6 +357,19 @@ a.t:hover { color: var(--link); }
 .tkrow { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0 9px 8px; border-bottom: 1px solid var(--line2); border-left: 3px solid var(--c); animation: bsx-fade .2s ease-out; }
 .tkrow .t { font-size: 15px; line-height: 1.3; }
 .tkrow .pcheck { width: 20px; height: 20px; margin-top: 1px; }
+/* To Do's "No due date" group (closed until opened), and courses hidden from the Dashboard */
+.undated { margin-top: 10px; }
+.undated > summary { display: flex; align-items: center; gap: 6px; padding: 8px 0; cursor: pointer; font-weight: 700; font-size: 14px; list-style: none; border-top: 1px solid var(--line2); }
+.undated > summary::-webkit-details-marker { display: none; }
+.undated:not([open]) > summary .ic { transform: rotate(-90deg); }
+.udcount { margin-left: auto; min-width: 22px; text-align: center; font-size: 12.5px; color: var(--muted); background: var(--soft); border-radius: 10px; padding: 1px 7px; }
+.udcourse > .ctx { display: flex; gap: 4px; margin: 8px 0 2px; }
+.udcourse > .ctx > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.tkrow.isdone .t { font-weight: 400; color: var(--muted); text-decoration: line-through; }
+.dashlinks { display: flex; flex-wrap: wrap; gap: 6px 20px; }
+.hidlist { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 12px; max-width: 560px; }
+.hidrow { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 12px; border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 4px; }
+.hidrow .tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* groups */
 .gcards { display: grid; gap: 14px; }

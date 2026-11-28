@@ -15,7 +15,7 @@
     const gridEnd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + 42);
 
     const courses = await data.courses();
-    const listed = state.showAll ? courses : ui.focusCourses(courses);
+    const listed = ui.shownCourses(courses); // without courses hidden from the Dashboard
     const hidden = new Set(settings.calHidden);
     const shown = listed.filter((c) => !hidden.has(c.id));
     const fetched = await data.calendar(shown.map((c) => c.id), gridStart.getTime(), gridEnd.getTime());

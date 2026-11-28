@@ -1,4 +1,5 @@
-// The zip download (src/zip.js): CRC-32, names, the zip writer, planning and fetching.
+// The zip download (src/zip.js): CRC-32, names, the zip writer, planning, fetching and the
+// course summary pages.
 // Each zip made here is parsed byte by byte, and one is also expanded with PowerShell's
 // Expand-Archive when PowerShell is there.
 // Usage: node tests/zip.test.js
@@ -179,11 +180,6 @@ function parseZip(buf) {
   ]);
   const one = Z.plan(mods.slice(0, 2), { flattenFirst: true });
   assert.deepStrictEqual([...new Set(one.files.map((f) => f.dir))], ['', 'Extra_ practice_/'], 'one module: its files at the top');
-  // A course is offered for download only when it has files (the Dashboard's course dialog).
-  assert.strictEqual(Z.hasFiles(mods), true);
-  assert.strictEqual(Z.hasFiles([{ id: 5, name: 'Links only', depth: 0, items: [item(51, 'Reading', 'Link', 'https://example.edu/r'), item(52, 'Tool', 'External tool', '/d2l/lti')] }]), false);
-  assert.strictEqual(Z.hasFiles([{ id: 6, name: 'Outside', depth: 0, items: [{ ...item(61, 'Ed file', 'File', ''), external: {} }] }, { id: 7, name: 'Empty', depth: 0 }]), false);
-  assert.strictEqual(Z.hasFiles([]), false);
   // Folder names are kept short, so deep module trees stay under Windows' 260-character paths.
   assert.strictEqual(Z.FOLDER_MAX, 40);
   const longName = 'Unit 4: An unreasonably long module title about graph algorithms and more';
@@ -295,6 +291,112 @@ function parseZip(buf) {
   assert.strictEqual(Z.MAX_DATA, 2e9);
   const huge = await Z.fetchAll(whole.files.slice(0, 2), { fetch: async () => ({ ok: true, status: 200, headers: { get: (h) => (h === 'content-length' ? '3000000000' : null) }, arrayBuffer: async () => new ArrayBuffer(0) }), concurrency: 1 });
   assert.deepStrictEqual(huge.failed.map((f) => f.reason), ['Left out: the zip would pass 2 GB.', 'Left out: the zip would pass 2 GB.']);
+
+  // ---- the course summary ----
+  const O = 'https://school.brightspace.com';
+  // Escaping and the HTML clean-up.
+  assert.strictEqual(Z.escapeHtml(`<b a="1">'&'</b>`), '&lt;b a=&quot;1&quot;&gt;&#39;&amp;&#39;&lt;/b&gt;');
+  assert.strictEqual(Z.cleanHtml('<p>Hi <b>there</b></p>'), '<p>Hi <b>there</b></p>');
+  const dirty = Z.cleanHtml([
+    '<p onclick="steal()" style="color:red">Read <a href="javascript:alert(1)">this</a>, <a href="jav&#x61;script:alert(2)">that</a>,',
+    ' <a href=" JAVASCRIPT:alert(3)">more</a> and <a href="/d2l/le/content/7/Home" onmouseover="x()">the module</a>.</p>',
+    '<script>alert("x")</script><style>p{display:none}</style><iframe src="https://evil.example/"></iframe>',
+    '<img src="x" onerror="alert(4)"><img src="data:image/png;base64,AAAA" alt="pixel"><img src="/content/fig.png" alt="Figure 1">',
+    '<svg onload="alert(5)"><script>alert(6)</script></svg><form action="https://evil.example/"><input name="p"></form>',
+    '<!-- <script>alert(7)</script> --><scr<script>ipt>alert(8)</script>',
+    '<div><table><tr><td>a < b && c</td></tr></table></div></span></p></div><ul><li>open',
+  ].join(''), O);
+  for (const bad of ['<script', 'onclick', 'onerror', 'onload', 'onmouseover', 'javascript:', 'style=', '<style', '<iframe', '<svg', '<form', '<input', 'evil.example', 'alert(1)', 'alert(4)', 'alert(6)', 'alert(7)']) {
+    assert.ok(!dirty.toLowerCase().includes(bad.toLowerCase()), `cleanHtml left ${bad} in: ${dirty}`);
+  }
+  assert.ok(dirty.includes('<a href="https://school.brightspace.com/d2l/le/content/7/Home" rel="noopener noreferrer">the module</a>'), 'relative links become Brightspace addresses');
+  assert.ok(dirty.includes('<a>this</a>') && dirty.includes('<a>that</a>') && dirty.includes('<a>more</a>'), 'unsafe links lose their address, keep their text');
+  assert.ok(dirty.includes('<img src="https://school.brightspace.com/content/fig.png" alt="Figure 1">'), 'images keep a checked address and alt text');
+  assert.ok(dirty.includes('[image: pixel]'), 'data: images become their alt text');
+  assert.ok(dirty.includes('a &lt; b &amp;&amp; c'), 'stray < and & are escaped');
+  assert.ok(dirty.endsWith('<ul><li>open</li></ul>'), 'open tags are closed; stray end tags dropped');
+  assert.strictEqual((dirty.match(/<div>/g) || []).length, (dirty.match(/<\/div>/g) || []).length, 'balanced');
+
+  const course = { id: 7, name: 'CS 101: Intro <Programming>', course_code: 'cs.101' };
+  const generated = new Date(2026, 10, 27, 9, 30);
+  const sections = {
+    announcements: { value: [
+      { id: 1, title: 'Old news', message_html: '<p>Week 1</p>', posted_at: '2026-09-01T12:00:00Z', attachments: [] },
+      { id: 2, title: 'Exam <moved>', message_html: '<p>Now on <b>Friday</b><script>alert(1)</script></p>', posted_at: '2026-11-20T12:00:00Z', pinned: true, attachments: [{ name: 'room.pdf', url: '/d2l/api/le/1.0/7/news/2/attachments/9' }] },
+      { id: 3, title: 'Plain', message_html: '', message: 'Line one\nLine <two>', posted_at: '2026-10-01T12:00:00Z', attachments: [] },
+    ] },
+    grades: { error: 'Brightspace answered 500.' },
+    work: { value: [
+      { id: 'assignment-5', source_id: 5, kind: 'assignment', name: 'Homework 1', due_at: '2026-10-01T04:00:00Z', points_possible: 10, grade: { score: 9, points_possible: 10, displayed: '90 %', comment: 'Nice' }, html_url: '/d2l/lms/dropbox/user/folder_submit_files.d2l?db=5&ou=7' },
+      { id: 'assignment-6', source_id: 6, kind: 'assignment', name: 'Homework 2', due_at: '2026-10-08T04:00:00Z', points_possible: 10, grade: null, html_url: '/d2l/lms/dropbox/user/folder_submit_files.d2l?db=6&ou=7' },
+      { id: 'quiz-8', source_id: 8, kind: 'quiz', name: 'Quiz 1', due_at: null, points_possible: null, grade: { score: 4, points_possible: 5 }, html_url: '/d2l/lms/quizzing/user/quiz_summary.d2l?qi=8&ou=7' },
+    ] },
+    details: new Map([['5', { submitted: true, status: 'graded', submitted_at: '2026-10-02T04:00:00Z', feedback: { score: 9, comment_html: '<p onclick="x()">Good <i>work</i></p>', comment: '' } }]]),
+    discussions: { value: [{ id: 'discussion-3', name: 'Introductions', forum: 'General', due_at: null, points_possible: null, locked: false, html_url: '/d2l/le/7/discussions/topics/3/View' }] },
+    syllabus: { value: { overview: { html: '<p>Office hours <a href="https://example.edu/oh">here</a></p>', text: '' }, link: null } },
+  };
+  // A module already called "Course summary" keeps its name; the summary folder takes the next one.
+  const clash = Z.plan([{ id: 1, name: 'Course summary', depth: 0, items: [item(11, 'Slides', 'File', '/content/s.pdf')] }], { origin: O });
+  const sum = Z.courseSummary({ course, origin: O, generated, taken: clash.taken, ...sections });
+  assert.strictEqual(clash.files[0].dir, 'Course summary/');
+  assert.strictEqual(sum.dir, 'Course summary (2)/');
+  assert.deepStrictEqual(sum.entries.map((e) => e.name), ['index.html', 'announcements.html', 'grades.html', 'assignments.html', 'quizzes.html', 'discussions.html', 'syllabus.html'].map((n) => `Course summary (2)/${n}`));
+  const page = (n) => sum.entries.find((e) => e.name.endsWith(`/${n}.html`)).data;
+  for (const e of sum.entries) {
+    assert.ok(e.data.startsWith('<!DOCTYPE html>') && e.data.includes('<meta charset="utf-8">'), e.name);
+    assert.ok(!/<script|javascript:|\son[a-z]+=/i.test(e.data), `${e.name} has no script`);
+    assert.ok(e.data.includes('CS 101: Intro &lt;Programming&gt;') && !e.data.includes('<Programming>'), `${e.name} escapes the course name`);
+  }
+  // index: the course, its code, the date, links to the pages; the failed one says so.
+  assert.ok(page('index').includes('cs.101'));
+  assert.ok(page('index').includes('<a href="grades.html">Grades</a> <span class="bad">(could not be loaded: Brightspace answered 500.)</span>'));
+  assert.ok(page('index').includes('href="https://school.brightspace.com/d2l/home/7"'));
+  // Announcements: newest first, full bodies (cleaned), plain text kept, attachments linked.
+  const ann = page('announcements');
+  assert.ok(ann.indexOf('Exam &lt;moved&gt;') < ann.indexOf('Plain') && ann.indexOf('Plain') < ann.indexOf('Old news'), 'newest first');
+  assert.ok(ann.includes('Now on <b>Friday</b>') && !ann.includes('alert'));
+  assert.ok(ann.includes('<div class="body plain">Line one\nLine &lt;two&gt;</div>'));
+  assert.ok(ann.includes('<a href="https://school.brightspace.com/d2l/api/le/1.0/7/news/2/attachments/9">room.pdf</a>'));
+  // A section that failed still has its page, and goes in failed.txt.
+  assert.ok(page('grades').includes('could not be loaded from Brightspace: Brightspace answered 500.'));
+  assert.deepStrictEqual(sum.failed, [{ where: 'Course summary (2)', title: 'Grades page', reason: 'Could not be loaded: Brightspace answered 500.' }]);
+  // Assignments: status, score and feedback; quizzes get their own page.
+  const asg = page('assignments');
+  assert.ok(asg.includes('Graded late') && asg.includes('Score: 9 / 10') && asg.includes('<p>Good <i>work</i></p>'), asg);
+  assert.ok(asg.includes('Homework 2') && asg.includes('Not known'), 'no details: status not guessed');
+  assert.ok(asg.includes('href="https://school.brightspace.com/d2l/lms/dropbox/user/folder_submit_files.d2l?db=5&amp;ou=7"'));
+  assert.ok(page('quizzes').includes('Quiz 1') && page('quizzes').includes('Score: 4 / 5'));
+  assert.ok(page('discussions').includes('Introductions') && page('discussions').includes('Posts are not included'));
+  assert.ok(page('syllabus').includes('<a href="https://example.edu/oh" rel="noopener noreferrer">here</a>'));
+  // Grades page with data: every item, category, feedback, the final grade.
+  const graded = Z.courseSummary({ course, origin: O, generated, ...sections, grades: { value: {
+    final: { score: 88, points_possible: 100, displayed: 'B+' },
+    estimate: { score: 44, points_possible: 50 },
+    groups: [{ name: 'Homework', value: { score: 9, points_possible: 10, displayed: '90 %' }, items: [{ id: 1, name: 'HW <1>', points_possible: 10, value: { score: 9, points_possible: 10, displayed: '90 %', comment: 'Well done & tidy' } }, { id: 2, name: 'HW 2', points_possible: 10, value: null, marked_dropped: true }] }],
+  } } });
+  const gr = graded.entries.find((e) => e.name.endsWith('/grades.html')).data;
+  assert.strictEqual(graded.dir, 'Course summary/');
+  assert.ok(gr.includes('<strong>Final grade:</strong> 88 / 100 (B+)'), gr);
+  assert.ok(gr.includes('<td>HW &lt;1&gt;</td><td>Homework</td><td class="num">9</td><td class="num">10</td><td>90 %</td><td class="plain">Well done &amp; tidy</td>'), gr);
+  assert.ok(gr.includes('HW 2 <span class="muted">(dropped)</span>') && gr.includes('Homework total'));
+  assert.deepStrictEqual(graded.failed, []);
+  // A course with no quizzes has no quizzes page.
+  const noQuiz = Z.courseSummary({ course, origin: O, generated, ...sections, work: { value: sections.work.value.filter((a) => a.kind !== 'quiz') } });
+  assert.ok(!noQuiz.entries.some((e) => e.name.endsWith('/quizzes.html')));
+  // A course with no files at all: the zip still has the summary.
+  const empty = Z.plan([], { origin: O });
+  const emptySum = Z.courseSummary({ course, origin: O, generated, taken: empty.taken, announcements: { value: [] }, grades: { value: { final: null, groups: [] } }, work: { value: [] }, discussions: { value: [] }, syllabus: { value: { overview: null, link: null } } });
+  const emptyZip = parseZip(await new Blob(Z.zipParts(Z.entriesFor('CS 101', empty, { got: new Map(), failed: emptySum.failed }, emptySum.entries))).arrayBuffer());
+  assert.deepStrictEqual(emptyZip.map((e) => e.name), ['index.html', 'announcements.html', 'grades.html', 'assignments.html', 'discussions.html', 'syllabus.html'].map((n) => `Course summary/${n}`));
+  assert.ok(dec.decode(emptyZip[1].data).includes('No announcements in this course.'));
+  // Summary pages next to files, links.txt and failed.txt (with the failed section) in one zip.
+  const withFiles = Z.plan(mods, { origin: O });
+  const withSum = Z.courseSummary({ course, origin: O, generated, taken: withFiles.taken, ...sections });
+  const full = parseZip(await new Blob(Z.zipParts(Z.entriesFor('CS 101', withFiles, { got: result.got, failed: [...result.failed, ...withSum.failed] }, withSum.entries))).arrayBuffer());
+  assert.deepStrictEqual(full.map((e) => e.name).slice(0, 5), built.map((e) => e.name).slice(0, 5), 'module files unchanged');
+  assert.ok(full.some((e) => e.name === 'Course summary/index.html'));
+  assert.deepStrictEqual(full.map((e) => e.name).slice(-2), ['links.txt', 'failed.txt']);
+  assert.ok(dec.decode(full[full.length - 1].data).includes('Course summary / Grades page\r\n  Could not be loaded: Brightspace answered 500.'));
 
   // ---- a real unzipper: PowerShell's Expand-Archive ----
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bsx-zip-'));

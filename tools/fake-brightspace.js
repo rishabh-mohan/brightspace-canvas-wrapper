@@ -104,12 +104,24 @@ function build(c) {
     ForumId: c.id * 10 + 1, TopicId: c.id * 100 + 80 + i, Name: `Week ${i * 4} reflection`, Description: rich(`<p>Post a reflection on week ${i * 4} and reply to one classmate.</p>`),
     DueDate: i === 2 ? null : at(-20 + i * 12), StartDate: null, EndDate: null, IsLocked: false, IsHidden: false, MustPostToParticipate: i === 3, ScoreOutOf: i === 2 ? null : 5, ActivityId: '',
   }));
-  const posts = [
+  // Each topic has its own posts (the first every thread, the second the recursion thread, the
+  // third the midterm question). The newest `unread[k]` posts of topic k are unread: CS 25100 has
+  // 2, 0 and 1, so its card shows 3; some courses have none. myUpdates adds them up.
+  const unread = [c.id % 3, 0, c.id === 101 ? 1 : 0];
+  const thread = [
     { PostId: 1, ParentPostId: null, ThreadId: 1, Subject: 'Recursion finally clicked', Message: rich('<p>The call-stack drawing from lecture made it obvious. Anyone else?</p>'), PostingUserDisplayName: 'Avery Chen', DatePosted: at(-6, 10, 12), IsAnonymous: false, IsDeleted: false },
     { PostId: 2, ParentPostId: 1, ThreadId: 1, Subject: 'Re: Recursion finally clicked', Message: rich('<p>Same. Drawing the frames helped more than the code.</p>'), PostingUserDisplayName: 'Jordan Patel', DatePosted: at(-6, 13, 40), IsAnonymous: false, IsDeleted: false },
     { PostId: 3, ParentPostId: 2, ThreadId: 1, Subject: 'Re: Recursion finally clicked', Message: rich('<p>Try the visualiser linked in Week 3.</p>'), PostingUserDisplayName: 'Sam Rivera (TA)', DatePosted: at(-5, 9, 2), IsAnonymous: false, IsDeleted: false },
-    { PostId: 4, ParentPostId: null, ThreadId: 4, Subject: 'Question about the midterm format', Message: rich('<p>Is it multiple choice or free response?</p>'), PostingUserDisplayName: 'Riley Kim', DatePosted: at(-4, 18, 30), IsAnonymous: false, IsDeleted: false, IsRead: false },
+    { PostId: 4, ParentPostId: null, ThreadId: 4, Subject: 'Question about the midterm format', Message: rich('<p>Is it multiple choice or free response?</p>'), PostingUserDisplayName: 'Riley Kim', DatePosted: at(-4, 18, 30), IsAnonymous: false, IsDeleted: false },
+    { PostId: 5, ParentPostId: 4, ThreadId: 4, Subject: 'Re: Question about the midterm format', Message: rich('<p>Mostly free response, per the review sheet.</p>'), PostingUserDisplayName: 'Sam Rivera (TA)', DatePosted: at(-3, 11, 5), IsAnonymous: false, IsDeleted: false },
   ];
+  const picked = [[1, 2, 3, 4, 5], [1, 2, 3], [4, 5]];
+  const posts = new Map(topics.map((t, k) => {
+    const id = (n) => n && t.TopicId * 10 + n; // post ids unique across topics
+    const list = thread.filter((p) => picked[k].includes(p.PostId)).map((p) => ({ ...p, PostId: id(p.PostId), ParentPostId: id(p.ParentPostId), ThreadId: id(p.ThreadId) }));
+    list.forEach((p, n) => (p.IsRead = n < list.length - unread[k]));
+    return [t.TopicId, list];
+  }));
 
   const news = (c.extra ? [1] : [1, 2, 3, 4]).map((i) => ({
     Id: c.id * 10 + i, IsHidden: false, Attachments: i === 3 ? [{ FileId: 1, FileName: 'solutions.pdf', Size: 220000 }] : [], CreatedBy: 1, CreatedDate: at(-i * 5 + 3, 9, 15), LastModifiedDate: at(-i * 5 + 3, 9, 15), Title: ['Exam room change', 'Office hours moved this week', 'Homework solutions posted', 'Welcome to the course'][i - 1],
@@ -176,9 +188,9 @@ function quizSummary(query) {
 
 // POST .../discussions/forums/{f}/topics/{t}/posts/ with CreatePostData as JSON.
 function addPost(pathname, body) {
-  const m = pathname.match(/^\/d2l\/api\/le\/[\d.]+\/(\d+)\/discussions\/forums\/\d+\/topics\/\d+\/posts\/$/);
-  const d = m && DATA.get(Number(m[1]));
-  if (!d) return null;
+  const m = pathname.match(/^\/d2l\/api\/le\/[\d.]+\/(\d+)\/discussions\/forums\/\d+\/topics\/(\d+)\/posts\/$/);
+  const list = m && DATA.get(Number(m[1]))?.posts.get(Number(m[2]));
+  if (!list) return null;
   let p;
   try {
     p = JSON.parse(body.toString('utf8'));
@@ -186,7 +198,8 @@ function addPost(pathname, body) {
     return { status: 400, type: 'text/plain', body: 'Bad JSON' };
   }
   if (!p.Message || !p.Message.Content) return { status: 400, type: 'text/plain', body: 'A post needs a message.' };
-  d.posts.push({ PostId: 100 + d.posts.length, ParentPostId: p.ParentPostId, ThreadId: p.ParentPostId || 100 + d.posts.length, Subject: p.Subject, Message: rich(String(p.Message.Content).replace(/</g, '&lt;')), PostingUserId: 42, PostingUserDisplayName: 'Student One', DatePosted: new Date().toISOString(), IsAnonymous: false, IsDeleted: false, IsRead: true });
+  const id = Number(m[2]) * 100 + list.length;
+  list.push({ PostId: id, ParentPostId: p.ParentPostId, ThreadId: p.ParentPostId || id, Subject: p.Subject, Message: rich(String(p.Message.Content).replace(/</g, '&lt;')), PostingUserId: 42, PostingUserDisplayName: 'Student One', DatePosted: new Date().toISOString(), IsAnonymous: false, IsDeleted: false, IsRead: true });
   return { status: 200, type: 'application/json', body: '{}' };
 }
 
@@ -293,7 +306,7 @@ function handle(pathname, query) {
   }
   if (t === 'discussions/forums/') return json(d.forums);
   if ((x = t.match(/^discussions\/forums\/(\d+)\/topics\/$/))) return json(d.topics.filter((k) => k.ForumId === Number(x[1])));
-  if ((x = t.match(/^discussions\/forums\/(\d+)\/topics\/(\d+)\/posts\/$/))) return json(d.posts);
+  if ((x = t.match(/^discussions\/forums\/(\d+)\/topics\/(\d+)\/posts\/$/))) return json(d.posts.get(Number(x[2])) || []);
   if (t === 'grades/') return json(d.items);
   if (t === 'grades/categories/') return json(d.categories);
   if (t === 'grades/setup/') return json({ GradingSystem: c.system, IsNullGradeZero: false, DefaultGradeSchemeId: c.id === 103 ? 7 : 1 });
@@ -313,7 +326,7 @@ function handle(pathname, query) {
   }
   if (t === 'classlist/') return json(d.classlist);
   if (t === 'overview') return json(c.extra ? null : { Description: rich(`<p><strong>${c.name}</strong></p><p>Lectures Monday, Wednesday and Friday. Grading: ${d.categories.map((k) => `${k.Name} ${k.Weight}%`).join(', ')}.</p><p>Late work loses 10% per day. Email the instructor before a deadline if you need an extension.</p>`), HasAttachment: true });
-  if (t === 'updates/myUpdates') return json({ OrgUnitId: String(c.id), UserId: '42', UnreadDiscussions: c.id % 3, UnapprovedDiscussions: 0, UnreadAssignmentFeedback: c.id % 2, UnattemptedQuizzes: c.extra ? 0 : 1, UnreadAssignmentSubmissions: 0, UngradedQuizzes: 0, PendingEnrollmentRequests: 0 });
+  if (t === 'updates/myUpdates') return json({ OrgUnitId: String(c.id), UserId: '42', UnreadDiscussions: [...d.posts.values()].flat().filter((p) => p.IsRead === false).length, UnapprovedDiscussions: 0, UnreadAssignmentFeedback: c.id % 2, UnattemptedQuizzes: c.extra ? 0 : 1, UnreadAssignmentSubmissions: 0, UngradedQuizzes: 0, PendingEnrollmentRequests: 0 });
   return json(null);
 }
 

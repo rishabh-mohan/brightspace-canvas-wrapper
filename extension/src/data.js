@@ -53,6 +53,18 @@ BSX.data = (() => {
       );
   }
 
+  // The courses lists are built from: this term's (without any, pinned ones; without those,
+  // everything), or every course with `all`. Courses the student hid never count.
+  function pickCourses(courseList, { all = false, hidden = [] } = {}) {
+    const out = new Set(hidden.map(String));
+    const shown = courseList.filter((c) => !out.has(String(c.id)));
+    if (all) return shown;
+    const term = shown.filter((c) => c.current_term);
+    if (term.length) return term;
+    const pinned = shown.filter((c) => c.pinned);
+    return pinned.length ? pinned : shown;
+  }
+
   // The organisation's own org unit id, which Brightspace-wide tools such as Email hang off.
   async function orgId() {
     const items = await client.lpBookmarked('enrollments/myenrollments/');
@@ -427,6 +439,8 @@ BSX.data = (() => {
       posts,
     };
   }
+  // How many of a topic's posts (from discussion()) the student has not read; their own don't count.
+  const unreadPosts = (posts) => (posts || []).filter((p) => p.unread && !p.mine).length;
 
   // ---- to-do, planner, feedback --------------------------------------------
   const perCourse = async (courseList, fn) =>
@@ -925,6 +939,8 @@ BSX.data = (() => {
               type: topicType(t),
               unread: Boolean(t.Unread),
               locked: Boolean(t.IsLocked),
+              exempt: Boolean(t.IsExempt),
+              due_at: t.DueDate || t.DueDateTime || null,
               updated_at: t.LastModifiedDate || null,
               url: t.Url || '', // a link's address, a tool's launch address, or a file's path
               file_url: `${topicBase}/${t.TopicId}/file?stream=true`, // the file itself, shown inline
@@ -949,6 +965,17 @@ BSX.data = (() => {
   // Gradescope, publisher homework sites and the like: found as LTI links in Content.
   const externalTools = (ou) => itemsOfType(ou, 'External tool');
   const files = (ou) => itemsOfType(ou, 'File');
+
+  // Readings and pages with no due date that the student has not opened yet (Brightspace's
+  // own Unread mark on each topic), for To Do's "No due date" group. Graded work has its own
+  // dates and lists, so it is left out, as are locked, exempt and module-text items.
+  const UNDATED_SKIP = new Set(['Assignment', 'Quiz', 'Discussion', 'External tool', 'Module overview']);
+  const undatedFrom = (mods) =>
+    (mods || []).flatMap((m) => (m.locked ? [] : m.items
+      .filter((i) => i.unread && !i.due_at && !i.locked && !i.exempt && !UNDATED_SKIP.has(i.type))
+      .map((i) => ({ kind: 'content', source_id: i.id, name: i.title, type: i.type, module: m.name, html_url: i.html_url, due_at: null }))));
+  // Read from the content tree modules() already asks for (one cached request per course).
+  const undated = (courseList) => perCourse(courseList, async (c) => undatedFrom(await modules(c.id)));
 
   // Links on the course's own Brightspace home page (its navigation bar and menus), for
   // tools the API does not list, such as Simple Syllabus or the notification settings.
@@ -1102,9 +1129,9 @@ BSX.data = (() => {
   }
 
   return {
-    courses, orgId, me, updates,
-    assignments, assignmentGroups, assignment, submission, canSubmit, submit, quiz, quizAttempts, parseQuizSummary, discussions, discussion, post,
-    todo, planner, tasks, overdue, recentFeedback,
+    courses, pickCourses, orgId, me, updates,
+    assignments, assignmentGroups, assignment, submission, canSubmit, submit, quiz, quizAttempts, parseQuizSummary, discussions, discussion, unreadPosts, post,
+    todo, planner, tasks, overdue, recentFeedback, undated, undatedFrom,
     grades, estimate, dropped, dropInfo, groupResults, results, dropRule, estimable, whyNot, courseTotals, gradeScheme, knownScheme, lastGraded, newestGraded,
     announcements, recentAnnouncements,
     modules, externalTools, files, syllabus, syllabusLink, notificationsLink, homeLinks, courseTools, people, groups,

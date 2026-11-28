@@ -7,6 +7,7 @@
   const KIND_ICON = { assignment: 'assignment', quiz: 'quiz', discussion: 'discussion', todo: 'note', external: 'external' };
   let editing = null; // id of the course card whose nickname and colour are being edited
   let listSeen = false; // the list view scrolls to today once per visit
+  let showHidden = false; // the Dashboard lists the courses hidden from cards' menus
   window.addEventListener('hashchange', () => (listSeen = false));
 
   // ---- sidebar shared by the dashboard and course home ----------------------
@@ -27,6 +28,53 @@
       h('button', { class: 'iconbtn xs', type: 'button', title: 'Dismiss', 'aria-label': `Dismiss ${i.name || i.title}`, onclick: () => ui.setFlag('dismissed', i, true) }, ic('close', 14)));
   }
 
+  // Readings and pages with no due date the student has not opened yet (data.undated), this
+  // term's courses only: a group under To Do, closed until opened, by course. Ticking one off
+  // uses To Do's own done marks; it stays (struck through) until the next redraw, for undo.
+  const UNDATED_PAGE = new Set(['File', 'Link']); // shown on the wrapper's own item page
+  const UNDATED_PER_COURSE = 5;
+  let undatedOpen = false; // once opened, the group stays open when the page is redrawn
+  function undatedGroup(courseList, only = null) {
+    const list = courseList.filter((c) => c.current_term && (only == null || c.id === only));
+    if (settings.undated === false || !list.length) return null;
+    const names = new Map(list.map((c) => [c.id, nameOf(c)]));
+    return ui.lazy(data.undated(list), (items) => {
+      const open = items.filter((i) => !ui.isDone(i) && !ui.isDismissed(i));
+      if (!open.length) return null;
+      let left = open.length;
+      const count = h('span', { class: 'udcount', title: 'Not opened yet' }, String(left));
+      const row = (i) => {
+        const tick = h('button', { class: 'pcheck', type: 'button', 'aria-label': `Mark ${i.name} done`, onclick: () => {
+          const now = !ui.isDone(i);
+          ui.setFlag('done', i, now, { quiet: true });
+          tick.classList.toggle('done', now);
+          tick.replaceChildren(...(now ? [ic('check', 14)] : []));
+          tick.setAttribute('aria-label', `Mark ${i.name} ${now ? 'not done' : 'done'}`);
+          el.classList.toggle('isdone', now);
+          count.textContent = String((left += now ? -1 : 1));
+        } });
+        const el = h('div', { class: 'tkrow', style: `--c:${tint(i.course_id)}` }, tick,
+          h('div', { class: 'tmid' },
+            h('a', { class: 't', href: UNDATED_PAGE.has(i.type) ? courseHref(i.course_id, 'modules', i.source_id) : i.html_url }, i.name),
+            h('div', { class: 'm' }, [i.type, i.module].filter(Boolean).join(' · '))));
+        return el;
+      };
+      const byCourse = new Map();
+      for (const i of open) byCourse.set(i.course_id, [...(byCourse.get(i.course_id) || []), i]);
+      const groups = [...byCourse.entries()].map(([id, rows]) => {
+        const more = rows.length > UNDATED_PER_COURSE ? h('button', { class: 'linkbtn', type: 'button', onclick: (ev) => ev.currentTarget.replaceWith(...rows.slice(UNDATED_PER_COURSE).map(row)) }, `Show ${rows.length - UNDATED_PER_COURSE} more`) : null;
+        return h('div', { class: 'udcourse' },
+          only == null ? h('div', { class: 'ctx', style: `--c:${tint(id)}` }, h('span', null, names.get(id) || ''), h('span', null, `(${rows.length})`)) : null,
+          rows.slice(0, UNDATED_PER_COURSE).map(row), more);
+      });
+      const box = h('details', { class: 'undated', open: undatedOpen },
+        h('summary', null, ic('down', 14), h('span', null, 'No due date'), count),
+        groups);
+      box.addEventListener('toggle', () => (undatedOpen = box.open));
+      return box;
+    }, '');
+  }
+
   // To Do (overdue first), Recent Feedback, and a grades button.
   // With `only`, the lists are limited to that one course (used on course pages).
   ui.todoSide = (courseList, { labels = true, gradesHref = '#/grades', only = null } = {}) => {
@@ -44,13 +92,13 @@
     ]);
     const add = h('button', { class: 'iconbtn xs', type: 'button', title: 'Add To Do', 'aria-label': 'Add To Do', onclick: () => ui.todoDialog(null, courseList) }, ic('plus', 16));
     return [
-      ui.sideSection(['To Do', add], ui.lazy(todo, ([upcoming, late]) => {
+      ui.sideSection(['To Do', add], [ui.lazy(todo, ([upcoming, late]) => {
         const lateRows = [...late.filter((i) => ids.has(i.course_id)), ...mine.filter((i) => Date.parse(i.due_at) < now)].filter(open).slice(0, 6).map((i) => todoRow(i, label(i.course_id), true, courseList));
         const coming = [...upcoming, ...mine.filter((i) => Date.parse(i.due_at) >= now)].filter(open).sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at));
         const rows = coming.slice(0, 8).map((i) => todoRow(i, label(i.course_id), false, courseList));
         const more = coming.length > 8 ? h('div', { class: 'muted small pad' }, `${coming.length - 8} more`) : null;
         return [lateRows, rows, more];
-      }, 'Loading…')),
+      }, 'Loading…'), undatedGroup(courseList, only)]),
       ui.sideSection('Recent Feedback', ui.lazy(data.recentFeedback(courseList), (rows) =>
         rows.slice(0, 5).map((f) => h('div', { class: 'todo' },
           h('span', { class: 'todoic ok' }, ic('check')),
@@ -88,7 +136,9 @@
     return h('div', { class: 'edit' },
       h('label', null, 'Nickname', nick),
       h('label', null, 'Colour', h('div', { class: 'swatches' }, swatches)),
-      h('div', { class: 'row' }, ui.button('Apply', save, 'primary'), ui.button('Reset', () => done(null)), ui.button('Cancel', () => editCard(null))));
+      h('div', { class: 'row' }, ui.button('Apply', save, 'primary'), ui.button('Reset', () => done(null)), ui.button('Cancel', () => editCard(null))),
+      // Hiding takes the course off the Dashboard, To Do, Tasks, the calendar and reminders.
+      h('button', { class: 'linkbtn', type: 'button', style: 'margin-top:0', title: 'Shown again from \u201cShow hidden\u201d under the cards, or Account', onclick: () => { editing = null; ui.hideCourse(c.id, true); ui.flash(`${nameOf(c)} is hidden. \u201cShow hidden\u201d under the cards brings it back.`); } }, ic('close', 14), 'Hide this course'));
   }
 
   // Opening or closing a card's editor redraws just the cards involved (nothing else on the
@@ -126,18 +176,24 @@
     const img = h('img', { src: c.image_url, alt: '', loading: 'lazy' });
     img.addEventListener('error', () => img.remove());
     const name = nameOf(c);
-    const badge = (pick) => {
+    // `say`: the count in words, for the link's tooltip and label (screen readers read the label).
+    const badge = (pick, say) => {
       const b = h('span', { class: 'badge', hidden: true });
       data.updates(c.id).then((u) => {
         const n = pick(u);
         if (n > 0) {
           b.textContent = n > 99 ? '99+' : String(n);
           b.hidden = false;
+          const link = b.parentElement;
+          if (say && link) {
+            link.title += `: ${say(n)}`;
+            link.setAttribute('aria-label', `${link.getAttribute('aria-label')}, ${say(n)}`);
+          }
         }
       }).catch(() => {});
       return b;
     };
-    const action = (section, icon, label, pick) => h('a', { class: 'cardic', href: courseHref(c.id, section), title: label, 'aria-label': `${label} - ${name}` }, ic(icon, 22), pick ? badge(pick) : null);
+    const action = (section, icon, label, pick, say) => h('a', { class: 'cardic', href: courseHref(c.id, section), title: label, 'aria-label': `${label} - ${name}` }, ic(icon, 22), pick ? badge(pick, say) : null);
     const body = editing === c.id
       ? cardEditor(c)
       : [
@@ -145,12 +201,14 @@
           h('div', { class: 'cardics' },
             action('announcements', 'announcement', 'Announcements'),
             action('assignments', 'assignment', 'Assignments', (u) => u.feedback),
-            action('discussions', 'discussion', 'Discussions', (u) => u.discussions),
-            action('files', 'file', 'Files')),
+            action('discussions', 'discussion', 'Discussions', (u) => u.discussions, (n) => `${n} unread discussion post${n === 1 ? '' : 's'}`),
+            action('files', 'file', 'Files'),
+            // The whole course as one .zip (src/zip.js), at the far right of the row.
+            BSX.zip ? h('button', { class: 'cardic cardzip', type: 'button', title: `Download ${name} as .zip`, 'aria-label': `Download ${name} as .zip`, onclick: (ev) => BSX.zip.downloadCourse(c, ev.currentTarget) }, ic('folder', 22)) : null),
         ];
     const el = h('div', { class: 'card' },
       h('a', { class: 'hero', href: courseHref(c.id), style: `background:${colorOf(c.id)}`, 'aria-label': name }, img),
-      h('button', { class: 'more', type: 'button', title: 'Nickname and colour', 'aria-label': `Nickname and colour for ${name}`, onclick: () => editCard(editing === c.id ? null : c.id) }, ic('dots', 20)),
+      h('button', { class: 'more', type: 'button', title: 'Nickname, colour or hide', 'aria-label': `Nickname, colour or hide ${name}`, onclick: () => editCard(editing === c.id ? null : c.id) }, ic('dots', 20)),
       body);
     cardEls.set(c.id, [c, el]);
     return el;
@@ -414,7 +472,7 @@
       null,
       ...[[0, 'Show All Tasks'], [10, 'Show 10 Tasks'], [5, 'Show 5 Tasks']].map(([n, text]) => ({ label: text, on: (settings.taskLimit || 0) === n, onclick: () => { settings.taskLimit = n; taskView.all = false; ui.saveSettings(); ui.render(); } })),
     ]);
-    const section = ui.sideSection(['Tasks', h('span', { class: 'tkact' }, add, options)], [head, body]);
+    const section = ui.sideSection(['Tasks', h('span', { class: 'tkact' }, add, options)], [head, body, undatedGroup(courses)]);
     return section;
   }
 
@@ -422,7 +480,9 @@
   ui.views.dashboard = async () => {
     const courses = await data.courses();
     const focus = ui.focusCourses(courses);
-    const visible = state.showAll ? courses : focus;
+    const visible = ui.shownCourses(courses);
+    const hidden = courses.filter((c) => ui.isHiddenCourse(c.id));
+    const unhidden = courses.length - hidden.length;
     const mode = settings.dash;
     // Canvas's "Dashboard Options" menu: the three views, and the colour overlay on cards.
     const pick = (key, label) => ({ label, on: mode === key, onclick: () => { settings.dash = key; listSeen = false; ui.saveSettings(); ui.render(); } });
@@ -439,17 +499,24 @@
         mode === 'cards' ? { label: 'Color Overlay', on: overlay, onclick: () => { settings.overlay = !overlay; ui.saveSettings(); ui.render(); } } : undefined,
         // Brightspace course images are wide banners; wide cards show them uncropped.
         mode === 'cards' ? { label: 'Wide Cards', on: Boolean(settings.wideCards), onclick: () => { settings.wideCards = !settings.wideCards; ui.saveSettings(); ui.render(); } } : undefined,
-        // A whole course's files as one .zip (src/zip.js), picked from the courses shown.
-        typeof BSX.zip?.courseDialog === 'function' ? null : undefined,
-        typeof BSX.zip?.courseDialog === 'function' ? { label: 'Download course as .zip…', onclick: () => BSX.zip.courseDialog(visible) } : undefined,
       ].filter((x) => x !== undefined)),
     ];
-    const toggle = focus.length < courses.length
-      ? h('div', { class: 'small', style: 'margin-top:20px' }, h('a', { href: '#/', onclick: (ev) => { ev.preventDefault(); settings.showAll = state.showAll = !state.showAll; ui.saveSettings(); ui.render(); } }, state.showAll ? 'Show current courses only' : `Show all ${courses.length} courses`))
+    // "Show all N courses", and "Show N hidden" for courses hidden from a card's menu: those are
+    // listed under the cards, each with Unhide.
+    const link = (text, go) => h('a', { href: '#/', onclick: (ev) => { ev.preventDefault(); go(); } }, text);
+    const toggle = focus.length < unhidden || hidden.length
+      ? h('div', { class: 'small dashlinks', style: 'margin-top:20px' },
+          focus.length < unhidden ? link(state.showAll ? 'Show current courses only' : `Show all ${unhidden} courses`, () => { settings.showAll = state.showAll = !state.showAll; ui.saveSettings(); ui.render(); }) : null,
+          hidden.length ? link(showHidden ? 'Close hidden courses' : `Show ${hidden.length} hidden`, () => { showHidden = !showHidden; ui.render(); }) : null)
+      : null;
+    const hiddenList = hidden.length && showHidden
+      ? h('div', { class: 'hidlist', role: 'list', 'aria-label': 'Hidden courses' }, hidden.map((c) => h('div', { class: 'hidrow', role: 'listitem', style: `--c:${colorOf(c.id)}` },
+          h('span', { class: 'tname' }, nameOf(c), h('span', { class: 'muted small' }, ` ${c.course_code}`)),
+          h('button', { class: 'btn small', type: 'button', 'aria-label': `Unhide ${nameOf(c)}`, onclick: () => ui.hideCourse(c.id, false) }, 'Unhide'))))
       : null;
 
     let body;
-    if (mode === 'list') body = listView(visible);
+    if (mode === 'list') body = [undatedGroup(visible), listView(visible)]; // no sidebar here, so the group leads the list
     else if (mode === 'activity') body = activityView(visible, { fresh: true });
     else body = visible.length ? h('div', { class: 'cards' }, visible.map(card)) : ui.empty('No current courses found.');
     // With the Tasks panel on, it takes the To Do list's place at the top of the sidebar.
@@ -457,7 +524,7 @@
     const fresh = mode === 'cards' && BSX.whatsnew ? BSX.whatsnew.side(visible) : null;
     const [todo, ...rest] = mode === 'list' ? [] : ui.todoSide(visible);
     const side = mode === 'list' ? null : [settings.tasks ? tasksPanel(visible) : todo, fresh, ...rest];
-    return { title: 'Dashboard', actions, body: [body, toggle], side };
+    return { title: 'Dashboard', actions, body: [body, toggle, hiddenList], side };
   };
 
   ui.views.courses = async () => {
@@ -756,7 +823,7 @@
   // place the same assignment shows up twice (folded into one, or kept apart).
   ui.views.connections = async () => {
     const courses = await data.courses();
-    const visible = state.showAll ? courses : ui.focusCourses(courses);
+    const visible = ui.shownCourses(courses);
     const ed = settings.ed;
     const save = () => { ui.saveSettings(); if (BSX.ed) BSX.ed.clear(); if (BSX.gradescope) BSX.gradescope.clear(); ui.render(); };
     const onoff = (on, set) => h('div', { class: 'seg' }, [false, true].map((v) => h('button', { type: 'button', class: Boolean(on) === v ? 'on' : null, onclick: () => { set(v); save(); } }, v ? 'On' : 'Off')));
@@ -940,7 +1007,7 @@
   // messages instructors did send through Brightspace (announcements) listed underneath.
   ui.views.inbox = async () => {
     const courses = await data.courses();
-    const visible = state.showAll ? courses : ui.focusCourses(courses);
+    const visible = ui.shownCourses(courses);
     const names = new Map(courses.map((c) => [c.id, nameOf(c)]));
     const org = await data.orgId().catch(() => null);
     const mail = ui.bs.email(org);
@@ -964,7 +1031,7 @@
 
   ui.views.allgrades = async () => {
     const courses = await data.courses();
-    const visible = state.showAll ? courses : ui.focusCourses(courses);
+    const visible = ui.shownCourses(courses);
     const totals = await data.courseTotals(visible);
     const byId = new Map(totals.map((t) => [t.course_id, t]));
     const cell = (t) => {

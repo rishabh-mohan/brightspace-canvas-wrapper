@@ -33,6 +33,7 @@
         "src/modorder.js",
         "src/ics.js",
         "src/reminders.js",
+        "src/notices.js",
         "src/ui-calendar.js"
       ],
       "run_at": "document_start"

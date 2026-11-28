@@ -112,10 +112,12 @@ BSX.client = (() => {
     persist();
     if (BSX.filetext) BSX.filetext.forget(); // text read from course files, too
     if (BSX.whatsnew) BSX.whatsnew.forget(); // and the What's New snapshot held by this page
+    if (BSX.notices) BSX.notices.forget(); // and the Alerts list and read marks
     try {
       // What's New snapshots (whatsnew.js), the due dates handed to reminders (reminders.js) and
-      // the reminders already shown, and what the Edfinity reader kept (edfinity.js)
-      Promise.resolve(store.remove([`bsxSeen:${globalThis.location?.host || ''}`, 'bsxDeadlines', 'bsxNotified', 'bsxNotifyUrls', 'bsxEdfinity'])).catch(() => {});
+      // the reminders already shown, what the Edfinity reader kept (edfinity.js) and the Alerts
+      // read marks (notices.js)
+      Promise.resolve(store.remove([`bsxSeen:${globalThis.location?.host || ''}`, 'bsxDeadlines', 'bsxNotified', 'bsxNotifyUrls', 'bsxEdfinity', `bsxRead:${globalThis.location?.host || ''}`])).catch(() => {});
     } catch {}
   }
 

@@ -2,13 +2,14 @@
 // Each file is fetched with the student's own session (same origin, like every other request)
 // and stored as is (no compression: course files are mostly PDFs, slides and images, which are
 // compressed already). Links, tools and other entries that are not files are listed in
-// links.txt; files that could not be fetched are listed in failed.txt.
+// links.txt; files that could not be fetched are listed in failed.txt. A whole course also gets a
+// "Course summary" folder of offline HTML pages (announcements, grades, assignments and so on).
 // Limits: a plain zip (no ZIP64), so at most 65,534 entries, and at most 2 GB of files: the
 // whole zip is held in memory until it is saved, and browsers (Firefox especially) can run out
 // well before the format's 4 GB. A download that would go past that stops adding files and lists
 // the rest in failed.txt. It asks before going on past 500 MB, and again at every further 1 GB.
-// The pure parts (crc32, names, the zip writer, the planning and fetching) are exported for
-// tests/zip.test.js; the progress dialog needs BSX.ui.
+// The pure parts (crc32, names, the zip writer, the planning and fetching, the summary pages) are
+// exported for tests/zip.test.js; the progress dialog needs BSX.ui.
 (function (root) {
   const MAX_ENTRIES = 65534; // 0xFFFF in the end record means ZIP64 to readers
   const MAX_DATA = 2e9; // bytes of file data in one zip (held in memory; the format allows < 4 GiB)
@@ -252,8 +253,9 @@
   // { got: Map(index -> { data, crc, size, type, disposition }), failed: [{ index, where, title, reason }], bytes }.
   // onProgress({ done, total, bytes, failed, current }); ask(bytes) -> Promise<boolean> is asked
   // when more than `warnBytes` have arrived, then again past every further `askEvery` (false
-  // cancels). Cancelling while a question is open settles at once.
-  async function fetchAll(files, { fetch: get = root.fetch, signal = null, concurrency = CONCURRENCY, onProgress = () => {}, ask = null, warnBytes = WARN_BYTES, askEvery = ASK_EVERY, maxBytes = MAX_DATA } = {}) {
+  // cancels). Cancelling while a question is open settles at once. `reserve` entries are kept
+  // free for the text files that go in after the files (links.txt, failed.txt, a course summary).
+  async function fetchAll(files, { fetch: get = root.fetch, signal = null, concurrency = CONCURRENCY, onProgress = () => {}, ask = null, warnBytes = WARN_BYTES, askEvery = ASK_EVERY, maxBytes = MAX_DATA, reserve = 2 } = {}) {
     const ctl = new AbortController();
     if (signal) {
       if (signal.aborted) throw abortError();
@@ -335,7 +337,7 @@
         if (ctl.signal.aborted) return;
         const index = next++;
         if (index >= files.length) return;
-        if (full || got.size + current.size + 2 >= MAX_ENTRIES) { // room kept for links.txt and failed.txt
+        if (full || got.size + current.size + reserve >= MAX_ENTRIES) { // room kept for the text files
           fail(index, full ? LEFT_OUT : 'Left out: too many files for one zip.');
           done++;
           continue;
@@ -364,8 +366,9 @@
   }
 
   // The zip's entries from a plan and what was fetched, in plan order (so names are the same
-  // whatever order the files arrived in), with links.txt and failed.txt.
-  function entriesFor(title, p, { got, failed }) {
+  // whatever order the files arrived in), then `extra` text files ({ name, data }, such as the
+  // course summary), links.txt and failed.txt.
+  function entriesFor(title, p, { got, failed }, extra = []) {
     const entries = [];
     p.files.forEach((f, index) => {
       const g = got.get(index);
@@ -377,9 +380,298 @@
       const data = enc.encode(body);
       entries.push({ name, data, crc: crc32(data), size: data.length });
     };
+    for (const e of extra) text(e.name, e.data);
     if (p.links.length) text('links.txt', linksText(title, p.links));
     if (failed.length) text('failed.txt', failedText(title, failed));
     return entries;
+  }
+
+  // ---- the course summary ---------------------------------------------------------------
+  // A whole course's zip also gets a "Course summary" folder: plain HTML pages (announcements,
+  // grades, assignments, quizzes, discussions, syllabus) that read offline in any browser. The
+  // pages are built here from what data.js returns, with no page access, so tests can check them.
+  // Nothing about other students goes in: no class list, and no discussion posts.
+  const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0', colon: ':', tab: '\t', newline: '\n' };
+  // Character references decoded, so a link such as "jav&#97;script:" is seen for what it is.
+  const unentity = (s) => String(s ?? '').replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);?/gi, (m, e) => {
+    if (e[0] !== '#') return NAMED[e.toLowerCase()] ?? m;
+    const n = /^#x/i.test(e) ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+    return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : '';
+  });
+  // An http(s) address, made absolute against Brightspace's own origin; anything else is null.
+  function webUrl(raw, origin = '') {
+    const s = unentity(raw).replace(/[\u0000-\u001f\u007f]/g, '').trim();
+    if (!s) return null;
+    try {
+      const u = new URL(s, origin || undefined);
+      return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Instructor-written HTML, rebuilt from an allowlist of plain formatting tags, as the
+  // wrapper's own pages show it. No attributes survive except a checked link or image
+  // address and an image's alt text; scripts, styles, frames, forms and media go with
+  // everything inside them; every piece of text is escaped again.
+  const KEEP_TAGS = new Set(['p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'span', 'div', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'hr', 'sub', 'sup', 'img']);
+  const VOID_TAGS = new Set(['br', 'hr', 'img']);
+  const DROP_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed', 'template', 'noscript', 'head', 'title', 'svg', 'math', 'form', 'button', 'select', 'textarea', 'video', 'audio', 'frameset', 'frame', 'noembed', 'noframes', 'xmp', 'plaintext']);
+  function attrsOf(s) {
+    const out = {};
+    const re = /([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>`]+)))?/g;
+    let m;
+    while ((m = re.exec(s || ''))) {
+      const k = m[1].toLowerCase();
+      if (!(k in out)) out[k] = m[2] ?? m[3] ?? m[4] ?? '';
+    }
+    return out;
+  }
+  // Text between tags keeps its character references; a stray < or > is escaped.
+  const cleanText = (s) => s.replace(/&(?!(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);)/gi, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function cleanHtml(html, origin = '') {
+    const src = String(html ?? '');
+    const out = [];
+    const open = [];
+    const TAG = /<!--[\s\S]*?(?:-->|$)|<![^>]*>?|<\?[^>]*>?|<\/?([A-Za-z][^\s/>]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+    let at = 0;
+    let m;
+    while ((m = TAG.exec(src))) {
+      out.push(cleanText(src.slice(at, m.index)));
+      at = TAG.lastIndex;
+      if (!m[1]) continue; // a comment, doctype or the like
+      const name = m[1].toLowerCase();
+      const closing = m[0][1] === '/';
+      if (DROP_TAGS.has(name)) {
+        if (closing) continue;
+        const end = new RegExp(`</${name}\\s*>`, 'ig');
+        end.lastIndex = at;
+        at = end.exec(src) ? end.lastIndex : src.length;
+        TAG.lastIndex = at;
+        continue;
+      }
+      if (!KEEP_TAGS.has(name)) continue; // other tags go; the text inside them stays
+      if (closing) {
+        const i = open.lastIndexOf(name);
+        if (i >= 0) while (open.length > i) out.push(`</${open.pop()}>`);
+        continue;
+      }
+      const a = attrsOf(m[2]);
+      if (name === 'img') {
+        const url = webUrl(a.src, origin);
+        const alt = unentity(a.alt || '');
+        out.push(url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}">` : escapeHtml(alt ? `[image: ${alt}]` : '[image]'));
+        continue;
+      }
+      if (name === 'a') {
+        const url = webUrl(a.href, origin);
+        out.push(url ? `<a href="${escapeHtml(url)}" rel="noopener noreferrer">` : '<a>');
+      } else out.push(`<${name}>`);
+      if (!VOID_TAGS.has(name)) open.push(name);
+    }
+    out.push(cleanText(src.slice(at)));
+    while (open.length) out.push(`</${open.pop()}>`);
+    return out.join('');
+  }
+
+  const SUMMARY_CSS = [
+    'body{font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2328;background:#fff;max-width:920px;margin:0 auto;padding:24px 16px}',
+    'a{color:#0b5cad}h1{font-size:24px;margin:0 0 2px}h2{font-size:18px;margin:28px 0 8px;padding-bottom:4px;border-bottom:1px solid #d8dee4}',
+    'nav{font-size:14px;margin:0 0 18px;display:flex;flex-wrap:wrap;gap:4px 14px}.muted{color:#59636e;font-size:13.5px}.bad{color:#b42318}',
+    '.item{border:1px solid #d8dee4;border-radius:6px;padding:12px 14px;margin:12px 0}.item h3{font-size:16px;margin:0 0 2px}',
+    '.plain{white-space:pre-wrap}.fb{background:#f6f8fa;border-left:3px solid #d8dee4;padding:6px 10px;margin-top:8px}',
+    'table{border-collapse:collapse;width:100%;font-size:14px}th,td{border-bottom:1px solid #d8dee4;padding:6px 8px;text-align:left;vertical-align:top}',
+    'th{background:#f6f8fa}.num{text-align:right;white-space:nowrap}tr.total td{font-weight:600;background:#fbfbfc}',
+    'img{max-width:100%;height:auto}.body table td,.body table th{border:1px solid #d8dee4}',
+  ].join('');
+  const SUMMARY_PAGES = [
+    ['announcements', 'Announcements'],
+    ['grades', 'Grades'],
+    ['assignments', 'Assignments'],
+    ['quizzes', 'Quizzes'],
+    ['discussions', 'Discussions'],
+    ['syllabus', 'Syllabus and overview'],
+  ];
+
+  // `sections` holds what data.js gave for each part, as { value } or { error } (why it failed):
+  //   announcements: data.announcements(ou)   grades: data.grades(ou)   work: data.assignments(ou)
+  //   discussions: data.discussions(ou)   syllabus: { overview: data.syllabus(ou), link: data.syllabusLink(ou) }
+  // and `details`: Map(assignment source_id -> data.assignment(ou, id)), for submissions and feedback.
+  // `taken` is the plan's set of names, so the folder never takes a module folder's name.
+  // Returns { dir, entries: [{ name, data: HTML text }], failed: [{ where, title, reason }] } for entriesFor.
+  function courseSummary({ course, origin = '', generated = new Date(), taken = new Set(), details = new Map(), ...sections }) {
+    const dir = `${uniquePath('', 'Course summary', taken, { folder: true })}/`;
+    const where = dir.slice(0, -1);
+    const id = encodeURIComponent(course.id);
+    const courseName = course.name || 'Course';
+    const made = new Date(generated);
+    const esc = escapeHtml;
+    const when = (iso) => {
+      const d = new Date(iso);
+      return iso && !Number.isNaN(d.getTime()) ? d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    };
+    const num = (n) => (n == null || n === '' || !Number.isFinite(Number(n)) ? '' : String(Math.round(Number(n) * 100) / 100));
+    const link = (url, text) => {
+      const href = webUrl(url, origin);
+      return href ? `<a href="${esc(href)}">${esc(text)}</a>` : esc(text);
+    };
+    const rich = (html, text) => (html ? `<div class="body">${cleanHtml(html, origin)}</div>` : text ? `<div class="body plain">${esc(text)}</div>` : '');
+    const score = (v, possible) => (v && v.score != null ? `${num(v.score)} / ${num(v.points_possible ?? possible) || '?'}` : v && v.displayed ? v.displayed : '-');
+    const files = (list) => (list && list.length ? `<p class="muted">Attachments:</p><ul>${list.map((f) => `<li>${link(f.url, f.name || 'file')}</li>`).join('')}</ul>` : '');
+    const back = (url, text) => `<p class="muted">${link(url, text)}</p>`;
+    const failed = [];
+    const written = new Map(); // page key -> null, or why it could not be loaded
+    const entries = [];
+    const shell = (title, body, sub = '') => `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title === courseName ? '' : `${esc(title)} - `}${esc(courseName)}</title>
+<style>${SUMMARY_CSS}</style>
+</head>
+<body>
+<nav><a href="index.html">Course summary</a>${SUMMARY_PAGES.filter(([k]) => written.has(k)).map(([k, t]) => `<a href="${k}.html">${esc(t)}</a>`).join('')}</nav>
+<h1>${esc(title)}</h1>
+<p class="muted">${esc(sub || courseName)}</p>
+${body}
+</body>
+</html>
+`;
+    const pages = []; // [key, title, body], written once every page is known (for the nav bar)
+    const add = (key, build) => {
+      const title = SUMMARY_PAGES.find(([k]) => k === key)[1];
+      const part = build.section;
+      if (part && part.error != null) {
+        const reason = String(part.error || 'unknown error');
+        written.set(key, reason);
+        failed.push({ where, title: `${title} page`, reason: `Could not be loaded: ${reason}` });
+        pages.push([key, title, `<p class="bad">This page could not be loaded from Brightspace: ${esc(reason)}</p>`]);
+        return;
+      }
+      const body = build.body(part ? part.value : null);
+      if (body == null) return; // nothing to show (a course with no quizzes)
+      written.set(key, null);
+      pages.push([key, title, body]);
+    };
+
+    add('announcements', {
+      section: sections.announcements,
+      body: (list) => {
+        const items = [...(list || [])].sort((a, b) => (Date.parse(b.posted_at) || 0) - (Date.parse(a.posted_at) || 0));
+        return `${items.length
+          ? items.map((a) => `<div class="item"><h3>${esc(a.title || '(untitled)')}${a.pinned ? ' <span class="muted">(pinned)</span>' : ''}</h3><div class="muted">${a.posted_at ? `Posted ${esc(when(a.posted_at))}` : ''}</div>${rich(a.message_html, a.message)}${files(a.attachments)}</div>`).join('\n')
+          : '<p>No announcements in this course.</p>'}\n${back(`/d2l/lms/news/main.d2l?ou=${id}`, 'Open Announcements in Brightspace')}`;
+      },
+    });
+
+    add('grades', {
+      section: sections.grades,
+      body: (g) => {
+        const out = [];
+        const f = g && g.final;
+        out.push(f && (f.score != null || f.displayed)
+          ? `<p><strong>Final grade:</strong> ${esc(score(f))}${f.displayed && f.score != null ? ` (${esc(f.displayed)})` : ''}</p>`
+          : '<p class="muted">Brightspace shows no final grade for this course yet.</p>');
+        const e = g && g.estimate;
+        if (e && e.points_possible > 0) out.push(`<p class="muted">Running total of graded work, worked out from the items below (unofficial): ${esc(num((e.score / e.points_possible) * 100))}%</p>`);
+        const rows = [];
+        for (const group of (g && g.groups) || []) {
+          for (const i of group.items || []) {
+            const v = i.value;
+            const notes = [i.marked_dropped ? 'dropped' : null, i.excluded ? 'not counted' : null, i.bonus ? 'bonus' : null].filter(Boolean).join(', ');
+            rows.push(`<tr><td>${esc(i.name)}${notes ? ` <span class="muted">(${esc(notes)})</span>` : ''}</td><td>${esc(group.name || '')}</td><td class="num">${esc(v && v.score != null ? num(v.score) : '-')}</td><td class="num">${esc(num(v && v.points_possible != null ? v.points_possible : i.points_possible))}</td><td>${esc((v && v.displayed) || '')}</td><td class="plain">${esc((v && v.comment) || '')}</td></tr>`);
+          }
+          if (group.name && group.value && (group.value.score != null || group.value.displayed)) {
+            rows.push(`<tr class="total"><td>${esc(group.name)} total</td><td>${esc(group.name)}</td><td class="num">${esc(num(group.value.score))}</td><td class="num">${esc(num(group.value.points_possible))}</td><td>${esc(group.value.displayed || '')}</td><td></td></tr>`);
+          }
+        }
+        out.push(rows.length
+          ? `<table><thead><tr><th>Item</th><th>Category</th><th class="num">Score</th><th class="num">Points</th><th>Grade</th><th>Feedback</th></tr></thead><tbody>\n${rows.join('\n')}\n</tbody></table>`
+          : '<p>No grade items in this course.</p>');
+        out.push(back(`/d2l/lms/grades/my_grades/main.d2l?ou=${id}`, 'Open Grades in Brightspace'));
+        return out.join('\n');
+      },
+    });
+
+    const work = sections.work;
+    add('assignments', {
+      section: work,
+      body: (list) => {
+        const items = (list || []).filter((a) => a.kind === 'assignment');
+        if (!items.length) return '<p>No assignments in this course.</p>';
+        return items.map((a) => {
+          const d = details.get(String(a.source_id));
+          const due = a.due_at ? Date.parse(a.due_at) : null;
+          let status = a.grade ? 'Graded' : 'Not known';
+          if (d) {
+            const late = d.submitted_at && due != null && Date.parse(d.submitted_at) > due;
+            if (d.submitted) status = `${d.status === 'graded' ? 'Graded' : 'Submitted'}${late ? ' late' : ''}${d.submitted_at ? `, ${when(d.submitted_at)}` : ''}`;
+            else if (d.status === 'draft') status = 'Draft saved, not submitted';
+            else status = a.grade ? 'Graded' : due != null && due < made.getTime() ? 'Missing' : 'Not submitted';
+          }
+          const fb = d && d.feedback;
+          const v = a.grade || (fb && fb.score != null ? { score: fb.score, points_possible: a.points_possible } : null);
+          const feedback = fb && (fb.comment_html || fb.comment) ? rich(fb.comment_html, fb.comment) : a.grade && a.grade.comment ? rich('', a.grade.comment) : '';
+          const meta = [a.due_at ? `Due ${when(a.due_at)}` : 'No due date', status, `Score: ${score(v, a.points_possible)}${!v && a.points_possible != null ? ` (out of ${num(a.points_possible)})` : ''}`];
+          return `<div class="item"><h3>${link(a.html_url, a.name || '(untitled)')}</h3><div class="muted">${meta.map(esc).join(' &middot; ')}</div>${feedback ? `<div class="fb"><strong>Feedback</strong>${feedback}</div>` : ''}</div>`;
+        }).join('\n');
+      },
+    });
+
+    // A page only when the course has quizzes (a list that failed is reported on Assignments).
+    const quizzes = work && work.value ? work.value.filter((a) => a.kind === 'quiz') : [];
+    add('quizzes', {
+      section: null,
+      body: () => (quizzes.length
+        ? quizzes.map((q) => {
+            const meta = [q.due_at ? `Due ${when(q.due_at)}` : 'No due date', `Score: ${score(q.grade, q.points_possible)}`];
+            const comment = q.grade && q.grade.comment ? `<div class="fb"><strong>Feedback</strong>${rich('', q.grade.comment)}</div>` : '';
+            return `<div class="item"><h3>${link(q.html_url, q.name || '(untitled)')}</h3><div class="muted">${meta.map(esc).join(' &middot; ')}</div>${comment}</div>`;
+          }).join('\n')
+        : null),
+    });
+
+    add('discussions', {
+      section: sections.discussions,
+      body: (list) => {
+        const items = list || [];
+        const rows = items.map((t) => `<tr><td>${link(t.html_url, t.name || '(untitled)')}${t.locked ? ' <span class="muted">(locked)</span>' : ''}</td><td>${esc(t.forum || '')}</td><td>${esc(t.due_at ? when(t.due_at) : '')}</td><td class="num">${esc(num(t.points_possible))}</td></tr>`);
+        return `${rows.length
+          ? `<table><thead><tr><th>Topic</th><th>Forum</th><th>Due</th><th class="num">Points</th></tr></thead><tbody>\n${rows.join('\n')}\n</tbody></table>`
+          : '<p>No discussion topics in this course.</p>'}\n<p class="muted">Posts are not included, since they hold other students' writing. Open a topic in Brightspace to read them.</p>`;
+      },
+    });
+
+    add('syllabus', {
+      section: sections.syllabus,
+      body: (s) => {
+        const o = s && s.overview;
+        const tool = s && s.link;
+        const parts = [];
+        if (tool && tool.url) parts.push(`<p>Syllabus tool: ${link(tool.url, tool.title || 'Syllabus')}</p>`);
+        parts.push(o && (o.html || o.text) ? rich(o.html, o.text) : '<p>This course has no overview text in Brightspace.</p>');
+        if (o && o.has_attachment) parts.push('<p class="muted">The overview has an attachment; open the course in Brightspace to get it.</p>');
+        return parts.join('\n');
+      },
+    });
+
+    const list = SUMMARY_PAGES.filter(([k]) => written.has(k)).map(([k, t]) => {
+      const why = written.get(k);
+      return `<li><a href="${k}.html">${esc(t)}</a>${why != null ? ` <span class="bad">(could not be loaded: ${esc(why)})</span>` : ''}</li>`;
+    });
+    const index = shell(courseName, `<p>${[course.course_code, `Summary made ${when(made)}`].filter(Boolean).map(esc).join(' &middot; ')}</p>
+<ul>
+${list.join('\n')}
+</ul>
+<p class="muted">The course's files are in the module folders next to this one; links and tools that are not files are listed in links.txt.</p>
+${back(`/d2l/home/${id}`, 'Open the course in Brightspace')}`, 'Course summary');
+    const put = (name, data) => entries.push({ name: uniquePath(dir, name, taken), data });
+    put('index.html', index);
+    for (const [key, title, body] of pages) put(`${key}.html`, shell(title, body));
+    return { dir, entries, failed };
   }
 
   // ---- in the page: the progress dialog --------------------------------------------
@@ -410,8 +702,10 @@
     setTimeout(() => URL.revokeObjectURL(url), 60e3); // long enough for the browser to start saving
   }
 
-  // Downloads `mods` (see plan) as `${title}.zip`, with a dialog showing progress.
-  async function download({ title, mods, flattenFirst = false }) {
+  // Downloads `mods` (see plan) as `${title}.zip`, with a dialog showing progress. With `course`
+  // (a whole course), a Course summary folder goes in too, so a course with no files still
+  // makes a zip.
+  async function download({ title, mods, flattenFirst = false, course = null }) {
     const ui = BSX.ui;
     const app = ui && ui.appEl();
     if (!app) return;
@@ -420,14 +714,14 @@
       return;
     }
     const p = plan(mods, { flattenFirst, origin: location.origin });
-    if (!p.files.length) {
+    if (!p.files.length && !course) {
       ui.flash(`${title} has no files to download.`, 'bad');
       return;
     }
     const { h, ic, button } = ui;
     const ctl = new AbortController();
-    const count = h('div', { class: 'zipcount', style: STYLE.count }, `Starting: ${p.files.length} files`);
-    const bar = h('progress', { max: String(p.files.length), value: '0', style: STYLE.bar, 'aria-label': 'Files downloaded' });
+    const count = h('div', { class: 'zipcount', style: STYLE.count }, p.files.length ? `Starting: ${p.files.length} files` : 'No files in the course’s modules.');
+    const bar = h('progress', { max: String(p.files.length), value: '0', style: STYLE.bar, 'aria-label': 'Files downloaded', hidden: !p.files.length });
     const now = h('div', { class: 'muted small zipnow', style: STYLE.now });
     const fails = h('ul', { class: 'zipfails small', style: STYLE.fails, hidden: true });
     const ask = h('div', { class: 'zipask', style: STYLE.ask, hidden: true });
@@ -437,7 +731,7 @@
     const overlay = h('div', { class: 'modal' },
       h('div', { class: 'dialog zipdlg', role: 'dialog', 'aria-modal': 'true', 'aria-label': `Downloading ${title}` },
         h('div', { class: 'trayhead' }, h('h2', null, `Download ${title}`)),
-        h('p', { class: 'muted small', style: 'margin:0' }, `Every file in ${flattenFirst ? 'this module' : 'this course'}, as one .zip. Links and tools are listed in links.txt.`),
+        h('p', { class: 'muted small', style: 'margin:0' }, `${flattenFirst ? 'Every file in this module, as one .zip.' : 'Every file in this course, as one .zip, with a Course summary folder (announcements, grades, assignments and more).'} Links and tools are listed in links.txt.`),
         count, bar, now, ask, fails, actions));
     overlay.addEventListener('keydown', (ev) => {
       if (ev.key !== 'Escape') return;
@@ -450,7 +744,7 @@
     let lastState = null;
     const draw = (s, force = false) => {
       lastState = s;
-      if (!force && Date.now() - lastDraw < 100) return;
+      if (!s.total || (!force && Date.now() - lastDraw < 100)) return; // no files: the count says so already
       lastDraw = Date.now();
       count.textContent = `${s.done} of ${s.total} files · ${fmtBytes(s.bytes)}${s.failed ? ` · ${s.failed} failed` : ''}`;
       bar.value = s.done;
@@ -491,10 +785,19 @@
         signal: ctl.signal,
         onProgress: (s) => draw(s),
         ask: known > WARN_BYTES ? null : confirmBig,
+        reserve: course ? 2 + SUMMARY_PAGES.length + 1 : 2, // room for links.txt, failed.txt and the summary pages
       });
       if (lastState) draw(lastState, true);
       showFails(result.failed);
-      if (!result.got.size) {
+      let summary = null;
+      if (course) {
+        now.textContent = 'Writing course summary…';
+        const sections = await gatherSummary(course, ctl.signal);
+        summary = courseSummary({ course, origin: location.origin, generated: new Date(), taken: p.taken, ...sections });
+      }
+      const failed = summary ? [...result.failed, ...summary.failed] : result.failed;
+      showFails(failed);
+      if (!result.got.size && !summary) {
         count.textContent = 'No files could be downloaded.';
         now.textContent = '';
         actions.replaceChildren(button('Close', close, 'primary'));
@@ -502,15 +805,16 @@
         return;
       }
       now.textContent = 'Making the zip…';
-      const blob = new Blob(zipParts(entriesFor(title, p, result)), { type: 'application/zip' });
+      const blob = new Blob(zipParts(entriesFor(title, p, { got: result.got, failed }, summary ? summary.entries : [])), { type: 'application/zip' });
       const name = `${sanitize(title, { max: 80 })}.zip`;
       save(blob, name);
-      if (!result.failed.length) {
+      const also = summary ? ' and the course summary' : '';
+      if (!failed.length) {
         close();
-        ui.flash(`Downloaded ${name} (${result.got.size} files, ${fmtBytes(blob.size)}).`);
+        ui.flash(`Downloaded ${name} (${result.got.size} files${also}, ${fmtBytes(blob.size)}).`);
         return;
       }
-      count.textContent = `Saved ${name}: ${result.got.size} of ${p.files.length} files. ${result.failed.length} could not be downloaded (listed in failed.txt):`;
+      count.textContent = `Saved ${name}: ${result.got.size} of ${p.files.length} files${also}. ${failed.length} could not be downloaded (listed in failed.txt):`;
       now.textContent = '';
       actions.replaceChildren(button('Close', close, 'primary'));
       actions.querySelector('.btn').focus();
@@ -528,75 +832,75 @@
     }
   }
 
-  // Whether a course's modules hold any file to download (links and tools alone make no zip).
-  const hasFiles = (mods) => mods.some((x) => (x.items || []).some((i) => i.type === 'File' && i.file_url && !i.external));
   const courseTitle = (course) => (BSX.ui.nameOf && BSX.ui.nameOf(course)) || course.name || 'Course files';
 
-  // The course Files page's button: every module of the course, each a folder.
-  function courseButton(course) {
-    const ui = BSX.ui;
-    return ui.h('button', {
-      class: 'btn',
-      type: 'button',
-      onclick: async () => {
-        try {
-          const mods = await BSX.data.modules(course.id);
-          if (!hasFiles(mods)) return ui.flash('This course has no files to download.', 'bad');
-          await download({ title: courseTitle(course), mods });
-        } catch (e) {
-          ui.flash(`Could not list the course's files: ${e.message || e}`, 'bad');
-        }
-      },
-    }, 'Download all (.zip)');
-  }
-
-  // The Dashboard's "Download course as .zip…": pick one of `courses`, then the progress dialog.
-  function courseDialog(courses) {
-    const ui = BSX.ui;
-    const app = ui && ui.appEl();
-    if (!app) return;
-    const { h, ic, button } = ui;
-    const radios = courses.map((c, at) => [c, h('input', { type: 'radio', name: 'bsxzipcourse', checked: at === 0 })]);
-    const note = h('p', { class: 'small', role: 'status', style: 'margin:0;min-height:1.4em' });
-    const close = () => overlay.remove();
-    const go = button('Download', async () => {
-      const picked = radios.find(([, r]) => r.checked);
-      if (!picked) return;
-      const course = picked[0];
-      go.disabled = true;
-      go.textContent = 'Listing files…';
-      note.textContent = '';
-      try {
-        const mods = await BSX.data.modules(course.id);
-        if (hasFiles(mods)) {
-          close(); // the progress dialog takes over
-          download({ title: courseTitle(course), mods });
-          return;
-        }
-        note.className = 'small bad';
-        note.textContent = `${courseTitle(course)} has no files to download (only links, tools or nothing at all).`;
-      } catch (e) {
-        note.className = 'small bad';
-        note.textContent = `Could not list the course's files: ${e.message || e}`;
+  // What the course summary shows, read with data.js as the course pages read it. Each part
+  // is { value } or { error }, so one that fails still gets a page saying why. Cancel stops it.
+  async function gatherSummary(course, signal) {
+    const data = BSX.data;
+    const ou = course.id;
+    const stopped = new Promise((_, reject) => {
+      if (signal.aborted) reject(abortError());
+      signal.addEventListener('abort', () => reject(abortError()), { once: true });
+    });
+    stopped.catch(() => {});
+    const get = (fn) => Promise.race([Promise.resolve().then(fn), stopped]).then((value) => ({ value }), (e) => {
+      if (signal.aborted) throw abortError();
+      return { error: String((e && e.message) || e).slice(0, 300) };
+    });
+    const [announcements, grades, work, discussions, syllabus] = await Promise.all([
+      get(() => data.announcements(ou)),
+      get(() => data.grades(ou)),
+      get(() => data.assignments(ou)),
+      get(() => data.discussions(ou)),
+      get(async () => ({ overview: await data.syllabus(ou), link: await data.syllabusLink(ou).catch(() => null) })),
+    ]);
+    // Each assignment's submission and feedback, a few at a time, as the Assignments page asks.
+    const details = new Map();
+    const folders = (work.value || []).filter((a) => a.kind === 'assignment');
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, folders.length) }, async () => {
+      while (next < folders.length) {
+        const a = folders[next++];
+        const d = await get(() => data.assignment(ou, a.source_id));
+        if (d.value) details.set(String(a.source_id), d.value);
       }
-      go.disabled = false;
-      go.textContent = 'Download';
-    }, 'primary');
-    const overlay = h('div', { class: 'modal', onclick: (ev) => ev.target === overlay && close(), onkeydown: (ev) => ev.key === 'Escape' && (ev.stopPropagation(), close()) },
-      h('div', { class: 'dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Download course as .zip' },
-        h('div', { class: 'trayhead' }, h('h2', null, 'Download course as .zip'), h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Close', onclick: close }, ic('close'))),
-        h('p', { class: 'muted small', style: 'margin:0' }, 'Every file in the course’s modules, as one .zip with a folder per module. Links and tools are listed in links.txt.'),
-        courses.length
-          ? h('div', { role: 'radiogroup', 'aria-label': 'Course', style: 'max-height:50vh;overflow:auto' },
-              radios.map(([c, r]) => h('label', { class: 'calrow', style: 'display:flex;font-weight:400;font-size:14.5px' }, r, h('span', { class: 'dot', style: `background:${ui.colorOf ? ui.colorOf(c.id) : 'var(--muted)'}` }), h('span', null, courseTitle(c)))))
-          : h('p', { class: 'muted' }, 'No courses to show.'),
-        note,
-        h('div', { class: 'row', style: 'justify-content:flex-end' }, button('Cancel', close), courses.length ? go : null)));
-    app.append(overlay);
-    (courses.length ? go : overlay.querySelector('.btn')).focus();
+    }));
+    return { announcements, grades, work, discussions, syllabus, details };
   }
 
-  const api = { crc32, sanitize, uniquePath, splitExt, fileName, dispositionName, dosDateTime, zipParts, buildZip, plan, linksText, failedText, fetchAll, entriesFor, hasFiles, ZipLimitError, MAX_ENTRIES, MAX_DATA, WARN_BYTES, ASK_EVERY, FOLDER_MAX };
+  // A whole course as one .zip: every module a folder, and the Course summary folder. Used by
+  // the Dashboard card's folder icon and the Files page's button; `btn` (the one clicked) stays
+  // disabled meanwhile, so a double click starts one download.
+  async function downloadCourse(course, btn = null) {
+    const ui = BSX.ui;
+    if (btn && btn.disabled) return;
+    if (running) {
+      ui.flash('A download is already running.', 'bad');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    try {
+      let mods;
+      try {
+        mods = await BSX.data.modules(course.id);
+      } catch (e) {
+        ui.flash(`Could not list the course's files: ${e.message || e}`, 'bad');
+        return;
+      }
+      await download({ title: courseTitle(course), mods, course });
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // The course Files page's button.
+  function courseButton(course) {
+    const btn = BSX.ui.h('button', { class: 'btn', type: 'button', onclick: () => downloadCourse(course, btn) }, 'Download all (.zip)');
+    return btn;
+  }
+
+  const api = { crc32, sanitize, uniquePath, splitExt, fileName, dispositionName, dosDateTime, zipParts, buildZip, plan, linksText, failedText, fetchAll, entriesFor, escapeHtml, cleanHtml, courseSummary, ZipLimitError, MAX_ENTRIES, MAX_DATA, WARN_BYTES, ASK_EVERY, FOLDER_MAX };
   if (typeof module === 'object' && module.exports) module.exports = api;
-  else (root.BSX = root.BSX || {}).zip = { ...api, download, courseButton, courseDialog };
+  else (root.BSX = root.BSX || {}).zip = { ...api, download, downloadCourse, courseButton };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

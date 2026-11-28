@@ -472,10 +472,23 @@
     return box;
   }
 
-  function workRow(course, a) {
+  // `unread`: also count the topic's unread posts (Discussions list only, as it reads each topic's
+  // posts); the row then carries that count as a promise.
+  function workRow(course, a, unread = false) {
     const courseId = course.id;
     const now = Date.now();
     const status = h('span', { class: 'small nowrap' });
+    const fresh = h('span');
+    const count = unread && a.kind === 'discussion'
+      ? data.discussion(courseId, a.source_id).then((d) => {
+          const n = data.unreadPosts(d?.posts);
+          if (n) {
+            fresh.title = `${n} unread post${n === 1 ? '' : 's'} in this topic`;
+            fresh.append(ui.tag(`${n} unread`));
+          }
+          return n;
+        }).catch(() => 0)
+      : null;
     const show = (done, text) => {
       status.textContent = text;
       status.className = `small nowrap ${done ? 'ok' : a.due_at && Date.parse(a.due_at) < now ? 'bad' : 'muted'}`;
@@ -493,9 +506,9 @@
     const sub = [a.forum, a.due_at ? h('span', null, h('b', null, 'Due'), ` ${when(a.due_at)}`) : 'No due date', score].filter(Boolean);
     const el = h('div', { class: 'irow' },
       h('span', { class: 'iic ok' }, ic(KIND[a.kind].icon, 22)),
-      h('div', { class: 'imid' }, h('a', { class: 't', href: itemHref(courseId, a) }, a.name), h('div', { class: 'muted small' }, sub.map((s, i) => [i ? '  |  ' : null, s]), ui.alsoChips(course, a))),
+      h('div', { class: 'imid' }, h('a', { class: 't', href: itemHref(courseId, a) }, a.name, fresh), h('div', { class: 'muted small' }, sub.map((s, i) => [i ? '  |  ' : null, s]), ui.alsoChips(course, a))),
       status);
-    return [el, a.name];
+    return [el, a.name, count];
   }
 
   function groupBox(title, rows) {
@@ -512,7 +525,7 @@
     const byDue = (a, b) => dueMs.get(a) - dueMs.get(b);
     const rows = [];
     const make = (a) => {
-      const row = workRow(course, a);
+      const row = workRow(course, a, kind === 'discussion');
       rows.push(row);
       return row;
     };
@@ -546,12 +559,16 @@
 
     const pick = (key, text) => h('button', { type: 'button', class: settings.asgBy === key ? 'on' : null, onclick: () => { settings.asgBy = key; ui.saveSettings(); ui.render(); } }, text);
     const original = { assignments: bs.assignments, quizzes: bs.quizzes, discussions: bs.discussions }[section](course.id);
+    // Discussions list: the unread posts across all its topics, once every row has counted.
+    const unreadTotal = kind === 'discussion'
+      ? ui.lazy(Promise.all(rows.map((r) => r[2])).then((ns) => ns.reduce((s, n) => s + (n || 0), 0)), (n) => (n ? h('span', { class: 'muted small' }, `${n} unread post${n === 1 ? '' : 's'}`) : null), '')
+      : null;
     return {
       body: [
         h('div', { class: 'toolbar' }, ui.filterBox(`Search ${LABEL[section].toLowerCase()}`, rows, () => {
           // A group with nothing left after filtering is hidden rather than shown empty.
           for (const box of boxes) if (box) box.hidden = !box.querySelector('.irow:not([hidden])');
-        }), kind ? null : h('div', { class: 'seg' }, pick('date', 'Show by Date'), pick('type', 'Show by Type'))),
+        }), kind ? null : h('div', { class: 'seg' }, pick('date', 'Show by Date'), pick('type', 'Show by Type')), unreadTotal),
         all.length ? boxes : ui.empty(`No ${LABEL[section].toLowerCase()} in this course.`),
         kind ? null : gradescopeGroup(course),
         external,
@@ -917,7 +934,7 @@
     const outsideWork = settings.gradescope || (settings.ed?.on && settings.ed.token) ? ui.externalWork([course]).catch(() => []) : null;
     const [g, work, courses] = await Promise.all([data.grades(id), data.assignments(id).catch(() => []), data.courses()]);
     // Switch between courses without leaving Grades, as Canvas's course menu does.
-    const listed = ui.state.showAll ? courses : ui.focusCourses(courses);
+    const listed = ui.shownCourses(courses);
     const choices = listed.includes(course) || !courses.includes(course) ? listed : [...listed, course];
     const picker = h('select', { class: 'txt pick', 'aria-label': 'Course' }, choices.map((c) => h('option', { value: String(c.id), selected: c.id === id }, nameOf(c))));
     picker.addEventListener('change', () => (location.hash = courseHref(Number(picker.value), 'grades')));
@@ -1097,8 +1114,7 @@
         const scale = GT.gradeScale(scheme);
         const st = whatIf.solver || (whatIf.solver = {});
         const goals = scale.ranges.filter((r) => r.start > 0);
-        const now = data.estimate(g, inputs(), { allItems });
-        if (!st.goal || (st.goal !== 'custom' && !goals.some((r) => r.symbol === st.goal))) st.goal = GT.nextGoal(now ? (now.score / now.points_possible) * 100 : NaN, goals)?.symbol || 'custom';
+        if (!st.goal || (st.goal !== 'custom' && !goals.some((r) => r.symbol === st.goal))) st.goal = GT.defaultGoal(goals)?.symbol || 'custom';
         if (!pool.choices.some((c) => c.key === st.target)) st.target = GT.defaultChoice(pool.choices).key;
         const goalPick = h('select', { class: 'txt', 'aria-label': 'Target grade' }, goals.map((r) => h('option', { value: r.symbol, selected: st.goal === r.symbol }, `${r.symbol} (${num(r.start)}%)`)), h('option', { value: 'custom', selected: st.goal === 'custom' }, 'Custom percent…'));
         const custom = h('input', { class: 'txt', type: 'number', min: '0', step: 'any', value: st.custom ?? '', placeholder: 'Percent, e.g. 85', 'aria-label': 'Target percent', hidden: st.goal !== 'custom', style: 'margin-top:6px' });
@@ -1189,7 +1205,8 @@
 
   async function files(course) {
     const list = await data.files(course.id);
-    if (!list.length) return { body: ui.empty('No files in this course.') };
+    // A course with no files still gets a zip (its course summary), so keep the button.
+    if (!list.length) return { body: [h('div', { class: 'toolbar' }, BSX.zip ? BSX.zip.courseButton(course) : null), ui.empty('No files in this course.')] };
     const rows = list.map((f) => [h('tr', null, h('td', null, ic('file', 18), ' ', h('a', { href: courseHref(course.id, 'modules', f.id) }, f.title)), h('td', { class: 'muted' }, f.module), h('td', { class: 'muted small nowrap' }, f.updated_at ? ui.fmt.short.format(new Date(f.updated_at)) : '')), `${f.title} ${f.module}`]);
     return {
       body: [

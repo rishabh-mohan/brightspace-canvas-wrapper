@@ -269,7 +269,7 @@
   // The courses the Calendar lists (this term's, or all with "Courses shown: All").
   const listedCourses = async () => {
     const courses = await data.courses();
-    return state.showAll ? courses : ui.focusCourses(courses);
+    return ui.shownCourses(courses);
   };
   const open = (courses) => (courses ? Promise.resolve(courses) : listedCourses()).then(dialog).catch((err) => say(`Couldn’t open the export: ${(err && err.message) || err}`, 'bad'));
 

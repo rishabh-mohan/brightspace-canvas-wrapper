@@ -55,13 +55,17 @@
     // The saved flags too, in case this page's preferences are still loading.
     const saved = (await store.get('bsx')).bsx || {};
     const off = (i) => ui.isDone(i) || ui.isDismissed(i) || Boolean((saved.done || {})[ui.keyOf(i)] || (saved.dismissed || {})[ui.keyOf(i)]);
+    // Courses and kinds of work muted in Account (src/notices.js) are not handed over.
+    const N = BSX.notices;
+    if (N) await N.ready;
+    const muted = (i) => Boolean(N && N.mutedWork(i));
     const [work, outside] = await Promise.all([data.todo(courses).catch(() => []), ui.externalWork(courses).catch(() => [])]);
     const mine = ui.personalItems(now, now + WINDOW, null);
     const seen = new Set();
     const items = [...work, ...outside.filter((i) => !i.submitted && !i.grade), ...mine]
       .filter((i) => {
         const t = Date.parse(i.due_at);
-        return t > now && t <= now + WINDOW && !off(i);
+        return t > now && t <= now + WINDOW && !off(i) && !muted(i);
       })
       .map((i) => ({ key: ui.keyOf(i), title: String(i.name || i.title || 'Untitled').slice(0, 200), course: i.course_id == null ? 'My To Do' : names.get(i.course_id) || '', due: Date.parse(i.due_at), url: urlOf(i) }))
       .filter((x) => !seen.has(x.key) && seen.add(x.key))
@@ -73,6 +77,7 @@
   }
   const onWorkPage = () => ['', '#/'].includes(location.hash) || /^#\/calendar/.test(location.hash);
   const tick = (force) => cfg.on && (force || onWorkPage()) && gather(force).catch(() => {});
+  BSX.reminders = { refresh: () => tick(true) }; // a mute changed (src/notices.js)
   loaded.then(() => setTimeout(tick, 5000)); // after the page's own preferences and first draw
   window.addEventListener('hashchange', () => setTimeout(tick, 1500));
 

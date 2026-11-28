@@ -148,7 +148,8 @@ assert.deepStrictEqual(pool.choices.map((c) => c.key), ['all', 'group:1', 'item:
 assert.strictEqual(pool.choices[0].label, 'All remaining ungraded items (3)');
 assert.strictEqual(pool.choices[1].label, 'All remaining in Homework (2)');
 assert.strictEqual(pool.choices[1].what, 'the 2 remaining items in Homework');
-assert.strictEqual(T.defaultChoice(pool.choices).key, 'item:5', 'the final is picked first');
+assert.strictEqual(T.defaultChoice(pool.choices).key, 'all', 'every remaining item is picked first');
+assert.strictEqual(T.defaultChoice(T.solverTargets({ system: 'Points', groups: [book.groups[0]] }, { estimable: data.estimable }).choices).key, 'group:1', 'one category: all of it');
 // Homework: (18 + 40f + 70) / 160 = 75% gives f = 0.8.
 r = run(book, [2, 3], 75);
 near(r.res.fraction, 0.8, 'group: 80% on both homeworks');
@@ -233,9 +234,9 @@ const common = T.gradeScale(null).ranges;
 assert.strictEqual(T.letterFor(85, common), 'B');
 assert.strictEqual(T.letterFor(59.9, common), 'F');
 assert.strictEqual(T.letterFor(93, common), 'A');
-assert.strictEqual(T.nextGoal(85, common).symbol, 'B+');
-assert.strictEqual(T.nextGoal(87, common).symbol, 'A-', 'at a cut-off the next one up is the goal');
-assert.strictEqual(T.nextGoal(99, common).symbol, 'A+');
-assert.strictEqual(T.nextGoal(NaN, common).symbol, 'A+');
+assert.strictEqual(T.defaultGoal(common).symbol, 'A', 'an A is the default goal');
+assert.strictEqual(T.defaultGoal(stat.ranges).symbol, 'A');
+assert.strictEqual(T.defaultGoal([{ symbol: 'A+', start: 97 }, { symbol: 'A-', start: 90 }, { symbol: 'B', start: 80 }]).symbol, 'A+', 'no plain A: the highest A');
+assert.strictEqual(T.defaultGoal([{ symbol: 'B', start: 80 }, { symbol: 'C', start: 70 }]).symbol, 'B', 'no A at all: the top cut-off');
 
 console.log('gradetools tests ok');

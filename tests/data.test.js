@@ -474,7 +474,7 @@ const assert = require('assert');
   let removed = null;
   ctx2.chrome.storage.local.remove = async (keys) => (removed = keys);
   ctx2.BSX.client.forget();
-  assert.deepStrictEqual([...removed], ['bsxSeen:x.brightspace.com', 'bsxDeadlines', 'bsxNotified', 'bsxNotifyUrls', 'bsxEdfinity']);
+  assert.deepStrictEqual([...removed], ['bsxSeen:x.brightspace.com', 'bsxDeadlines', 'bsxNotified', 'bsxNotifyUrls', 'bsxEdfinity', 'bsxRead:x.brightspace.com']);
   await new Promise((r) => setTimeout(r, 1100));
   assert.deepStrictEqual(Object.keys(written[savedKey].entries), [], 'saved answers cleared');
   console.log('data tests ok,', calls.length, 'requests');

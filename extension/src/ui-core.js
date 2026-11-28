@@ -232,7 +232,8 @@ BSX.ui = (() => {
   // ed: the Ed Discussion reader (on, token, region, map of Ed course -> Brightspace course).
   // edfinity: the Edfinity reader (on, map of Edfinity course id -> Brightspace course id, 0 = hide).
   // links: outside items the student folded into another item, or kept 'separate'.
-  const settings = { theme: 'auto', courses: {}, dash: 'cards', navOpen: true, navMore: false, calHidden: [], asgBy: 'date', todos: [], done: {}, dismissed: {}, ed: { on: false, token: '', region: 'us', map: {} }, edfinity: { on: false, map: {} }, links: {} };
+  // hiddenCourses: ids of courses hidden from a card's menu. undated: To Do's "No due date" group.
+  const settings = { theme: 'auto', courses: {}, dash: 'cards', tasks: true, navOpen: true, navMore: false, calHidden: [], hiddenCourses: [], undated: true, asgBy: 'date', todos: [], done: {}, dismissed: {}, ed: { on: false, token: '', region: 'us', map: {} }, edfinity: { on: false, map: {} }, links: {} };
   async function loadSettings() {
     try {
       const saved = (await store.get('bsx'))?.bsx;
@@ -243,6 +244,8 @@ BSX.ui = (() => {
       if (typeof saved.navOpen === 'boolean') settings.navOpen = saved.navOpen;
       if (typeof saved.navMore === 'boolean') settings.navMore = saved.navMore;
       if (Array.isArray(saved.calHidden)) settings.calHidden = saved.calHidden.map(Number);
+      if (Array.isArray(saved.hiddenCourses)) settings.hiddenCourses = saved.hiddenCourses.map(Number).filter((n) => !Number.isNaN(n));
+      if (typeof saved.undated === 'boolean') settings.undated = saved.undated;
       if (['date', 'type'].includes(saved.asgBy)) settings.asgBy = saved.asgBy;
       if (Array.isArray(saved.todos)) settings.todos = saved.todos.filter((t) => t && typeof t.title === 'string' && t.id != null);
       if (saved.done && typeof saved.done === 'object') settings.done = { ...saved.done };
@@ -499,12 +502,17 @@ BSX.ui = (() => {
     title.focus();
   }
 
-  // This term's courses; without any, pinned ones; without those, everything.
-  function focusCourses(courses) {
-    const term = courses.filter((c) => c.current_term);
-    if (term.length) return term;
-    const pinned = courses.filter((c) => c.pinned);
-    return pinned.length ? pinned : courses;
+  // This term's courses; without any, pinned ones; without those, everything. Courses hidden
+  // from a card's menu are left out (data.pickCourses), here and in shownCourses.
+  const focusCourses = (courses) => data.pickCourses(courses, { hidden: settings.hiddenCourses });
+  // The courses lists show: this term's, or all with "Courses shown: All".
+  const shownCourses = (courses) => data.pickCourses(courses, { all: state.showAll, hidden: settings.hiddenCourses });
+  const isHiddenCourse = (id) => settings.hiddenCourses.includes(Number(id));
+  function hideCourse(id, on) {
+    settings.hiddenCourses = settings.hiddenCourses.filter((x) => x !== Number(id));
+    if (on) settings.hiddenCourses.push(Number(id));
+    saveSettings();
+    render();
   }
 
   // ---- links ---------------------------------------------------------------
@@ -790,6 +798,8 @@ BSX.ui = (() => {
 
   function trayContent(name) {
     const close = h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Close', onclick: () => openTray(null) }, ic('close'));
+    // Trays added by other files (notifications): { icon, label, content(close) }.
+    if (BSX.ui.trays && BSX.ui.trays[name]) return BSX.ui.trays[name].content(close);
     if (name === 'courses') {
       return [
         h('div', { class: 'trayhead' }, h('h2', null, 'Courses'), close),
@@ -811,7 +821,7 @@ BSX.ui = (() => {
         tip('Search', 'Finds modules, files, assignments, quizzes, discussions and announcements at once, even with small typos, then also instructions, feedback, posts, syllabi, people and past courses a moment later. With nothing typed, it lists what is due in the next two weeks. To find words inside PDFs and images too, turn on Search inside files in Account.'),
         tip('Work outside Brightspace', 'Use “+ To Do” for Gradescope, publisher sites or anything else. Those items appear in To Do, the list view and the calendar.'),
         tip('Grades', 'A total marked as an estimate is computed here from graded items. It applies each group\'s dropped-score rules but is not official.'),
-        tip('Names and colours', 'The ⋮ button on a course card sets a nickname and colour.'),
+        tip('Names and colours', 'The ⋮ button on a course card sets a nickname and colour, or hides the course.'),
         tip('Something looks wrong', 'Use Refresh (top right) to reload data, or the Brightspace button to see the original page.'),
         h('button', { class: 'trayitem', type: 'button', onclick: turnOff }, 'Show the original Brightspace page'),
       ];
@@ -824,6 +834,14 @@ BSX.ui = (() => {
       h('div', { class: 'seg' }, THEMES.map((t) => h('button', { type: 'button', class: settings.theme === t ? 'on' : null, onclick: () => setTheme(t) }, t[0].toUpperCase() + t.slice(1)))),
       h('div', { class: 'traylabel' }, 'Courses shown'),
       h('div', { class: 'seg' }, scope(false, 'Current'), scope(true, 'All')),
+      // Courses hidden from a card's menu, each shown again with a click.
+      settings.hiddenCourses.length ? lazy(data.courses(), (courses) => {
+        const hidden = courses.filter((c) => isHiddenCourse(c.id));
+        return hidden.length ? [h('div', { class: 'traylabel' }, `Hidden courses (${hidden.length})`), hidden.map((c) => h('button', { class: 'trayitem', type: 'button', title: `Show ${nameOf(c)} again`, onclick: () => { hideCourse(c.id, false); openTray('account'); } }, h('span', { class: 'dot', style: `background:${colorOf(c.id)}` }), h('span', null, h('span', { class: 'tname' }, nameOf(c)), h('span', { class: 'muted small tcode' }, 'Unhide'))))] : null;
+      }, '') : null,
+      h('div', { class: 'traylabel' }, 'Undated readings in To Do'),
+      h('div', { class: 'seg' }, [true, false].map((on) => h('button', { type: 'button', class: (settings.undated !== false) === on ? 'on' : null, onclick: () => { settings.undated = on; saveSettings(); render(); openTray('account'); } }, on ? 'Show' : 'Off'))),
+      h('p', { class: 'muted small', style: 'margin:8px 4px 0' }, 'Readings and pages with no due date that you have not opened yet, in a \u201cNo due date\u201d group under To Do, for this term\u2019s courses.'),
       h('div', { class: 'traylabel' }, 'Search inside files'),
       h('div', { class: 'seg' }, [false, true].map((on) => h('button', { type: 'button', class: Boolean(settings.fileText) === on ? 'on' : null, onclick: () => { settings.fileText = on; saveSettings(); if (!on && BSX.filetext) BSX.filetext.forget(); openTray('account'); } }, on ? 'Read them' : 'Off'))),
       h('p', { class: 'muted small', style: 'margin:8px 4px 0' }, 'When on, search (s) also finds words inside your courses\u2019 PDFs and images. They are read on this computer, scans with OCR, starting the next time you search; nothing is sent anywhere. Off deletes the text it kept.'),
@@ -867,6 +885,7 @@ BSX.ui = (() => {
       item('groups', '#/groups', 'groups', 'Groups'),
       item('calendar', '#/calendar', 'calendar', 'Calendar'),
       item('inbox', '#/inbox', 'inbox', 'Inbox'),
+      ...Object.entries(BSX.ui.trays || {}).map(([key, t]) => trayBtn(key, t.icon, t.label)),
       trayBtn('help', 'help', 'Help'),
       h('span', { class: 'gap' }),
       h('button', { type: 'button', onclick: turnOff, title: 'Show the original Brightspace page' }, ic('swap', 26), h('span', null, 'Brightspace'))
@@ -1233,12 +1252,12 @@ BSX.ui = (() => {
 
   return {
     h, ic, safeHref, cleanHtml, prose, plainOf, clip, num, pct, fmt, applyClock, when, dayKey, bytes, DAY, COLORS,
-    settings, saveSettings, colorOf, nameOf, focusCourses, state,
+    settings, saveSettings, colorOf, nameOf, focusCourses, shownCourses, isHiddenCourse, hideCourse, state,
     keyOf, isDone, isDismissed, setFlag, personalItems, todoDialog, itemLink, externalWork, alsoOn, alsoChips, setLink, sameWork, workKey, outsideAnnouncements, edStatus: () => edState, edfinityStatus: () => edfinityState, setEdfinity, folded,
     courseHref, itemHref, wrapHref, bs, PLURAL,
     empty, tag, button, linkButton, lazy, sideSection, filterBox, flash, menu,
     // The wrapper's own top element, for dialogs and effects placed over everything.
     appEl: () => (frame ? frame.app : null),
-    views, render, reload, start,
+    views, render, reload, start, openTray,
   };
 })();

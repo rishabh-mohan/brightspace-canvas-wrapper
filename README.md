@@ -21,6 +21,8 @@ If nothing appears in Firefox, open `about:addons`, choose the extension, and un
 
 **Dashboard**
 - **Card View** shows this term's courses. The ⋮ on a card sets a nickname and colour. Cards also show "N new" (see What's New) and when the course's last grade was posted, in red after two weeks.
+  - The folder icon at the right of a card's icon row downloads that course as one .zip (so does **Download all (.zip)** on the course's Files page). Folders in the zip follow the modules. Links and external tools are listed in `links.txt`, and anything that couldn't be downloaded in `failed.txt`. A separate `Course summary` folder holds offline pages for the course's announcements, grades, assignments, quizzes, discussion topics and syllabus, with your own scores and feedback only. A course with no files still gets a zip with the summary.
+  - **Hide this course** (in the ⋮ editor) takes a course off the Dashboard, To Do, Tasks, the calendar and reminders. **Show N hidden** under the cards, or Account, brings it back.
 - **List View** is a day-by-day planner where you can tick items off.
 - **Recent Activity** shows new announcements and grades.
 - **What's New** lists what appeared or changed since you last marked a course seen: new announcements, new or changed grades and feedback, new assignments, quizzes and discussions, changed due dates, and new or updated module content. Each item links to its page.
@@ -30,8 +32,8 @@ If nothing appears in Firefox, open `about:addons`, choose the extension, and un
 - **Dashboard Options** (⋮ at the top) switches between views and has these options:
   - **Color Overlay** and **Wide Cards**, for the course cards.
   - **Tasks Panel**: a weekly sidebar with completion rings per course. Dashboard Options also offers a three-day view, a limit on how many tasks each list shows, and a 24-hour clock. Finished work shows its score.
-  - **Download course as .zip…**: pick one of the courses shown and all of its module files download as one .zip. Folders in the zip follow the modules. Links and external tools are listed in `links.txt`, and files that couldn't be downloaded in `failed.txt`. A course with no files says so.
 - The sidebar has **To Do** (overdue first), **Recent Feedback** and a link to grades. **+ To Do** adds your own items.
+  - **No due date** (closed until clicked, also in the Tasks Panel and List View): this term's readings, pages and files with no due date that you haven't opened yet, to tick off. Account can turn it off.
 - **Grades** (the sidebar's link to all grades) lists every course's total and when its last grade was posted.
   - **Semester GPA**: this term's courses with the letter each total works out to and the credit hours you type for each (3 until you change it; 0 leaves a course out). Letters follow the course's own grade scheme once you have opened that course's Grades page, otherwise common cut-offs, and the panel says which. Change a letter to try out a what-if. The GPA uses the standard US 4.0 scale (A 4.0, A- 3.7, B+ 3.3, …).
   - Enter your GPA and credit hours so far for a cumulative GPA too. Credits and your earlier GPA are kept in this browser; what-if letters are not saved.
@@ -51,6 +53,7 @@ If nothing appears in Firefox, open `about:addons`, choose the extension, and un
 - **Assignment pages**: instructions, attached files, the rubric with your ratings, your submissions, and feedback with its files.
 - **Quizzes**: attempts completed and remaining. **Take the Quiz** opens Brightspace's quiz page inside the wrapper.
 - **Discussions**: threads, with your posts and unread posts marked. **Reply** posts from the page.
+  - The topic list shows **N unread** on each topic and the course's total; a course card's Discussions icon counts unread posts.
 - **Grades**:
   - Each item shows its score, a Missing or Late label, and drop rules with the dropped scores struck through.
   - **What-If** scores let you try out grades; locked items say why they can't be changed. As in Canvas, an ungraded item stays out of the total until you type a score into it, so switching What-If on doesn't change the total by itself.
@@ -79,6 +82,7 @@ If nothing appears in Firefox, open `about:addons`, choose the extension, and un
   - **Search inside files** (off until you turn it on, at the bottom of the search box): reads the text of PDFs in your courses' Content, and reads scanned PDFs and images with OCR. Everything is read on your own computer and nothing is sent anywhere. The first time takes a while; after that only new or changed files are read. Scanned PDFs are read up to page 15, and files over 30 MB are skipped.
 - **Keyboard shortcuts**: press `?` for the list.
 - **Reminders** (off until you turn them on under Account): a browser notification before work is due (1 day and 1 hour before by default; you pick the times). The first time, the browser asks to allow notifications. Clicking a notification opens the item. Reminders use the deadlines from the last time you opened Brightspace with the extension. Not available in Firefox for Android, which doesn't give extensions notifications; Account shows a note there instead.
+- **Alerts** (the bell in the left menu): work due within a day and What's New items, unread until opened, with a count and **Mark all read**. Account → Notifications mutes kinds of work and courses for Alerts and reminders. Kept in this browser; works on Firefox for Android too.
 - **Toolbar badge**: the extension icon counts new grades and announcements.
 - **Phone layout**: the pages adapt to phone width. Nothing scrolls sideways on 360–430 px screens, buttons are bigger to tap, text boxes don't make iPhones zoom in, edit and ⋮ buttons show without hovering, search results wrap and wide cards stack in one column.
 
@@ -107,7 +111,7 @@ All three are off until you switch them on under **Account → Connected sites**
 ## Privacy and what it changes
 
 - **Where your data goes:** everything runs in your browser with your own sign-ins. Nothing is sent anywhere except Brightspace, and Gradescope, Ed and Edfinity if you switch them on. The extension collects no data.
-- **What it keeps, and where:** preferences (including the GPA calculator's credit hours and earlier GPA), your own To Do items, your Ed token and recent Brightspace answers (kept to load pages faster) are stored in this browser only. So is What's New's snapshot of each course from your last visit (ids, dates and scores only; feedback comments are kept as a short hash, never titles or text). With **Reminders** on, the upcoming deadlines they use, a list of reminders already shown and the link each notification opens are kept as well; turning reminders off deletes them. If you turn on **Search inside files**, the text read from your course files is kept there too. With **Edfinity** on, the courses and assignments it read (names, dates, status and scores) are kept as well; turning it off deletes them. Signing out of Brightspace clears the kept answers, file text, What's New snapshots, the reminders' deadlines, shown list and links, and the Edfinity copy.
+- **What it keeps, and where:** preferences (including the GPA calculator's credit hours and earlier GPA), your own To Do items, your Ed token and recent Brightspace answers (kept to load pages faster) are stored in this browser only. So is What's New's snapshot of each course from your last visit (ids, dates and scores only; feedback comments are kept as a short hash, never titles or text). With **Reminders** on, the upcoming deadlines they use, a list of reminders already shown and the link each notification opens are kept as well; turning reminders off deletes them. If you turn on **Search inside files**, the text read from your course files is kept there too. With **Edfinity** on, the courses and assignments it read (names, dates, status and scores) are kept as well; turning it off deletes them. **Alerts** keeps which entries you have read (ids and times only, for 60 days). Signing out of Brightspace clears the kept answers, file text, What's New snapshots, the reminders' deadlines, shown list and links, the Alerts read marks, and the Edfinity copy.
 - **Notifications:** asked for only when you turn on Reminders, and optional. Your browser shows them; nothing is sent anywhere.
 - **Downloads:** .ics calendar files and Download all zips are built on your own computer. The files in a zip come straight from Brightspace with your own sign-in; nothing passes through another server.
 - **Changes to Brightspace:** it only changes anything when you press **Submit Assignment** or **Post Reply**. Quizzes and text-entry submissions use Brightspace's own pages, shown inside the wrapper.
@@ -137,6 +141,8 @@ node tests/gradetools.test.js      # "What do I need?" solver and "last grade po
 node tests/gpa.test.js             # Semester GPA calculator
 node tests/ics.test.js             # calendar export (.ics)
 node tests/reminders.test.js       # reminder scheduling (background)
+node tests/notices.test.js         # Alerts list and notification mutes
+node tests/discussions.test.js     # unread discussion posts against the fake site
 node tests/whatsnew.test.js        # What's New snapshots and changes
 node tests/zip.test.js             # Download all zip writer (also extracts a sample with PowerShell Expand-Archive when it is there)
 node tests/modules-order.test.js   # the student's own module order
@@ -173,6 +179,7 @@ node tools/chrome.js <folder> [--dev] # Chrome build only; --dev also runs it on
 | `extension/src/gradetools.js`, `gpa.js` | "What do I need?" solver and last grade posted; Semester GPA calculator |
 | `extension/src/ics.js` | Calendar export: builds the .ics file (RFC 5545), the course filter dialog, the Account section |
 | `extension/src/reminders.js`, `extension/reminders-bg.js` | Reminders: settings and deadline hand-off in the page; alarms and notifications in the background (loaded by background.js in Chrome, from the manifest in Firefox) |
+| `extension/src/notices.js` | Alerts tray (unread list, count on the bell, read marks) and Account → Notifications mutes |
 | `extension/src/styles.js`, `icons.js` | Themes, layout, motion, icons |
 | `extension/background.js` | Access probe; Gradescope, Ed and Edfinity requests; toolbar badge |
 | `extension/fonts/` | Lato (SIL Open Font License) |

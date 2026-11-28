@@ -54,14 +54,11 @@ BSX.gradetools = (() => {
   // The letter a percent earns on a scale (its lowest letter below every cut-off).
   const letterFor = (percent, ranges) => (ranges.find((r) => percent >= r.start - EPS) || ranges[ranges.length - 1] || {}).symbol || null;
 
-  // A sensible default target: the lowest cut-off above `percent` (the next letter up), or the
-  // top one when the percent already clears them all. Only cut-offs above 0 are targets.
-  function nextGoal(percent, ranges) {
+  // The default target: an A (the plain A, else the highest A-something), else the top cut-off.
+  // Only cut-offs above 0 are targets.
+  function defaultGoal(ranges) {
     const goals = ranges.filter((r) => r.start > 0);
-    if (!goals.length) return null;
-    if (!Number.isFinite(percent)) return goals[0];
-    const above = goals.filter((r) => r.start > percent + EPS);
-    return above.length ? above[above.length - 1] : goals[0];
+    return goals.find((r) => /^A$/i.test(r.symbol)) || goals.find((r) => /^A/i.test(r.symbol)) || goals[0] || null;
   }
 
   // Items the solver can aim at: ungraded (no score, none filled in by an outside copy in
@@ -93,8 +90,9 @@ BSX.gradetools = (() => {
     return { items, byId: new Map(items.map((t) => [t.id, t])), choices };
   }
 
-  // The default choice: a single item called "final", else the first choice.
-  const defaultChoice = (choices) => choices.find((c) => c.ids.length === 1 && /\bfinal\b/i.test(c.label)) || choices[0] || null;
+  // The default choice: the first, which covers every remaining item (all of them, the one
+  // category holding them all, or the only item).
+  const defaultChoice = (choices) => choices[0] || null;
 
   // Solve for the fraction f of full marks needed on every target (each gets f × its points) so
   // the estimate reaches `goal` percent. `estimate(overrides)` is the What-If engine (returns
@@ -176,5 +174,5 @@ BSX.gradetools = (() => {
     return { tone: 'no', head: 'Can’t work this out', lines: ['There is nothing counted toward a total yet.'] };
   }
 
-  return { STALE_DAYS, postedAgo, countsBlanks, COMMON_SCALE, gradeScale, letterFor, nextGoal, solverTargets, defaultChoice, solve, describeSolve, up1, down1 };
+  return { STALE_DAYS, postedAgo, countsBlanks, COMMON_SCALE, gradeScale, letterFor, defaultGoal, solverTargets, defaultChoice, solve, describeSolve, up1, down1 };
 })();
